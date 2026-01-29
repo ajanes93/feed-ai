@@ -6,6 +6,7 @@ export interface DigestItem {
   whyItMatters?: string;
   sourceName: string;
   sourceUrl: string;
+  publishedAt?: string;
   position: number;
 }
 

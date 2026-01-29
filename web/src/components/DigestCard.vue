@@ -15,6 +15,16 @@ const categoryEmoji: Record<string, string> = {
   competitors: "👀",
 };
 
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 const categoryColor: Record<string, string> = {
   ai: "text-purple-400",
   jobs: "text-green-400",
@@ -64,14 +74,22 @@ const categoryColor: Record<string, string> = {
 
     <!-- Footer: source + position -->
     <div class="mx-auto flex w-full max-w-lg items-center justify-between">
-      <a
-        :href="item.sourceUrl"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="text-sm text-gray-500 transition-colors hover:text-gray-300"
-      >
-        {{ item.sourceName }} ↗
-      </a>
+      <div class="flex flex-col">
+        <a
+          :href="item.sourceUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-sm text-gray-500 transition-colors hover:text-gray-300"
+        >
+          {{ item.sourceName }} ↗
+        </a>
+        <span
+          v-if="item.publishedAt"
+          class="text-xs text-gray-600"
+        >
+          {{ formatDate(item.publishedAt) }}
+        </span>
+      </div>
       <span class="text-xs text-gray-600">{{ current }} / {{ total }}</span>
     </div>
 

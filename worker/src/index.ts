@@ -54,6 +54,7 @@ app.get("/api/digest/:date", async (c) => {
       whyItMatters: row.why_it_matters,
       sourceName: row.source_name,
       sourceUrl: row.source_url,
+      publishedAt: row.published_at,
       position: row.position,
     })),
   });
@@ -116,7 +117,7 @@ async function generateDailyDigest(env: Env): Promise<Response> {
     ).bind(digestId, today, digestItems.length),
     ...digestItems.map((item) =>
       env.DB.prepare(
-        "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, published_at, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(
         item.id,
         item.digestId,
@@ -126,6 +127,7 @@ async function generateDailyDigest(env: Env): Promise<Response> {
         item.whyItMatters,
         item.sourceName,
         item.sourceUrl,
+        item.publishedAt ?? null,
         item.position
       )
     ),
