@@ -9,7 +9,7 @@ export async function fetchSource(source: Source): Promise<RawItem[]> {
     const feed = await parser.parseURL(source.url);
 
     return feed.items.slice(0, 20).map((item, index) => ({
-      id: `${source.id}-${Date.now()}-${index}`,
+      id: crypto.randomUUID(),
       sourceId: source.id,
       title: item.title || 'Untitled',
       link: item.link || '',

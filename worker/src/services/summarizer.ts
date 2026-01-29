@@ -1,11 +1,24 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { RawItem, DigestItem } from '../types';
 
+interface ClaudeDigestItem {
+  title: string;
+  summary: string;
+  why_it_matters?: string;
+  category: string;
+  source_name: string;
+  source_url: string;
+}
+
 export async function generateDigest(
   items: RawItem[],
   apiKey: string,
   digestId: string
 ): Promise<DigestItem[]> {
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY is not set');
+  }
+
   const client = new Anthropic({ apiKey });
 
   const itemList = items
@@ -56,9 +69,21 @@ Return ONLY a JSON array, no other text:
     throw new Error('Unexpected response type');
   }
 
-  const parsed = JSON.parse(content.text);
+  let parsed: ClaudeDigestItem[];
+  try {
+    // Handle cases where Claude wraps JSON in markdown code blocks
+    const text = content.text.replace(/^```(?:json)?\n?|\n?```$/g, '').trim();
+    parsed = JSON.parse(text);
+  } catch (e) {
+    console.error('Failed to parse Claude response:', content.text);
+    throw new Error('Failed to parse digest response as JSON');
+  }
 
-  return parsed.map((item: any, index: number) => ({
+  if (!Array.isArray(parsed)) {
+    throw new Error('Expected JSON array from Claude');
+  }
+
+  return parsed.map((item, index) => ({
     id: `${digestId}-${index}`,
     digestId,
     category: item.category,

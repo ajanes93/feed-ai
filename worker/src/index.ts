@@ -7,7 +7,13 @@ import { generateDigest } from './services/summarizer';
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.use('/*', cors());
+app.use('/*', cors({
+  origin: [
+    'https://feed-ai.pages.dev',
+    'https://feed-ai.andresjanes.com',
+    'http://localhost:5173',
+  ],
+}));
 
 // Get today's digest
 app.get('/api/today', async (c) => {
@@ -90,27 +96,29 @@ async function generateDailyDigest(env: Env): Promise<Response> {
   const digestItems = await generateDigest(rawItems, env.ANTHROPIC_API_KEY, digestId);
   console.log(`Generated ${digestItems.length} digest items`);
 
-  // Save to D1
-  await env.DB.prepare(
-    'INSERT INTO digests (id, date, item_count) VALUES (?, ?, ?)'
-  ).bind(digestId, today, digestItems.length).run();
+  // Save to D1 using batch for atomicity
+  const statements = [
+    env.DB.prepare(
+      'INSERT INTO digests (id, date, item_count) VALUES (?, ?, ?)'
+    ).bind(digestId, today, digestItems.length),
+    ...digestItems.map(item =>
+      env.DB.prepare(
+        'INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(
+        item.id,
+        item.digestId,
+        item.category,
+        item.title,
+        item.summary,
+        item.whyItMatters,
+        item.sourceName,
+        item.sourceUrl,
+        item.position
+      )
+    ),
+  ];
 
-  for (const item of digestItems) {
-    await env.DB.prepare(`
-      INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, position)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      item.id,
-      item.digestId,
-      item.category,
-      item.title,
-      item.summary,
-      item.whyItMatters,
-      item.sourceName,
-      item.sourceUrl,
-      item.position
-    ).run();
-  }
+  await env.DB.batch(statements);
 
   return new Response(`Generated digest with ${digestItems.length} items`, { status: 200 });
 }

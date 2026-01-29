@@ -1,9 +1,7 @@
 import { ref, computed } from 'vue';
 import type { Digest } from '../types';
 
-const API_BASE = import.meta.env.PROD
-  ? 'https://evening-scroll-api.<your-subdomain>.workers.dev'
-  : 'http://localhost:8787';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8787';
 
 export function useDigest() {
   const digest = ref<Digest | null>(null);
