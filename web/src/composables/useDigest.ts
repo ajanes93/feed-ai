@@ -1,7 +1,7 @@
-import { ref, computed } from 'vue';
-import type { Digest } from '../types';
+import { ref, computed } from "vue";
+import type { Digest } from "../types";
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8787';
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8787";
 
 export function useDigest() {
   const digest = ref<Digest | null>(null);
@@ -16,14 +16,14 @@ export function useDigest() {
       const res = await fetch(`${API_BASE}/api/today`);
       if (!res.ok) {
         if (res.status === 404) {
-          error.value = 'No digest yet today. Check back at 5pm!';
+          error.value = "No digest yet today. Check back at 5pm!";
           return;
         }
-        throw new Error('Failed to fetch');
+        throw new Error("Failed to fetch");
       }
       digest.value = await res.json();
     } catch (e) {
-      error.value = 'Failed to load digest';
+      error.value = "Failed to load digest";
       console.error(e);
     } finally {
       loading.value = false;
@@ -36,10 +36,10 @@ export function useDigest() {
 
     try {
       const res = await fetch(`${API_BASE}/api/digest/${date}`);
-      if (!res.ok) throw new Error('Failed to fetch');
+      if (!res.ok) throw new Error("Failed to fetch");
       digest.value = await res.json();
     } catch (e) {
-      error.value = 'Failed to load digest';
+      error.value = "Failed to load digest";
       console.error(e);
     } finally {
       loading.value = false;
@@ -47,11 +47,11 @@ export function useDigest() {
   }
 
   const formattedDate = computed(() => {
-    if (!digest.value) return '';
-    return new Date(digest.value.date).toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric'
+    if (!digest.value) return "";
+    return new Date(digest.value.date).toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
     });
   });
 
@@ -61,6 +61,6 @@ export function useDigest() {
     error,
     formattedDate,
     fetchToday,
-    fetchDate
+    fetchDate,
   };
 }

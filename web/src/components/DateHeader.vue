@@ -6,10 +6,12 @@ defineProps<{
 </script>
 
 <template>
-  <div class="fixed top-0 left-0 right-0 z-10 bg-gradient-to-b from-gray-900 to-transparent pb-8 pt-4 px-6">
-    <div class="max-w-lg mx-auto flex justify-between items-center">
-      <h2 class="text-white font-medium">{{ date }}</h2>
-      <span class="text-gray-500 text-sm">{{ itemCount }} items</span>
+  <div
+    class="fixed top-0 right-0 left-0 z-10 bg-gradient-to-b from-gray-900 to-transparent px-6 pt-4 pb-8"
+  >
+    <div class="mx-auto flex max-w-lg items-center justify-between">
+      <h2 class="font-medium text-white">{{ date }}</h2>
+      <span class="text-sm text-gray-500">{{ itemCount }} items</span>
     </div>
   </div>
 </template>
