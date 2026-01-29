@@ -8,7 +8,7 @@ crons = ["0 17 * * *"]  # 5pm UTC daily (adjust for your timezone)
 [[d1_databases]]
 binding = "DB"
 database_name = "feed-ai"
-database_id = "<your-database-id>"
+database_id = "1b13de90-ca8b-4e8f-aac0-e32e07945060"
 
 [vars]
 ANTHROPIC_API_KEY = ""  # Set via wrangler secret
