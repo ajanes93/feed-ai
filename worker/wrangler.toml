@@ -1,4 +1,4 @@
-name = "evening-scroll-api"
+name = "feed-ai-api"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
@@ -7,7 +7,7 @@ crons = ["0 17 * * *"]  # 5pm UTC daily (adjust for your timezone)
 
 [[d1_databases]]
 binding = "DB"
-database_name = "evening-scroll"
+database_name = "feed-ai"
 database_id = "<your-database-id>"
 
 [vars]
