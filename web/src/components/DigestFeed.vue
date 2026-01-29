@@ -10,9 +10,11 @@ defineProps<{
 <template>
   <div class="h-screen snap-y snap-mandatory overflow-y-scroll">
     <DigestCard
-      v-for="item in items"
+      v-for="(item, index) in items"
       :key="item.id"
       :item="item"
+      :current="index + 1"
+      :total="items.length"
     />
   </div>
 </template>

@@ -3,6 +3,8 @@ import type { DigestItem } from "../types";
 
 defineProps<{
   item: DigestItem;
+  current: number;
+  total: number;
 }>();
 
 const categoryEmoji: Record<string, string> = {
@@ -23,49 +25,77 @@ const categoryColor: Record<string, string> = {
 </script>
 
 <template>
-  <div
-    class="flex h-screen snap-start snap-always flex-col justify-center px-6 py-12"
-  >
-    <div class="mx-auto max-w-lg">
+  <div class="flex h-screen snap-start snap-always flex-col px-6 pt-16 pb-6">
+    <div class="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center">
       <!-- Category badge -->
       <span
         :class="[
-          'text-sm font-medium',
+          'text-xs font-semibold tracking-wide uppercase',
           categoryColor[item.category] || 'text-gray-400',
         ]"
       >
         {{ categoryEmoji[item.category] || "📌" }}
-        {{ item.category.toUpperCase() }}
+        {{ item.category }}
       </span>
 
       <!-- Title -->
-      <h1 class="mt-3 text-2xl leading-tight font-bold text-white">
+      <a
+        :href="item.sourceUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="mt-2 block text-xl leading-tight font-bold text-white transition-colors hover:text-blue-300"
+      >
         {{ item.title }}
-      </h1>
+      </a>
 
       <!-- Summary -->
-      <p class="mt-4 text-lg leading-relaxed text-gray-300">
+      <p class="mt-3 text-base leading-relaxed text-gray-300">
         {{ item.summary }}
       </p>
 
       <!-- Why it matters -->
       <p
         v-if="item.whyItMatters"
-        class="mt-4 text-base text-blue-400 italic"
+        class="mt-3 text-sm text-blue-400 italic"
       >
         → {{ item.whyItMatters }}
       </p>
+    </div>
 
-      <!-- Source link -->
+    <!-- Footer: source + position -->
+    <div class="mx-auto flex w-full max-w-lg items-center justify-between">
       <a
         :href="item.sourceUrl"
         target="_blank"
         rel="noopener noreferrer"
-        class="mt-6 inline-flex items-center gap-2 text-gray-500 transition-colors hover:text-gray-300"
+        class="text-sm text-gray-500 transition-colors hover:text-gray-300"
       >
-        <span>{{ item.sourceName }}</span>
-        <span>↗</span>
+        {{ item.sourceName }} ↗
       </a>
+      <span class="text-xs text-gray-600">{{ current }} / {{ total }}</span>
+    </div>
+
+    <!-- Scroll hint (first card only) -->
+    <div
+      v-if="current === 1"
+      class="mt-3 flex justify-center"
+    >
+      <div class="animate-bounce text-gray-600">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M19 9l-7 7-7-7"
+          />
+        </svg>
+      </div>
     </div>
   </div>
 </template>
