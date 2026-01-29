@@ -27,6 +27,7 @@ CREATE TABLE items (
   why_it_matters TEXT,
   source_name TEXT NOT NULL,
   source_url TEXT NOT NULL,
+  published_at TEXT,
   position INTEGER NOT NULL,
   created_at INTEGER DEFAULT (unixepoch()),
   FOREIGN KEY (digest_id) REFERENCES digests(id)

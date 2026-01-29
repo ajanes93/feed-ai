@@ -16,6 +16,7 @@ export interface DigestItem {
   whyItMatters?: string;
   sourceName: string;
   sourceUrl: string;
+  publishedAt?: string;
   position: number;
 }
 
@@ -29,4 +30,5 @@ export interface Digest {
 export interface Env {
   DB: D1Database;
   ANTHROPIC_API_KEY: string;
+  ADMIN_KEY: string;
 }

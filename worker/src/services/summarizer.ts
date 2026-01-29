@@ -88,6 +88,14 @@ Return ONLY a JSON array, no other text:
     throw new Error("Expected JSON array from Claude");
   }
 
+  // Build URL → publishedAt lookup from raw items
+  const pubDateByUrl = new Map<string, string>();
+  for (const raw of items) {
+    if (raw.publishedAt && raw.link) {
+      pubDateByUrl.set(raw.link, new Date(raw.publishedAt).toISOString());
+    }
+  }
+
   return parsed.map((item, index) => ({
     id: `${digestId}-${index}`,
     digestId,
@@ -97,6 +105,7 @@ Return ONLY a JSON array, no other text:
     whyItMatters: item.why_it_matters,
     sourceName: item.source_name,
     sourceUrl: item.source_url,
+    publishedAt: pubDateByUrl.get(item.source_url),
     position: index,
   }));
 }
