@@ -68,8 +68,12 @@ app.get("/api/digests", async (c) => {
   return c.json(result.results);
 });
 
-// Manual trigger (for testing)
+// Manual trigger (protected)
 app.post("/api/generate", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!c.env.ADMIN_KEY || authHeader !== `Bearer ${c.env.ADMIN_KEY}`) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
   return generateDailyDigest(c.env);
 });
 
