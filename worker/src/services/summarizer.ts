@@ -94,7 +94,7 @@ Return ONLY a JSON array, no other text:
     category: item.category,
     title: item.title,
     summary: item.summary,
-    whyItMatters: item.why_it_matters || null,
+    whyItMatters: item.why_it_matters,
     sourceName: item.source_name,
     sourceUrl: item.source_url,
     position: index,
