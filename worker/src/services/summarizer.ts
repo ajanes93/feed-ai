@@ -1,5 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { RawItem, DigestItem } from '../types';
+import Anthropic from "@anthropic-ai/sdk";
+import { RawItem, DigestItem } from "../types";
 
 interface ClaudeDigestItem {
   title: string;
@@ -16,21 +16,25 @@ export async function generateDigest(
   digestId: string
 ): Promise<DigestItem[]> {
   if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY is not set');
+    throw new Error("ANTHROPIC_API_KEY is not set");
   }
 
   const client = new Anthropic({ apiKey });
 
   const itemList = items
-    .map((item, i) => `${i + 1}. [${item.sourceId}] ${item.title}\n   ${item.content?.slice(0, 200) || 'No description'}\n   URL: ${item.link}`)
-    .join('\n\n');
+    .map(
+      (item, i) =>
+        `${i + 1}. [${item.sourceId}] ${item.title}\n   ${item.content?.slice(0, 200) || "No description"}\n   URL: ${item.link}`
+    )
+    .join("\n\n");
 
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 2000,
-    messages: [{
-      role: 'user',
-      content: `You are curating a daily digest for a senior software engineer interested in AI, Vue.js, and tech jobs.
+    messages: [
+      {
+        role: "user",
+        content: `You are curating a daily digest for a senior software engineer interested in AI, Vue.js, and tech jobs.
 
 Here are today's ${items.length} items from various sources:
 
@@ -60,27 +64,28 @@ Return ONLY a JSON array, no other text:
     "source_name": "...",
     "source_url": "..."
   }
-]`
-    }]
+]`,
+      },
+    ],
   });
 
   const content = response.content[0];
-  if (content.type !== 'text') {
-    throw new Error('Unexpected response type');
+  if (content.type !== "text") {
+    throw new Error("Unexpected response type");
   }
 
   let parsed: ClaudeDigestItem[];
   try {
     // Handle cases where Claude wraps JSON in markdown code blocks
-    const text = content.text.replace(/^```(?:json)?\n?|\n?```$/g, '').trim();
+    const text = content.text.replace(/^```(?:json)?\n?|\n?```$/g, "").trim();
     parsed = JSON.parse(text);
-  } catch (e) {
-    console.error('Failed to parse Claude response:', content.text);
-    throw new Error('Failed to parse digest response as JSON');
+  } catch {
+    console.error("Failed to parse Claude response:", content.text);
+    throw new Error("Failed to parse digest response as JSON");
   }
 
   if (!Array.isArray(parsed)) {
-    throw new Error('Expected JSON array from Claude');
+    throw new Error("Expected JSON array from Claude");
   }
 
   return parsed.map((item, index) => ({
@@ -92,6 +97,6 @@ Return ONLY a JSON array, no other text:
     whyItMatters: item.why_it_matters || null,
     sourceName: item.source_name,
     sourceUrl: item.source_url,
-    position: index
+    position: index,
   }));
 }
