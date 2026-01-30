@@ -13,18 +13,15 @@ function extractTag(xml: string, tag: string): string {
   return simple ? simple[1].trim() : "";
 }
 
-function parseItems(xml: string): Array<{
+interface FeedItem {
   title: string;
   link: string;
   content: string;
   pubDate: string;
-}> {
-  const items: Array<{
-    title: string;
-    link: string;
-    content: string;
-    pubDate: string;
-  }> = [];
+}
+
+function parseItems(xml: string): FeedItem[] {
+  const items: FeedItem[] = [];
 
   // Match both <item> (RSS) and <entry> (Atom) elements
   const itemRegex = /<(?:item|entry)[\s>]([\s\S]*?)<\/(?:item|entry)>/gi;
@@ -73,6 +70,12 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+function parsePublishedDate(pubDate: string): number | undefined {
+  if (!pubDate) return undefined;
+  const timestamp = new Date(pubDate).getTime();
+  return isNaN(timestamp) ? undefined : timestamp;
+}
+
 export async function fetchSource(source: Source): Promise<RawItem[]> {
   try {
     const response = await fetch(source.url, {
@@ -93,9 +96,7 @@ export async function fetchSource(source: Source): Promise<RawItem[]> {
       title: stripHtml(item.title) || "Untitled",
       link: item.link || "",
       content: stripHtml(item.content),
-      publishedAt: item.pubDate
-        ? new Date(item.pubDate).getTime()
-        : undefined,
+      publishedAt: parsePublishedDate(item.pubDate),
     }));
   } catch (error) {
     console.error(`Failed to fetch ${source.name}:`, error);
@@ -117,7 +118,7 @@ export async function fetchAllSources(
     )
     .flatMap((r) => r.value);
 
-  // Filter to items published within the last 48 hours
+  // Filter to items published within the last 48 hours (items with no date are kept)
   const cutoff = Date.now() - 48 * 60 * 60 * 1000;
   const recent = allItems.filter(
     (item) => !item.publishedAt || item.publishedAt >= cutoff

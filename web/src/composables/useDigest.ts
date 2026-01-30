@@ -21,16 +21,15 @@ export function useDigest() {
     }
   }
 
-  async function fetchToday() {
+  async function fetchDigest(url: string, notFoundMessage?: string) {
     loading.value = true;
     error.value = null;
 
     try {
-      await fetchDigestList();
-      const res = await fetch(`${API_BASE}/api/today`);
+      const res = await fetch(url);
       if (!res.ok) {
         if (res.status === 404) {
-          error.value = "No digest yet today. Check back at 5pm!";
+          error.value = notFoundMessage || "Failed to load digest";
           return;
         }
         throw new Error("Failed to fetch");
@@ -48,23 +47,26 @@ export function useDigest() {
     }
   }
 
-  async function fetchDate(date: string) {
-    loading.value = true;
-    error.value = null;
+  async function fetchToday() {
+    await fetchDigestList();
+    await fetchDigest(
+      `${API_BASE}/api/today`,
+      "No digest yet today. Check back at 5pm!"
+    );
+  }
 
-    try {
-      const res = await fetch(`${API_BASE}/api/digest/${date}`);
-      if (!res.ok) throw new Error("Failed to fetch");
-      digest.value = await res.json();
-    } catch (e) {
-      error.value = "Failed to load digest";
-      console.error(e);
-    } finally {
-      loading.value = false;
-    }
+  async function fetchDate(date: string) {
+    await fetchDigest(`${API_BASE}/api/digest/${date}`);
   }
 
   async function goToPrevious() {
+    if (!digest.value) {
+      // No digest loaded (today 404) — load the most recent available
+      if (availableDates.value.length === 0) return false;
+      currentDateIndex.value = 0;
+      await fetchDate(availableDates.value[0]);
+      return true;
+    }
     const nextIdx = currentDateIndex.value + 1;
     if (nextIdx >= availableDates.value.length) return false;
     currentDateIndex.value = nextIdx;
@@ -80,22 +82,23 @@ export function useDigest() {
     return true;
   }
 
-  const hasPrevious = computed(
-    () => currentDateIndex.value < availableDates.value.length - 1
-  );
+  const hasPrevious = computed(() => {
+    // When no digest is loaded (today 404), any available date is "previous"
+    if (!digest.value) return availableDates.value.length > 0;
+    return currentDateIndex.value < availableDates.value.length - 1;
+  });
 
   const hasNext = computed(() => currentDateIndex.value > 0);
 
   const formattedDate = computed(() => {
-    if (!digest.value) return "";
-    return new Date(digest.value.date + "T12:00:00").toLocaleDateString(
-      "en-US",
-      {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      }
-    );
+    const date = digest.value
+      ? new Date(digest.value.date + "T12:00:00")
+      : new Date();
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    });
   });
 
   return {
