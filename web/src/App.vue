@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from "vue";
 import { useDigest } from "./composables/useDigest";
+import { useSwipeNavigation } from "./composables/useSwipeNavigation";
 import DigestFeed from "./components/DigestFeed.vue";
 import DateHeader from "./components/DateHeader.vue";
 import EmptyState from "./components/EmptyState.vue";
 import CategoryFilter from "./components/CategoryFilter.vue";
 
 const activeCategory = ref("all");
-const pullDistance = ref(0);
-const refreshing = ref(false);
-const PULL_THRESHOLD = 80;
 
 const filteredItems = computed(() => {
   if (!digest.value) return [];
@@ -29,144 +27,21 @@ const {
   goToNext,
 } = useDigest();
 
-const swipeOffset = ref(0);
-const swipeAnimating = ref(false);
-const transitioning = ref(false);
-
-let touchStartX = 0;
-let touchStartY = 0;
-let touchStartTime = 0;
-let lastTouchX = 0;
-let lastTouchTime = 0;
-let isHorizontalSwipe: boolean | null = null;
-const SWIPE_THRESHOLD = 40;
-const VELOCITY_THRESHOLD = 0.3;
-const SPRING_DURATION = 400;
-
-const swipeStyle = computed(() => {
-  if (swipeOffset.value === 0 && !swipeAnimating.value) return {};
-  const opacity = Math.max(0.4, 1 - Math.abs(swipeOffset.value) / 500);
-  return {
-    transform: `translateX(${swipeOffset.value}px)`,
-    opacity: String(opacity),
-    transition: swipeAnimating.value
-      ? `transform ${SPRING_DURATION}ms cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${SPRING_DURATION}ms ease-out`
-      : "none",
-  };
+const {
+  swipeStyle,
+  pullDistance,
+  refreshing,
+  pullThreshold,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+} = useSwipeNavigation({
+  hasPrevious,
+  hasNext,
+  onSwipeRight: goToPrevious,
+  onSwipeLeft: goToNext,
+  onPullRefresh: fetchToday,
 });
-
-function onTouchStart(e: TouchEvent) {
-  const touch = e.touches[0];
-  if (!touch || transitioning.value) return;
-  touchStartX = touch.clientX;
-  touchStartY = touch.clientY;
-  touchStartTime = Date.now();
-  lastTouchX = touch.clientX;
-  lastTouchTime = touchStartTime;
-  isHorizontalSwipe = null;
-  swipeAnimating.value = false;
-  swipeOffset.value = 0;
-}
-
-function onTouchMove(e: TouchEvent) {
-  const touch = e.touches[0];
-  if (!touch || transitioning.value) return;
-
-  const dx = touch.clientX - touchStartX;
-  const dy = touch.clientY - touchStartY;
-
-  // Determine swipe direction on first significant movement
-  if (isHorizontalSwipe === null && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
-    isHorizontalSwipe = Math.abs(dx) > Math.abs(dy);
-  }
-
-  if (!isHorizontalSwipe) {
-    // Check for pull-to-refresh (vertical pull down when at top)
-    if (dy > 0 && !refreshing.value) {
-      const scrollEl = document.querySelector(".overflow-y-scroll");
-      if (scrollEl && scrollEl.scrollTop === 0) {
-        pullDistance.value = Math.min(120, dy * 0.4);
-      }
-    }
-    return;
-  }
-
-  // Apply resistance at edges (no valid navigation in this direction)
-  const canGo = dx > 0 ? hasPrevious.value : hasNext.value;
-  const resistance = canGo ? 1 : 0.2;
-  swipeOffset.value = dx * resistance;
-
-  lastTouchX = touch.clientX;
-  lastTouchTime = Date.now();
-}
-
-async function onTouchEnd(e: TouchEvent) {
-  const touch = e.changedTouches[0];
-  if (!touch || transitioning.value || !isHorizontalSwipe) {
-    swipeOffset.value = 0;
-    return;
-  }
-
-  const dx = touch.clientX - touchStartX;
-  const dt = Math.max(1, Date.now() - lastTouchTime);
-  const velocity = (touch.clientX - lastTouchX) / dt;
-
-  const shouldNavigate =
-    Math.abs(dx) > SWIPE_THRESHOLD || Math.abs(velocity) > VELOCITY_THRESHOLD;
-
-  if (shouldNavigate) {
-    const goingRight = dx > 0;
-    const canGo = goingRight ? hasPrevious.value : hasNext.value;
-
-    if (canGo) {
-      transitioning.value = true;
-      // Animate off-screen in swipe direction
-      swipeAnimating.value = true;
-      swipeOffset.value = goingRight ? window.innerWidth : -window.innerWidth;
-
-      await new Promise((r) => setTimeout(r, SPRING_DURATION / 2));
-
-      if (goingRight) {
-        await goToPrevious();
-      } else {
-        await goToNext();
-      }
-
-      // Slide in from opposite side
-      swipeAnimating.value = false;
-      swipeOffset.value = goingRight
-        ? -window.innerWidth / 3
-        : window.innerWidth / 3;
-
-      // Force reflow, then animate to center
-      await new Promise((r) => requestAnimationFrame(r));
-      swipeAnimating.value = true;
-      swipeOffset.value = 0;
-
-      setTimeout(() => {
-        swipeAnimating.value = false;
-        transitioning.value = false;
-      }, SPRING_DURATION);
-      return;
-    }
-  }
-
-  // Spring back to center
-  swipeAnimating.value = true;
-  swipeOffset.value = 0;
-  setTimeout(() => {
-    swipeAnimating.value = false;
-  }, SPRING_DURATION);
-
-  // Handle pull-to-refresh
-  if (pullDistance.value >= PULL_THRESHOLD && !refreshing.value) {
-    refreshing.value = true;
-    pullDistance.value = 40;
-    await fetchToday();
-    refreshing.value = false;
-  }
-  pullDistance.value = 0;
-}
 
 onMounted(() => {
   fetchToday();
@@ -192,7 +67,7 @@ onMounted(() => {
           refreshing ? 'animate-spin' : '',
         ]"
         :style="{
-          opacity: Math.min(1, pullDistance / PULL_THRESHOLD),
+          opacity: Math.min(1, pullDistance / pullThreshold),
           transform: `rotate(${pullDistance * 3}deg)`,
         }"
       />

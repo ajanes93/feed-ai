@@ -20,29 +20,15 @@ defineProps<{
         v-for="(item, idx) in items"
         :key="item.id"
         :item="item"
-        :style="{ animationDelay: `${idx * 50}ms` }"
-        class="card-enter"
+        v-motion
+        :initial="{ opacity: 0, y: 8 }"
+        :enter="{ opacity: 1, y: 0, transition: { delay: idx * 50, duration: 300 } }"
       />
     </TransitionGroup>
   </div>
 </template>
 
 <style scoped>
-.card-enter {
-  animation: cardFadeSlide 0.3s ease-out both;
-}
-
-@keyframes cardFadeSlide {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 .card-enter-active {
   transition: all 0.3s ease-out;
 }

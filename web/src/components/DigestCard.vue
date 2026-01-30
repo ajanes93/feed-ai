@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, useTemplateRef } from "vue";
+import { onLongPress } from "@vueuse/core";
 import type { DigestItem } from "../types";
 
 const props = defineProps<{
@@ -7,20 +8,11 @@ const props = defineProps<{
 }>();
 
 const showActions = ref(false);
-let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+const cardRef = useTemplateRef("card");
 
-function onPointerDown() {
-  longPressTimer = setTimeout(() => {
-    showActions.value = true;
-  }, 500);
-}
-
-function onPointerUp() {
-  if (longPressTimer) {
-    clearTimeout(longPressTimer);
-    longPressTimer = null;
-  }
-}
+onLongPress(cardRef, () => {
+  showActions.value = true;
+}, { delay: 500 });
 
 async function shareItem() {
   showActions.value = false;
@@ -83,10 +75,8 @@ function formatDate(iso: string): string {
 
 <template>
   <article
+    ref="card"
     class="relative rounded-xl border border-gray-800/50 bg-gray-900/60 p-5 transition-colors select-none hover:border-gray-700/50"
-    @pointerdown="onPointerDown"
-    @pointerup="onPointerUp"
-    @pointerleave="onPointerUp"
     @contextmenu.prevent
   >
     <!-- Top row: category + time -->
