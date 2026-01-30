@@ -72,7 +72,7 @@ app.get("/api/digest/:date", async (c) => {
     id: digest.id,
     date: digest.date,
     itemCount: digest.item_count,
-    items: items.results.map(mapItemFromDb),
+    items: items.results.map((row) => mapItemFromDb(row as unknown as DbItem)),
   });
 });
 

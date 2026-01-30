@@ -91,7 +91,9 @@ export async function fetchSource(source: Source): Promise<RawItem[]> {
       link: item.link || "",
       content: stripHtml(item.content),
       publishedAt: item.pubDate
-        ? new Date(item.pubDate).getTime()
+        ? (Number.isNaN(new Date(item.pubDate).getTime())
+            ? undefined
+            : new Date(item.pubDate).getTime())
         : undefined,
     }));
   } catch (error) {

@@ -86,9 +86,21 @@ Return ONLY a JSON array, no other text:
     throw new Error("Failed to parse digest response as JSON");
   }
 
-  if (!Array.isArray(parsed)) {
-    throw new Error("Expected JSON array from Claude");
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error("Expected non-empty JSON array from Claude");
   }
+
+  // Validate required fields on each item
+  parsed = parsed.filter((item) => {
+    const valid =
+      typeof item.title === "string" &&
+      typeof item.summary === "string" &&
+      typeof item.category === "string" &&
+      typeof item.source_name === "string" &&
+      typeof item.source_url === "string";
+    if (!valid) console.warn("Dropping malformed digest item:", item);
+    return valid;
+  });
 
   // Build URL → publishedAt lookup from raw items
   const pubDateByUrl = new Map(
