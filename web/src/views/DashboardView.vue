@@ -97,6 +97,7 @@ onMounted(fetchDashboard);
           </h2>
           <DataTable
             :columns="aiColumns"
+            :row-count="data.ai.recentCalls.length"
             empty-message="No AI usage recorded yet"
           >
             <tr
@@ -138,10 +139,6 @@ onMounted(fetchDashboard);
                 </span>
               </td>
             </tr>
-            <template
-              v-if="data.ai.recentCalls.length > 0"
-              #empty
-            />
           </DataTable>
         </section>
 
@@ -152,6 +149,7 @@ onMounted(fetchDashboard);
           </h2>
           <DataTable
             :columns="sourceColumns"
+            :row-count="data.sources.length"
             empty-message="No sources tracked"
           >
             <tr
@@ -196,10 +194,6 @@ onMounted(fetchDashboard);
                 </span>
               </td>
             </tr>
-            <template
-              v-if="data.sources.length > 0"
-              #empty
-            />
           </DataTable>
         </section>
 
@@ -210,6 +204,7 @@ onMounted(fetchDashboard);
           </h2>
           <DataTable
             :columns="errorColumns"
+            :row-count="data.errors.length"
             empty-message="No errors recorded"
           >
             <tr
@@ -236,10 +231,6 @@ onMounted(fetchDashboard);
                 {{ err.message }}
               </td>
             </tr>
-            <template
-              v-if="data.errors.length > 0"
-              #empty
-            />
           </DataTable>
         </section>
 

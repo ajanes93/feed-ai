@@ -236,12 +236,18 @@ function isValidDigestItem(item: DigestItemRaw): boolean {
 }
 
 function applyCategoryLimits(items: DigestItemRaw[]): DigestItemRaw[] {
+  const result: DigestItemRaw[] = [];
   const counts: Record<string, number> = {};
-  return items.filter((item) => {
-    const count = (counts[item.category] = (counts[item.category] || 0) + 1);
+
+  for (const item of items) {
+    counts[item.category] = (counts[item.category] || 0) + 1;
     const limit = CATEGORY_LIMITS[item.category as keyof typeof CATEGORY_LIMITS];
-    return !limit || count <= limit;
-  });
+    if (!limit || counts[item.category] <= limit) {
+      result.push(item);
+    }
+  }
+
+  return result;
 }
 
 export async function generateDigest(

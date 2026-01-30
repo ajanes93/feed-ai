@@ -1,6 +1,7 @@
 <script setup lang="ts">
 defineProps<{
   columns: { key: string; label: string }[];
+  rowCount: number;
   emptyMessage?: string;
 }>();
 </script>
@@ -20,17 +21,15 @@ defineProps<{
         </tr>
       </thead>
       <tbody>
-        <slot />
-        <slot name="empty">
-          <tr>
-            <td
-              :colspan="columns.length"
-              class="px-3 py-6 text-center text-gray-500"
-            >
-              {{ emptyMessage || "No data" }}
-            </td>
-          </tr>
-        </slot>
+        <slot v-if="rowCount > 0" />
+        <tr v-else>
+          <td
+            :colspan="columns.length"
+            class="px-3 py-6 text-center text-gray-500"
+          >
+            {{ emptyMessage || "No data" }}
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>

@@ -100,6 +100,12 @@ function mapDigestItem(row: Record<string, unknown>) {
   };
 }
 
+function logSettledFailures(label: string, results: PromiseSettledResult<unknown>[]) {
+  for (const r of results) {
+    if (r.status === "rejected") console.warn(`${label} failed:`, r.reason);
+  }
+}
+
 // --- App ---
 
 const app = new Hono<{ Bindings: Env }>();
@@ -289,7 +295,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   console.log(`Generated ${digestItems.length} digest items`);
 
   // Record AI usage (best-effort, don't fail digest on logging errors)
-  await Promise.allSettled(
+  const usageResults = await Promise.allSettled(
     aiUsages.map(async (usage) => {
       await recordAIUsage(env.DB, usage);
       if (usage.status !== "success") {
@@ -303,6 +309,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
       }
     })
   );
+  logSettledFailures("AI usage recording", usageResults);
 
   // Save to D1 using batch for atomicity
   const statements = [
@@ -355,7 +362,7 @@ async function recordSourceHealth(env: Env, results: SourceFetchResult[]) {
   });
 
   // Log source failures (best-effort)
-  await Promise.allSettled(
+  const logResults = await Promise.allSettled(
     results
       .filter((r) => !r.success)
       .map((r) =>
@@ -367,6 +374,7 @@ async function recordSourceHealth(env: Env, results: SourceFetchResult[]) {
         })
       )
   );
+  logSettledFailures("Source failure logging", logResults);
 
   try {
     await env.DB.batch(statements);
