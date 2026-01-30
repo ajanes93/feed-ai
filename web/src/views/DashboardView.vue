@@ -37,7 +37,7 @@ onMounted(fetchDashboard);
 </script>
 
 <template>
-  <div class="min-h-[100dvh] bg-gray-950 p-4 text-gray-100">
+  <div class="h-[100dvh] overflow-y-auto bg-gray-950 p-4 text-gray-100">
     <div class="mx-auto max-w-4xl">
       <!-- Header -->
       <div class="mb-6 flex items-center justify-between">
