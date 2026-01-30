@@ -70,6 +70,12 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+function parsePublishedDate(pubDate: string): number | undefined {
+  if (!pubDate) return undefined;
+  const timestamp = new Date(pubDate).getTime();
+  return isNaN(timestamp) ? undefined : timestamp;
+}
+
 export async function fetchSource(source: Source): Promise<RawItem[]> {
   try {
     const response = await fetch(source.url, {
@@ -90,11 +96,7 @@ export async function fetchSource(source: Source): Promise<RawItem[]> {
       title: stripHtml(item.title) || "Untitled",
       link: item.link || "",
       content: stripHtml(item.content),
-      publishedAt: item.pubDate
-        ? (Number.isNaN(new Date(item.pubDate).getTime())
-            ? undefined
-            : new Date(item.pubDate).getTime())
-        : undefined,
+      publishedAt: parsePublishedDate(item.pubDate),
     }));
   } catch (error) {
     console.error(`Failed to fetch ${source.name}:`, error);

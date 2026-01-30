@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from "vue";
+import { onMounted, onBeforeUnmount, ref, computed } from "vue";
 import { useDigest } from "./composables/useDigest";
 import DigestFeed from "./components/DigestFeed.vue";
 import DateHeader from "./components/DateHeader.vue";
@@ -22,8 +22,13 @@ const transitioning = ref(false);
 
 let touchStartX = 0;
 let touchStartY = 0;
+let transitionTimeout: ReturnType<typeof setTimeout> | null = null;
 const SWIPE_THRESHOLD = 60;
 const TRANSITION_DURATION = 300;
+
+onBeforeUnmount(() => {
+  if (transitionTimeout) clearTimeout(transitionTimeout);
+});
 
 const transitionClasses = computed(() => {
   if (swipeTransition.value === "slide-left") {
@@ -61,9 +66,10 @@ async function onTouchEnd(e: TouchEvent) {
     await goToNext();
   }
 
-  setTimeout(() => {
+  transitionTimeout = setTimeout(() => {
     swipeTransition.value = "none";
     transitioning.value = false;
+    transitionTimeout = null;
   }, TRANSITION_DURATION);
 }
 

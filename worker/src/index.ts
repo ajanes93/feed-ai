@@ -87,8 +87,11 @@ app.get("/api/digests", async (c) => {
 
 // Manual trigger (protected)
 app.post("/api/generate", async (c) => {
+  if (!c.env.ADMIN_KEY) {
+    return c.json({ error: "ADMIN_KEY not configured" }, 500);
+  }
   const authHeader = c.req.header("Authorization");
-  if (!c.env.ADMIN_KEY || authHeader !== `Bearer ${c.env.ADMIN_KEY}`) {
+  if (authHeader !== `Bearer ${c.env.ADMIN_KEY}`) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   return generateDailyDigest(c.env);
