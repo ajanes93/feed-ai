@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, ref, computed } from "vue";
 import { useDigest } from "./composables/useDigest";
 import DigestFeed from "./components/DigestFeed.vue";
 import DateHeader from "./components/DateHeader.vue";
@@ -25,16 +25,29 @@ let touchStartY = 0;
 const SWIPE_THRESHOLD = 60;
 const TRANSITION_DURATION = 300;
 
+const transitionClasses = computed(() => {
+  if (swipeTransition.value === "slide-left") {
+    return "-translate-x-4 opacity-90";
+  }
+  if (swipeTransition.value === "slide-right") {
+    return "translate-x-4 opacity-90";
+  }
+  return "";
+});
+
 function onTouchStart(e: TouchEvent) {
-  if (!e.touches[0]) return;
-  touchStartX = e.touches[0].clientX;
-  touchStartY = e.touches[0].clientY;
+  const touch = e.touches[0];
+  if (!touch) return;
+  touchStartX = touch.clientX;
+  touchStartY = touch.clientY;
 }
 
 async function onTouchEnd(e: TouchEvent) {
-  if (transitioning.value || !e.changedTouches[0]) return;
-  const dx = e.changedTouches[0].clientX - touchStartX;
-  const dy = e.changedTouches[0].clientY - touchStartY;
+  const touch = e.changedTouches[0];
+  if (transitioning.value || !touch) return;
+
+  const dx = touch.clientX - touchStartX;
+  const dy = touch.clientY - touchStartY;
 
   if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) < Math.abs(dy)) return;
 
@@ -102,14 +115,7 @@ onMounted(() => {
         @next="goToNext"
       />
       <div
-        :class="[
-          'transition-transform duration-300 ease-out',
-          swipeTransition === 'slide-left'
-            ? '-translate-x-4 opacity-90'
-            : swipeTransition === 'slide-right'
-              ? 'translate-x-4 opacity-90'
-              : '',
-        ]"
+        :class="['transition-transform duration-300 ease-out', transitionClasses]"
       >
         <DigestFeed :items="digest.items" />
       </div>

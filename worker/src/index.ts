@@ -24,6 +24,32 @@ app.get("/api/today", async (c) => {
   return c.redirect(`/api/digest/${today}`);
 });
 
+interface DbItem {
+  id: string;
+  category: string;
+  title: string;
+  summary: string;
+  why_it_matters: string | null;
+  source_name: string;
+  source_url: string;
+  published_at: string | null;
+  position: number;
+}
+
+function mapItemFromDb(row: DbItem) {
+  return {
+    id: row.id,
+    category: row.category,
+    title: row.title,
+    summary: row.summary,
+    whyItMatters: row.why_it_matters,
+    sourceName: row.source_name,
+    sourceUrl: row.source_url,
+    publishedAt: row.published_at,
+    position: row.position,
+  };
+}
+
 // Get digest by date
 app.get("/api/digest/:date", async (c) => {
   const date = c.req.param("date");
@@ -46,17 +72,7 @@ app.get("/api/digest/:date", async (c) => {
     id: digest.id,
     date: digest.date,
     itemCount: digest.item_count,
-    items: items.results.map((row) => ({
-      id: row.id,
-      category: row.category,
-      title: row.title,
-      summary: row.summary,
-      whyItMatters: row.why_it_matters,
-      sourceName: row.source_name,
-      sourceUrl: row.source_url,
-      publishedAt: row.published_at,
-      position: row.position,
-    })),
+    items: items.results.map(mapItemFromDb),
   });
 });
 

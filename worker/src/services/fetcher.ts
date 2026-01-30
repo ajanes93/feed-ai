@@ -58,20 +58,16 @@ function parseItems(xml: string): FeedItem[] {
   return items;
 }
 
-const HTML_ENTITIES: Record<string, string> = {
-  "&amp;": "&",
-  "&lt;": "<",
-  "&gt;": ">",
-  "&quot;": '"',
-  "&#39;": "'",
-};
-
 function stripHtml(html: string): string {
-  let text = html.replace(/<[^>]*>/g, " ");
-  for (const [entity, char] of Object.entries(HTML_ENTITIES)) {
-    text = text.replace(new RegExp(entity, "g"), char);
-  }
-  return text.replace(/\s+/g, " ").trim();
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export async function fetchSource(source: Source): Promise<RawItem[]> {

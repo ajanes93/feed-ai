@@ -91,12 +91,11 @@ Return ONLY a JSON array, no other text:
   }
 
   // Build URL → publishedAt lookup from raw items
-  const pubDateByUrl = new Map<string, string>();
-  for (const raw of items) {
-    if (raw.publishedAt && raw.link) {
-      pubDateByUrl.set(raw.link, new Date(raw.publishedAt).toISOString());
-    }
-  }
+  const pubDateByUrl = new Map(
+    items
+      .filter((raw) => raw.publishedAt && raw.link)
+      .map((raw) => [raw.link, new Date(raw.publishedAt!).toISOString()])
+  );
 
   return parsed.map((item, index) => ({
     id: `${digestId}-${index}`,

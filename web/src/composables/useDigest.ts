@@ -21,16 +21,15 @@ export function useDigest() {
     }
   }
 
-  async function fetchToday() {
+  async function fetchDigest(url: string, handle404?: () => void) {
     loading.value = true;
     error.value = null;
 
     try {
-      await fetchDigestList();
-      const res = await fetch(`${API_BASE}/api/today`);
+      const res = await fetch(url);
       if (!res.ok) {
-        if (res.status === 404) {
-          error.value = "No digest yet today. Check back at 5pm!";
+        if (res.status === 404 && handle404) {
+          handle404();
           return;
         }
         throw new Error("Failed to fetch");
@@ -48,20 +47,15 @@ export function useDigest() {
     }
   }
 
-  async function fetchDate(date: string) {
-    loading.value = true;
-    error.value = null;
+  async function fetchToday() {
+    await fetchDigestList();
+    await fetchDigest(`${API_BASE}/api/today`, () => {
+      error.value = "No digest yet today. Check back at 5pm!";
+    });
+  }
 
-    try {
-      const res = await fetch(`${API_BASE}/api/digest/${date}`);
-      if (!res.ok) throw new Error("Failed to fetch");
-      digest.value = await res.json();
-    } catch (e) {
-      error.value = "Failed to load digest";
-      console.error(e);
-    } finally {
-      loading.value = false;
-    }
+  async function fetchDate(date: string) {
+    await fetchDigest(`${API_BASE}/api/digest/${date}`);
   }
 
   async function goToPrevious() {
