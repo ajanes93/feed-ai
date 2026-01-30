@@ -176,12 +176,8 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   const { items: rawItems, health } = await fetchAllSources(sources);
   console.log(`Fetched ${rawItems.length} items`);
 
-  // Record source health (non-fatal if table doesn't exist yet)
-  try {
-    await recordSourceHealth(env, health);
-  } catch (err) {
-    console.warn("Failed to record source health:", err);
-  }
+  // Record source health
+  await recordSourceHealth(env, health);
 
   if (rawItems.length === 0) {
     return new Response("No items fetched", { status: 500 });
