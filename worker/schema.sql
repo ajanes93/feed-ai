@@ -55,6 +55,41 @@ CREATE TABLE IF NOT EXISTS source_health (
   consecutive_failures INTEGER DEFAULT 0
 );
 
+-- AI usage tracking per digest generation
+CREATE TABLE IF NOT EXISTS ai_usage (
+  id TEXT PRIMARY KEY,
+  digest_id TEXT,
+  model TEXT NOT NULL,
+  provider TEXT NOT NULL,       -- 'gemini' or 'anthropic'
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  total_tokens INTEGER,
+  latency_ms INTEGER,
+  was_fallback INTEGER DEFAULT 0,
+  error TEXT,
+  status TEXT NOT NULL,         -- 'success', 'rate_limited', 'error'
+  created_at INTEGER DEFAULT (unixepoch()),
+  FOREIGN KEY (digest_id) REFERENCES digests(id)
+);
+
+-- General error/event log
+CREATE TABLE IF NOT EXISTS error_logs (
+  id TEXT PRIMARY KEY,
+  level TEXT NOT NULL,          -- 'info', 'warn', 'error'
+  category TEXT NOT NULL,       -- 'ai', 'fetch', 'parse', 'general'
+  message TEXT NOT NULL,
+  details TEXT,                 -- JSON blob for extra context
+  source_id TEXT,
+  digest_id TEXT,
+  created_at INTEGER DEFAULT (unixepoch())
+);
+
+CREATE INDEX idx_ai_usage_created ON ai_usage(created_at);
+CREATE INDEX idx_ai_usage_digest ON ai_usage(digest_id);
+CREATE INDEX idx_error_logs_created ON error_logs(created_at);
+CREATE INDEX idx_error_logs_category ON error_logs(category);
+CREATE INDEX idx_error_logs_level ON error_logs(level);
+
 CREATE INDEX idx_digests_date ON digests(date);
 CREATE INDEX idx_items_digest ON items(digest_id);
 CREATE INDEX idx_items_position ON items(position);
