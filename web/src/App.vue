@@ -134,7 +134,9 @@ async function onTouchEnd(e: TouchEvent) {
 
       // Slide in from opposite side
       swipeAnimating.value = false;
-      swipeOffset.value = goingRight ? -window.innerWidth / 3 : window.innerWidth / 3;
+      swipeOffset.value = goingRight
+        ? -window.innerWidth / 3
+        : window.innerWidth / 3;
 
       // Force reflow, then animate to center
       await new Promise((r) => requestAnimationFrame(r));
@@ -189,7 +191,10 @@ onMounted(() => {
           'h-8 w-8 rounded-full border-2 border-gray-600 border-t-white',
           refreshing ? 'animate-spin' : '',
         ]"
-        :style="{ opacity: Math.min(1, pullDistance / PULL_THRESHOLD), transform: `rotate(${pullDistance * 3}deg)` }"
+        :style="{
+          opacity: Math.min(1, pullDistance / PULL_THRESHOLD),
+          transform: `rotate(${pullDistance * 3}deg)`,
+        }"
       />
     </div>
 

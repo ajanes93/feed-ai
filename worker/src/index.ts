@@ -6,6 +6,14 @@ import type { SourceFetchResult } from "./services/fetcher";
 import { fetchAllSources } from "./services/fetcher";
 import { generateDigest } from "./services/summarizer";
 
+function timingSafeEqual(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  const aBuf = encoder.encode(a);
+  const bBuf = encoder.encode(b);
+  if (aBuf.byteLength !== bBuf.byteLength) return false;
+  return crypto.subtle.timingSafeEqual(aBuf, bBuf);
+}
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.use(
@@ -37,20 +45,6 @@ interface DbItem {
   position: number;
 }
 
-function mapItemFromDb(row: DbItem) {
-  return {
-    id: row.id,
-    category: row.category,
-    title: row.title,
-    summary: row.summary,
-    whyItMatters: row.why_it_matters,
-    sourceName: row.source_name,
-    sourceUrl: row.source_url,
-    publishedAt: row.published_at,
-    position: row.position,
-  };
-}
-
 // Get digest by date
 app.get("/api/digest/:date", async (c) => {
   const date = c.req.param("date");
@@ -73,7 +67,20 @@ app.get("/api/digest/:date", async (c) => {
     id: digest.id,
     date: digest.date,
     itemCount: digest.item_count,
-    items: items.results.map((row) => mapItemFromDb(row as unknown as DbItem)),
+    items: items.results.map((row) => {
+      const item = row as DbItem;
+      return {
+        id: item.id,
+        category: item.category,
+        title: item.title,
+        summary: item.summary,
+        whyItMatters: item.why_it_matters,
+        sourceName: item.source_name,
+        sourceUrl: item.source_url,
+        publishedAt: item.published_at,
+        position: item.position,
+      };
+    }),
   });
 });
 
@@ -87,12 +94,21 @@ app.get("/api/digests", async (c) => {
 });
 
 // Source health (protected)
+function checkAuth(c: {
+  req: { header: (name: string) => string | undefined };
+  env: Env;
+}): boolean {
+  const authHeader = c.req.header("Authorization") ?? "";
+  const expected = c.env.ADMIN_KEY ? `Bearer ${c.env.ADMIN_KEY}` : "";
+  return (
+    expected !== "" &&
+    authHeader.length === expected.length &&
+    timingSafeEqual(authHeader, expected)
+  );
+}
+
 app.get("/api/health", async (c) => {
-  if (!c.env.ADMIN_KEY) {
-    return c.json({ error: "ADMIN_KEY not configured" }, 500);
-  }
-  const authHeader = c.req.header("Authorization");
-  if (authHeader !== `Bearer ${c.env.ADMIN_KEY}`) {
+  if (!checkAuth(c)) {
     return c.json({ error: "Unauthorized" }, 401);
   }
 
@@ -103,9 +119,7 @@ app.get("/api/health", async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const healthData = result.results.map((row) => {
     const source = sources.find((s) => s.id === row.source_id);
-    const thresholdDays = source
-      ? FRESHNESS_THRESHOLDS[source.category]
-      : 14;
+    const thresholdDays = source ? FRESHNESS_THRESHOLDS[source.category] : 14;
     const thresholdSec = thresholdDays * 24 * 60 * 60;
     const lastSuccess = row.last_success_at as number | null;
     const stale = !lastSuccess || now - lastSuccess > thresholdSec;
@@ -129,11 +143,7 @@ app.get("/api/health", async (c) => {
 
 // Manual trigger (protected)
 app.post("/api/generate", async (c) => {
-  if (!c.env.ADMIN_KEY) {
-    return c.json({ error: "ADMIN_KEY not configured" }, 500);
-  }
-  const authHeader = c.req.header("Authorization");
-  if (authHeader !== `Bearer ${c.env.ADMIN_KEY}`) {
+  if (!checkAuth(c)) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   return generateDailyDigest(c.env);
@@ -206,23 +216,22 @@ async function generateDailyDigest(env: Env): Promise<Response> {
 
 async function recordSourceHealth(env: Env, results: SourceFetchResult[]) {
   const now = Math.floor(Date.now() / 1000);
-  const statements = results.map((r) => {
-    if (r.success) {
-      return env.DB.prepare(
-        `INSERT INTO source_health (source_id, last_success_at, item_count, consecutive_failures)
-         VALUES (?, ?, ?, 0)
-         ON CONFLICT(source_id) DO UPDATE SET
-           last_success_at = ?, item_count = ?, consecutive_failures = 0`
-      ).bind(r.sourceId, now, r.itemCount, now, r.itemCount);
-    }
-    return env.DB.prepare(
-      `INSERT INTO source_health (source_id, last_error_at, last_error, consecutive_failures)
-       VALUES (?, ?, ?, 1)
-       ON CONFLICT(source_id) DO UPDATE SET
-         last_error_at = ?, last_error = ?,
-         consecutive_failures = source_health.consecutive_failures + 1`
-    ).bind(r.sourceId, now, r.error ?? null, now, r.error ?? null);
-  });
+  const statements = results.map((r) =>
+    r.success
+      ? env.DB.prepare(
+          `INSERT INTO source_health (source_id, last_success_at, item_count, consecutive_failures)
+           VALUES (?, ?, ?, 0)
+           ON CONFLICT(source_id) DO UPDATE SET
+             last_success_at = ?, item_count = ?, consecutive_failures = 0`
+        ).bind(r.sourceId, now, r.itemCount, now, r.itemCount)
+      : env.DB.prepare(
+          `INSERT INTO source_health (source_id, last_error_at, last_error, consecutive_failures)
+           VALUES (?, ?, ?, 1)
+           ON CONFLICT(source_id) DO UPDATE SET
+             last_error_at = ?, last_error = ?,
+             consecutive_failures = source_health.consecutive_failures + 1`
+        ).bind(r.sourceId, now, r.error ?? null, now, r.error ?? null)
+  );
 
   try {
     await env.DB.batch(statements);

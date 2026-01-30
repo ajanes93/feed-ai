@@ -43,10 +43,7 @@ const counts = computed(() => {
       {{ cat.label }}
       <span
         v-if="counts[cat.key]"
-        :class="[
-          'ml-1',
-          activeCategory === cat.key ? 'text-gray-600' : 'text-gray-600',
-        ]"
+        class="ml-1 text-gray-600"
       >
         {{ counts[cat.key] }}
       </span>

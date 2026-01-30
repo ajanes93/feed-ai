@@ -1,8 +1,11 @@
-import Parser from "rss-parser";
+import { XMLParser } from "fast-xml-parser";
 import { Source } from "../sources";
 import { RawItem } from "../types";
 
-const parser = new Parser();
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+});
 
 function stripHtml(html: string): string {
   return html
@@ -22,6 +25,34 @@ function parsePublishedDate(dateStr?: string): number | undefined {
   return isNaN(timestamp) ? undefined : timestamp;
 }
 
+interface FeedItem {
+  title?: string;
+  link?: string | { "@_href"?: string };
+  description?: string;
+  "content:encoded"?: string;
+  content?: string;
+  summary?: string;
+  pubDate?: string;
+  published?: string;
+  updated?: string;
+}
+
+function extractLink(link: FeedItem["link"]): string {
+  if (!link) return "";
+  if (typeof link === "string") return link;
+  return link["@_href"] || "";
+}
+
+function extractItems(parsed: Record<string, unknown>): FeedItem[] {
+  const rss = parsed.rss as Record<string, unknown> | undefined;
+  const channel = rss?.channel as Record<string, unknown> | undefined;
+  const feed = parsed.feed as Record<string, unknown> | undefined;
+
+  const items = channel?.item ?? feed?.entry;
+  if (!items) return [];
+  return Array.isArray(items) ? items : [items];
+}
+
 async function fetchRssFeed(source: Source): Promise<RawItem[]> {
   const response = await fetch(source.url, {
     headers: { "User-Agent": "feed-ai/1.0" },
@@ -33,17 +64,26 @@ async function fetchRssFeed(source: Source): Promise<RawItem[]> {
   }
 
   const xml = await response.text();
-  const feed = await parser.parseString(xml);
+  const parsed = xmlParser.parse(xml);
+  const items = extractItems(parsed);
 
-  return (feed.items || []).slice(0, 20).map((item) => ({
+  return items.slice(0, 20).map((item) => ({
     id: crypto.randomUUID(),
     sourceId: source.id,
-    title: stripHtml(item.title || "Untitled"),
-    link: item.link || "",
+    title: stripHtml(String(item.title || "Untitled")),
+    link: extractLink(item.link),
     content: stripHtml(
-      item["content:encoded"] || item.content || item.contentSnippet || ""
+      String(
+        item["content:encoded"] ||
+          item.content ||
+          item.description ||
+          item.summary ||
+          ""
+      )
     ),
-    publishedAt: parsePublishedDate(item.isoDate || item.pubDate),
+    publishedAt: parsePublishedDate(
+      item.pubDate || item.published || item.updated
+    ),
   }));
 }
 
@@ -111,7 +151,11 @@ export async function fetchAllSources(
     sources.map(async (source) => {
       try {
         const items = await fetchSource(source);
-        health.push({ sourceId: source.id, success: items.length > 0, itemCount: items.length });
+        health.push({
+          sourceId: source.id,
+          success: true,
+          itemCount: items.length,
+        });
         return items;
       } catch (err) {
         health.push({
@@ -127,8 +171,7 @@ export async function fetchAllSources(
 
   const allItems = results
     .filter(
-      (r): r is PromiseFulfilledResult<RawItem[]> =>
-        r.status === "fulfilled"
+      (r): r is PromiseFulfilledResult<RawItem[]> => r.status === "fulfilled"
     )
     .flatMap((r) => r.value);
 

@@ -8,7 +8,9 @@ defineProps<{
 </script>
 
 <template>
-  <div class="h-[100dvh] overflow-y-scroll pt-22 pb-[calc(2rem+env(safe-area-inset-bottom))]">
+  <div
+    class="h-[100dvh] overflow-y-scroll pt-22 pb-[calc(2rem+env(safe-area-inset-bottom))]"
+  >
     <TransitionGroup
       name="card"
       tag="div"

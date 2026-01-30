@@ -14,8 +14,8 @@ export const CATEGORY_LIMITS: Record<Source["category"], number> = {
 
 // Staleness threshold in days — sources with no items beyond this are flagged
 export const FRESHNESS_THRESHOLDS: Record<Source["category"], number> = {
-  ai: 1,   // AI news: stale after 24h
-  dev: 7,  // Dev/industry: stale after 7 days
+  ai: 1, // AI news: stale after 24h
+  dev: 7, // Dev/industry: stale after 7 days
   jobs: 7, // Jobs: stale after 7 days
 };
 

@@ -57,15 +57,11 @@ export function useDigest() {
   async function fetchToday() {
     await fetchDigestList();
     const today = todayDate();
-    const todayHasDigest = availableDates.value.includes(today);
-    if (todayHasDigest) {
+    if (availableDates.value.includes(today)) {
       viewingToday.value = false;
       await fetchDigest(`${API_BASE}/api/digest/${today}`);
     } else {
-      // Today has no digest — show empty state
-      viewingToday.value = true;
-      digest.value = null;
-      error.value = "No digest yet today. Check back at 5pm!";
+      showTodayEmpty();
     }
   }
 
@@ -99,10 +95,10 @@ export function useDigest() {
 
   async function goToNext() {
     if (viewingToday.value) return false;
-    const today = todayDate();
-    const todayHasDigest = availableDates.value.includes(today);
-    // At newest digest and today has no digest — swipe forward to today's empty state
-    if (currentDateIndex.value === 0 && !todayHasDigest) {
+    if (
+      currentDateIndex.value === 0 &&
+      !availableDates.value.includes(todayDate())
+    ) {
       showTodayEmpty();
       return true;
     }
@@ -120,10 +116,11 @@ export function useDigest() {
 
   const hasNext = computed(() => {
     if (viewingToday.value) return false;
-    const today = todayDate();
-    const todayHasDigest = availableDates.value.includes(today);
-    // Can swipe forward to today's empty state
-    if (currentDateIndex.value === 0 && !todayHasDigest) return true;
+    if (
+      currentDateIndex.value === 0 &&
+      !availableDates.value.includes(todayDate())
+    )
+      return true;
     return currentDateIndex.value > 0;
   });
 

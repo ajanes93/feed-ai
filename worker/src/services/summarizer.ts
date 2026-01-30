@@ -54,14 +54,7 @@ Return ONLY a JSON array, no other text:
 ]`;
 }
 
-function extractJson(text: string): string {
-  return text.replace(/^```(?:json)?\n?|\n?```$/g, "").trim();
-}
-
-async function callGemini(
-  prompt: string,
-  apiKey: string
-): Promise<string> {
+async function callGemini(prompt: string, apiKey: string): Promise<string> {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
     {
@@ -90,10 +83,7 @@ async function callGemini(
   return text;
 }
 
-async function callClaude(
-  prompt: string,
-  apiKey: string
-): Promise<string> {
+async function callClaude(prompt: string, apiKey: string): Promise<string> {
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
@@ -133,12 +123,17 @@ export async function generateDigest(
     console.log("Calling Claude...");
     responseText = await callClaude(prompt, apiKeys.anthropic);
   } else {
-    throw new Error("No AI API key configured (GEMINI_API_KEY or ANTHROPIC_API_KEY)");
+    throw new Error(
+      "No AI API key configured (GEMINI_API_KEY or ANTHROPIC_API_KEY)"
+    );
   }
 
   let parsed: DigestItemRaw[];
   try {
-    parsed = JSON.parse(extractJson(responseText));
+    const cleaned = responseText
+      .replace(/^```(?:json)?\n?|\n?```$/g, "")
+      .trim();
+    parsed = JSON.parse(cleaned);
   } catch {
     console.error("Failed to parse AI response:", responseText);
     throw new Error("Failed to parse digest response as JSON");
@@ -166,13 +161,13 @@ export async function generateDigest(
     const cat = item.category;
     categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
     const limit = CATEGORY_LIMITS[cat as keyof typeof CATEGORY_LIMITS];
-    return !limit || categoryCounts[cat] <= limit;
+    return limit === undefined || categoryCounts[cat] <= limit;
   });
 
   // Build URL → publishedAt lookup from raw items
   const pubDateByUrl = new Map(
     items
-      .filter((raw) => raw.publishedAt && raw.link)
+      .filter((raw) => raw.publishedAt && !isNaN(raw.publishedAt) && raw.link)
       .map((raw) => [raw.link, new Date(raw.publishedAt!).toISOString()])
   );
 
