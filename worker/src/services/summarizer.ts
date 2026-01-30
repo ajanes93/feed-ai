@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { RawItem, DigestItem } from "../types";
 import { CATEGORY_LIMITS } from "../sources";
+import type { AIUsageEntry } from "./logger";
 
 interface DigestItemRaw {
   title: string;
@@ -9,6 +10,16 @@ interface DigestItemRaw {
   category: string;
   source_name: string;
   source_url: string;
+}
+
+export interface AICallResult {
+  text: string;
+  usage: AIUsageEntry;
+}
+
+export interface DigestResult {
+  items: DigestItem[];
+  aiUsages: AIUsageEntry[];
 }
 
 function buildPrompt(items: RawItem[]): string {
@@ -54,7 +65,8 @@ Return ONLY a JSON array, no other text:
 ]`;
 }
 
-async function callGemini(prompt: string, apiKey: string): Promise<string> {
+async function callGemini(prompt: string, apiKey: string): Promise<AICallResult> {
+  const start = Date.now();
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
     {
@@ -70,46 +82,118 @@ async function callGemini(prompt: string, apiKey: string): Promise<string> {
       }),
     }
   );
+  const latencyMs = Date.now() - start;
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Gemini API error ${res.status}: ${body}`);
+    const isRateLimit = res.status === 429;
+    const usage: AIUsageEntry = {
+      model: "gemini-2.0-flash",
+      provider: "gemini",
+      latencyMs,
+      wasFallback: false,
+      error: body.slice(0, 500),
+      status: isRateLimit ? "rate_limited" : "error",
+    };
+    throw Object.assign(new Error(`Gemini API error ${res.status}: ${body}`), { usage });
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty Gemini response");
-  return text;
+  if (!text) {
+    const usage: AIUsageEntry = {
+      model: "gemini-2.0-flash",
+      provider: "gemini",
+      latencyMs,
+      wasFallback: false,
+      error: "Empty response",
+      status: "error",
+    };
+    throw Object.assign(new Error("Empty Gemini response"), { usage });
+  }
+
+  const tokenMeta = data?.usageMetadata;
+  return {
+    text,
+    usage: {
+      model: "gemini-2.0-flash",
+      provider: "gemini",
+      inputTokens: tokenMeta?.promptTokenCount,
+      outputTokens: tokenMeta?.candidatesTokenCount,
+      totalTokens: tokenMeta?.totalTokenCount,
+      latencyMs,
+      wasFallback: false,
+      status: "success",
+    },
+  };
 }
 
-async function callClaude(prompt: string, apiKey: string): Promise<string> {
+async function callClaude(prompt: string, apiKey: string, wasFallback: boolean): Promise<AICallResult> {
+  const start = Date.now();
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 8192,
     messages: [{ role: "user", content: prompt }],
   });
+  const latencyMs = Date.now() - start;
 
   if (!response.content || response.content.length === 0) {
-    throw new Error("Empty Claude response");
+    const usage: AIUsageEntry = {
+      model: "claude-haiku-4-5-20251001",
+      provider: "anthropic",
+      latencyMs,
+      wasFallback,
+      error: "Empty response",
+      status: "error",
+    };
+    throw Object.assign(new Error("Empty Claude response"), { usage });
   }
   const content = response.content[0];
   if (content.type !== "text") {
-    throw new Error("Unexpected Claude response type");
+    const usage: AIUsageEntry = {
+      model: "claude-haiku-4-5-20251001",
+      provider: "anthropic",
+      latencyMs,
+      wasFallback,
+      error: "Unexpected response type",
+      status: "error",
+    };
+    throw Object.assign(new Error("Unexpected Claude response type"), { usage });
   }
-  return content.text;
+
+  return {
+    text: content.text,
+    usage: {
+      model: "claude-haiku-4-5-20251001",
+      provider: "anthropic",
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      totalTokens: response.usage.input_tokens + response.usage.output_tokens,
+      latencyMs,
+      wasFallback,
+      status: "success",
+    },
+  };
 }
 
 async function callAI(
   prompt: string,
   apiKeys: { gemini?: string; anthropic?: string }
-): Promise<string> {
+): Promise<{ text: string; usages: AIUsageEntry[] }> {
+  const usages: AIUsageEntry[] = [];
+
   if (apiKeys.gemini) {
     try {
       console.log("Calling Gemini...");
-      return await callGemini(prompt, apiKeys.gemini);
+      const result = await callGemini(prompt, apiKeys.gemini);
+      usages.push(result.usage);
+      return { text: result.text, usages };
     } catch (err) {
+      // Capture usage from failed call if available
+      const errWithUsage = err as Error & { usage?: AIUsageEntry };
+      if (errWithUsage.usage) usages.push(errWithUsage.usage);
       console.error("Gemini failed, falling back to Claude:", err);
       if (!apiKeys.anthropic) throw err;
     }
@@ -117,7 +201,9 @@ async function callAI(
 
   if (apiKeys.anthropic) {
     console.log("Calling Claude...");
-    return await callClaude(prompt, apiKeys.anthropic);
+    const result = await callClaude(prompt, apiKeys.anthropic, usages.length > 0);
+    usages.push(result.usage);
+    return { text: result.text, usages };
   }
 
   throw new Error(
@@ -181,9 +267,12 @@ export async function generateDigest(
   items: RawItem[],
   apiKeys: { gemini?: string; anthropic?: string },
   digestId: string
-): Promise<DigestItem[]> {
+): Promise<DigestResult> {
   const prompt = buildPrompt(items);
-  const responseText = await callAI(prompt, apiKeys);
+  const { text: responseText, usages } = await callAI(prompt, apiKeys);
+
+  // Tag all usages with the digest ID
+  for (const u of usages) u.digestId = digestId;
 
   let parsed: DigestItemRaw[];
   try {
@@ -207,7 +296,7 @@ export async function generateDigest(
       .map((raw) => [raw.link, new Date(raw.publishedAt!).toISOString()])
   );
 
-  return limited.map((item, index) => ({
+  const digestItems = limited.map((item, index) => ({
     id: `${digestId}-${index}`,
     digestId,
     category: item.category,
@@ -219,4 +308,6 @@ export async function generateDigest(
     publishedAt: pubDateByUrl.get(item.source_url),
     position: index,
   }));
+
+  return { items: digestItems, aiUsages: usages };
 }
