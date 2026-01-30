@@ -23,14 +23,16 @@ const transitioning = ref(false);
 let touchStartX = 0;
 let touchStartY = 0;
 const SWIPE_THRESHOLD = 60;
+const TRANSITION_DURATION = 300;
 
 function onTouchStart(e: TouchEvent) {
+  if (!e.touches[0]) return;
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
 }
 
 async function onTouchEnd(e: TouchEvent) {
-  if (transitioning.value) return;
+  if (transitioning.value || !e.changedTouches[0]) return;
   const dx = e.changedTouches[0].clientX - touchStartX;
   const dy = e.changedTouches[0].clientY - touchStartY;
 
@@ -49,7 +51,7 @@ async function onTouchEnd(e: TouchEvent) {
   setTimeout(() => {
     swipeTransition.value = "none";
     transitioning.value = false;
-  }, 300);
+  }, TRANSITION_DURATION);
 }
 
 onMounted(() => {

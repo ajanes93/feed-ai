@@ -13,18 +13,15 @@ function extractTag(xml: string, tag: string): string {
   return simple ? simple[1].trim() : "";
 }
 
-function parseItems(xml: string): Array<{
+interface FeedItem {
   title: string;
   link: string;
   content: string;
   pubDate: string;
-}> {
-  const items: Array<{
-    title: string;
-    link: string;
-    content: string;
-    pubDate: string;
-  }> = [];
+}
+
+function parseItems(xml: string): FeedItem[] {
+  const items: FeedItem[] = [];
 
   // Match both <item> (RSS) and <entry> (Atom) elements
   const itemRegex = /<(?:item|entry)[\s>]([\s\S]*?)<\/(?:item|entry)>/gi;
@@ -61,16 +58,20 @@ function parseItems(xml: string): Array<{
   return items;
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+};
+
 function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
+  let text = html.replace(/<[^>]*>/g, " ");
+  for (const [entity, char] of Object.entries(HTML_ENTITIES)) {
+    text = text.replace(new RegExp(entity, "g"), char);
+  }
+  return text.replace(/\s+/g, " ").trim();
 }
 
 export async function fetchSource(source: Source): Promise<RawItem[]> {
@@ -117,7 +118,7 @@ export async function fetchAllSources(
     )
     .flatMap((r) => r.value);
 
-  // Filter to items published within the last 48 hours
+  // Filter to items published within the last 48 hours (items with no date are kept)
   const cutoff = Date.now() - 48 * 60 * 60 * 1000;
   const recent = allItems.filter(
     (item) => !item.publishedAt || item.publishedAt >= cutoff

@@ -96,21 +96,14 @@ export function useDigest() {
   const hasNext = computed(() => currentDateIndex.value > 0);
 
   const formattedDate = computed(() => {
-    if (!digest.value) {
-      return new Date().toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      });
-    }
-    return new Date(digest.value.date + "T12:00:00").toLocaleDateString(
-      "en-US",
-      {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      }
-    );
+    const date = digest.value
+      ? new Date(digest.value.date + "T12:00:00")
+      : new Date();
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    });
   });
 
   return {

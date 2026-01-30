@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { DigestItem } from "../types";
 
-defineProps<{
+const props = defineProps<{
   item: DigestItem;
 }>();
 
@@ -22,8 +23,11 @@ const fallbackStyle = {
   text: "text-gray-400",
 };
 
+const style = computed(() => categoryStyle[props.item.category] || fallbackStyle);
+
 function formatDate(iso: string): string {
   const d = new Date(iso);
+  if (isNaN(d.getTime())) return "Recently";
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffH = Math.floor(diffMs / (1000 * 60 * 60));
@@ -44,11 +48,11 @@ function formatDate(iso: string): string {
       <span
         :class="[
           'rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wider uppercase',
-          (categoryStyle[item.category] || fallbackStyle).bg,
-          (categoryStyle[item.category] || fallbackStyle).text,
+          style.bg,
+          style.text,
         ]"
       >
-        {{ (categoryStyle[item.category] || fallbackStyle).label }}
+        {{ style.label }}
       </span>
       <span
         v-if="item.publishedAt"
