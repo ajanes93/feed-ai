@@ -76,11 +76,18 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Error/Empty state -->
-    <EmptyState
-      v-else-if="error"
-      :message="error"
-    />
+    <!-- Error/Empty state with navigation -->
+    <template v-else-if="error">
+      <DateHeader
+        :date="formattedDate"
+        :item-count="0"
+        :has-previous="hasPrevious"
+        :has-next="hasNext"
+        @previous="goToPrevious"
+        @next="goToNext"
+      />
+      <EmptyState :message="error" />
+    </template>
 
     <!-- Digest content -->
     <template v-else-if="digest">
