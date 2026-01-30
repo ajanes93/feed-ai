@@ -68,7 +68,7 @@ app.get("/api/digest/:date", async (c) => {
     date: digest.date,
     itemCount: digest.item_count,
     items: items.results.map((row) => {
-      const item = row as DbItem;
+      const item = row as unknown as DbItem;
       return {
         id: item.id,
         category: item.category,
@@ -149,10 +149,21 @@ app.post("/api/generate", async (c) => {
   return generateDailyDigest(c.env);
 });
 
+// Rebuild digest for a specific date (protected)
+app.post("/api/rebuild/:date", async (c) => {
+  if (!checkAuth(c)) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  const date = c.req.param("date");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return c.json({ error: "Invalid date format, use YYYY-MM-DD" }, 400);
+  }
+  return rebuildDigest(c.env, date);
+});
+
 // Cron handler
 async function generateDailyDigest(env: Env): Promise<Response> {
   const today = new Date().toISOString().split("T")[0];
-  const digestId = `digest-${today}`;
 
   // Check if already generated
   const existing = await env.DB.prepare("SELECT id FROM digests WHERE date = ?")
@@ -162,6 +173,26 @@ async function generateDailyDigest(env: Env): Promise<Response> {
   if (existing) {
     return new Response(`Digest already exists for ${today}`, { status: 200 });
   }
+
+  return buildAndSaveDigest(env, today);
+}
+
+// Rebuild: delete existing digest for date, then regenerate
+async function rebuildDigest(env: Env, date: string): Promise<Response> {
+  const digestId = `digest-${date}`;
+
+  // Delete existing digest and its items
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM items WHERE digest_id = ?").bind(digestId),
+    env.DB.prepare("DELETE FROM digests WHERE id = ?").bind(digestId),
+  ]);
+  console.log(`Deleted existing digest for ${date}`);
+
+  return buildAndSaveDigest(env, date);
+}
+
+async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
+  const digestId = `digest-${date}`;
 
   // Fetch all sources
   console.log("Fetching sources...");
@@ -188,7 +219,7 @@ async function generateDailyDigest(env: Env): Promise<Response> {
   const statements = [
     env.DB.prepare(
       "INSERT INTO digests (id, date, item_count) VALUES (?, ?, ?)"
-    ).bind(digestId, today, digestItems.length),
+    ).bind(digestId, date, digestItems.length),
     ...digestItems.map((item) =>
       env.DB.prepare(
         "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, published_at, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
