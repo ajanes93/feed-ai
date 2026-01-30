@@ -86,6 +86,20 @@ function mapErrorLog(row: Record<string, unknown>) {
   };
 }
 
+function mapDigestItem(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    category: row.category,
+    title: row.title,
+    summary: row.summary,
+    whyItMatters: row.why_it_matters,
+    sourceName: row.source_name,
+    sourceUrl: row.source_url,
+    publishedAt: row.published_at,
+    position: row.position,
+  };
+}
+
 // --- App ---
 
 const app = new Hono<{ Bindings: Env }>();
@@ -140,20 +154,7 @@ app.get("/api/digest/:date", async (c) => {
     id: digest.id,
     date: digest.date,
     itemCount: digest.item_count,
-    items: items.results.map((row) => {
-      const r = row as Record<string, unknown>;
-      return {
-        id: r.id,
-        category: r.category,
-        title: r.title,
-        summary: r.summary,
-        whyItMatters: r.why_it_matters,
-        sourceName: r.source_name,
-        sourceUrl: r.source_url,
-        publishedAt: r.published_at,
-        position: r.position,
-      };
-    }),
+    items: items.results.map((row) => mapDigestItem(row as Record<string, unknown>)),
   });
 });
 

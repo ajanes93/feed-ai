@@ -60,6 +60,14 @@ Return ONLY a JSON array, no other text:
 ]`;
 }
 
+class AIError extends Error {
+  usage: AIUsageEntry;
+  constructor(usage: AIUsageEntry) {
+    super(`${usage.provider} error: ${usage.error}`);
+    this.usage = usage;
+  }
+}
+
 function aiError(
   model: string,
   provider: "gemini" | "anthropic",
@@ -68,8 +76,7 @@ function aiError(
   error: string,
   status: "rate_limited" | "error" = "error"
 ): never {
-  const usage: AIUsageEntry = { model, provider, latencyMs, wasFallback, error, status };
-  throw Object.assign(new Error(`${provider} error: ${error}`), { usage });
+  throw new AIError({ model, provider, latencyMs, wasFallback, error, status });
 }
 
 async function callGemini(prompt: string, apiKey: string): Promise<{ text: string; usage: AIUsageEntry }> {
@@ -165,8 +172,7 @@ async function callAI(
       usages.push(result.usage);
       return { text: result.text, usages };
     } catch (err) {
-      const errWithUsage = err as Error & { usage?: AIUsageEntry };
-      if (errWithUsage.usage) usages.push(errWithUsage.usage);
+      if (err instanceof AIError) usages.push(err.usage);
       console.error("Gemini failed, falling back to Claude:", err);
       if (!apiKeys.anthropic) throw err;
     }
@@ -184,6 +190,22 @@ async function callAI(
   );
 }
 
+function tryRecoverTruncatedJSON(json: string): DigestItemRaw[] | null {
+  try {
+    const lastComplete = json.lastIndexOf("}");
+    if (lastComplete <= 0) return null;
+    const recovered = json.slice(0, lastComplete + 1) + "]";
+    const parsed = JSON.parse(recovered);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      console.warn(`Recovered ${parsed.length} items from truncated response`);
+      return parsed;
+    }
+  } catch (err) {
+    console.error("Truncation recovery also failed:", (err as Error).message);
+  }
+  return null;
+}
+
 function parseAIResponse(responseText: string): DigestItemRaw[] {
   // Strip markdown fences (opening and closing)
   const cleaned = responseText
@@ -191,27 +213,13 @@ function parseAIResponse(responseText: string): DigestItemRaw[] {
     .replace(/```\s*$/g, "")
     .trim();
 
-  // Try parsing as-is first
   try {
     const parsed = JSON.parse(cleaned);
     if (Array.isArray(parsed) && parsed.length > 0) return parsed;
   } catch (err) {
     console.warn("Initial JSON parse failed, attempting truncation recovery:", (err as Error).message);
-
-    // Response may be truncated — try to recover valid items
-    try {
-      const lastComplete = cleaned.lastIndexOf("}");
-      if (lastComplete > 0) {
-        const recovered = cleaned.slice(0, lastComplete + 1) + "]";
-        const parsed = JSON.parse(recovered);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          console.warn(`Recovered ${parsed.length} items from truncated response`);
-          return parsed;
-        }
-      }
-    } catch (recoveryErr) {
-      console.error("Truncation recovery also failed:", (recoveryErr as Error).message);
-    }
+    const recovered = tryRecoverTruncatedJSON(cleaned);
+    if (recovered) return recovered;
   }
 
   throw new Error("Expected non-empty JSON array from AI");
