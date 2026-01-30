@@ -1,62 +1,11 @@
+import { XMLParser } from "fast-xml-parser";
 import { Source } from "../sources";
 import { RawItem } from "../types";
 
-function extractTag(xml: string, tag: string): string {
-  const match = xml.match(
-    new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]></${tag}>`)
-  );
-  if (match) return match[1].trim();
-
-  const simple = xml.match(
-    new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`)
-  );
-  return simple ? simple[1].trim() : "";
-}
-
-interface FeedItem {
-  title: string;
-  link: string;
-  content: string;
-  pubDate: string;
-}
-
-function parseItems(xml: string): FeedItem[] {
-  const items: FeedItem[] = [];
-
-  // Match both <item> (RSS) and <entry> (Atom) elements
-  const itemRegex = /<(?:item|entry)[\s>]([\s\S]*?)<\/(?:item|entry)>/gi;
-  let match;
-
-  while ((match = itemRegex.exec(xml)) !== null) {
-    const block = match[1];
-    const title = extractTag(block, "title");
-
-    // RSS uses <link>, Atom uses <link href="..."/>
-    let link = extractTag(block, "link");
-    if (!link) {
-      const hrefMatch = block.match(
-        /<link[^>]*href=["']([^"']+)["'][^>]*\/?>/
-      );
-      if (hrefMatch) link = hrefMatch[1];
-    }
-
-    const content =
-      extractTag(block, "description") ||
-      extractTag(block, "content") ||
-      extractTag(block, "summary") ||
-      "";
-
-    const pubDate =
-      extractTag(block, "pubDate") ||
-      extractTag(block, "published") ||
-      extractTag(block, "updated") ||
-      "";
-
-    items.push({ title, link, content, pubDate });
-  }
-
-  return items;
-}
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+});
 
 function stripHtml(html: string): string {
   return html
@@ -70,51 +19,160 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-function parsePublishedDate(pubDate: string): number | undefined {
-  if (!pubDate) return undefined;
-  const timestamp = new Date(pubDate).getTime();
+function parsePublishedDate(dateStr?: string): number | undefined {
+  if (!dateStr) return undefined;
+  const timestamp = new Date(dateStr).getTime();
   return isNaN(timestamp) ? undefined : timestamp;
+}
+
+interface FeedItem {
+  title?: string;
+  link?: string | { "@_href"?: string };
+  description?: string;
+  "content:encoded"?: string;
+  content?: string;
+  summary?: string;
+  pubDate?: string;
+  published?: string;
+  updated?: string;
+}
+
+function extractLink(link: FeedItem["link"]): string {
+  if (typeof link === "string") return link;
+  return link?.["@_href"] || "";
+}
+
+function extractItems(parsed: Record<string, unknown>): FeedItem[] {
+  const rss = parsed.rss as Record<string, unknown> | undefined;
+  const channel = rss?.channel as Record<string, unknown> | undefined;
+  const feed = parsed.feed as Record<string, unknown> | undefined;
+
+  const items = channel?.item ?? feed?.entry;
+  if (!items) return [];
+  return Array.isArray(items) ? items : [items];
+}
+
+const ITEM_LIMIT = 20;
+
+async function fetchRssFeed(source: Source): Promise<RawItem[]> {
+  const response = await fetch(source.url, {
+    headers: { "User-Agent": "feed-ai/1.0" },
+  });
+
+  if (!response.ok) {
+    console.error(`HTTP ${response.status} from ${source.name}`);
+    return [];
+  }
+
+  const xml = await response.text();
+  const parsed = xmlParser.parse(xml);
+  const items = extractItems(parsed);
+
+  return items.slice(0, ITEM_LIMIT).map((item) => ({
+    id: crypto.randomUUID(),
+    sourceId: source.id,
+    title: stripHtml(String(item.title || "Untitled")),
+    link: extractLink(item.link),
+    content: stripHtml(
+      String(
+        item["content:encoded"] ||
+          item.content ||
+          item.description ||
+          item.summary ||
+          ""
+      )
+    ),
+    publishedAt: parsePublishedDate(
+      item.pubDate || item.published || item.updated
+    ),
+  }));
+}
+
+interface JobicyJob {
+  id: number;
+  jobTitle: string;
+  url: string;
+  jobDescription?: string;
+  pubDate?: string;
+}
+
+interface JobicyResponse {
+  jobs?: JobicyJob[];
+}
+
+async function fetchJsonApi(source: Source): Promise<RawItem[]> {
+  const response = await fetch(source.url, {
+    headers: { "User-Agent": "feed-ai/1.0" },
+  });
+
+  if (!response.ok) {
+    console.error(`HTTP ${response.status} from ${source.name}`);
+    return [];
+  }
+
+  const data: JobicyResponse = await response.json();
+  const jobs = data.jobs || [];
+
+  return jobs.slice(0, ITEM_LIMIT).map((job) => ({
+    id: crypto.randomUUID(),
+    sourceId: source.id,
+    title: job.jobTitle || "Untitled",
+    link: job.url || "",
+    content: stripHtml(job.jobDescription || ""),
+    publishedAt: parsePublishedDate(job.pubDate),
+  }));
 }
 
 export async function fetchSource(source: Source): Promise<RawItem[]> {
   try {
-    const response = await fetch(source.url, {
-      headers: { "User-Agent": "feed-ai/1.0" },
-    });
-
-    if (!response.ok) {
-      console.error(`HTTP ${response.status} from ${source.name}`);
-      return [];
+    if (source.type === "api") {
+      return await fetchJsonApi(source);
     }
-
-    const xml = await response.text();
-    const items = parseItems(xml);
-
-    return items.slice(0, 20).map((item) => ({
-      id: crypto.randomUUID(),
-      sourceId: source.id,
-      title: stripHtml(item.title) || "Untitled",
-      link: item.link || "",
-      content: stripHtml(item.content),
-      publishedAt: parsePublishedDate(item.pubDate),
-    }));
+    // rss, reddit, hn, github, bluesky — all XML feeds
+    return await fetchRssFeed(source);
   } catch (error) {
     console.error(`Failed to fetch ${source.name}:`, error);
     return [];
   }
 }
 
+export interface SourceFetchResult {
+  sourceId: string;
+  success: boolean;
+  itemCount: number;
+  error?: string;
+}
+
 export async function fetchAllSources(
   sources: Source[]
-): Promise<RawItem[]> {
+): Promise<{ items: RawItem[]; health: SourceFetchResult[] }> {
+  const health: SourceFetchResult[] = [];
+
   const results = await Promise.allSettled(
-    sources.map((source) => fetchSource(source))
+    sources.map(async (source) => {
+      try {
+        const items = await fetchSource(source);
+        health.push({
+          sourceId: source.id,
+          success: true,
+          itemCount: items.length,
+        });
+        return items;
+      } catch (err) {
+        health.push({
+          sourceId: source.id,
+          success: false,
+          itemCount: 0,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return [];
+      }
+    })
   );
 
   const allItems = results
     .filter(
-      (r): r is PromiseFulfilledResult<RawItem[]> =>
-        r.status === "fulfilled"
+      (r): r is PromiseFulfilledResult<RawItem[]> => r.status === "fulfilled"
     )
     .flatMap((r) => r.value);
 
@@ -128,5 +186,5 @@ export async function fetchAllSources(
     `Filtered ${allItems.length} items to ${recent.length} recent items (last 48h)`
   );
 
-  return recent;
+  return { items: recent, health };
 }

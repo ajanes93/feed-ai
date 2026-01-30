@@ -45,6 +45,16 @@ CREATE TABLE raw_items (
   FOREIGN KEY (source_id) REFERENCES sources(id)
 );
 
+-- Source health tracking
+CREATE TABLE IF NOT EXISTS source_health (
+  source_id TEXT PRIMARY KEY,
+  last_success_at INTEGER,
+  last_error_at INTEGER,
+  last_error TEXT,
+  item_count INTEGER DEFAULT 0,
+  consecutive_failures INTEGER DEFAULT 0
+);
+
 CREATE INDEX idx_digests_date ON digests(date);
 CREATE INDEX idx_items_digest ON items(digest_id);
 CREATE INDEX idx_items_position ON items(position);

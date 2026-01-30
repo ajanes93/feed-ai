@@ -1,9 +1,19 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, computed } from "vue";
+import { onMounted, ref, computed } from "vue";
 import { useDigest } from "./composables/useDigest";
+import { useSwipeNavigation } from "./composables/useSwipeNavigation";
 import DigestFeed from "./components/DigestFeed.vue";
 import DateHeader from "./components/DateHeader.vue";
 import EmptyState from "./components/EmptyState.vue";
+import CategoryFilter from "./components/CategoryFilter.vue";
+
+const activeCategory = ref("all");
+
+const filteredItems = computed(() => {
+  if (!digest.value) return [];
+  if (activeCategory.value === "all") return digest.value.items;
+  return digest.value.items.filter((i) => i.category === activeCategory.value);
+});
 
 const {
   digest,
@@ -17,61 +27,21 @@ const {
   goToNext,
 } = useDigest();
 
-const swipeTransition = ref<"none" | "slide-left" | "slide-right">("none");
-const transitioning = ref(false);
-
-let touchStartX = 0;
-let touchStartY = 0;
-let transitionTimeout: ReturnType<typeof setTimeout> | null = null;
-const SWIPE_THRESHOLD = 60;
-const TRANSITION_DURATION = 300;
-
-onBeforeUnmount(() => {
-  if (transitionTimeout) clearTimeout(transitionTimeout);
+const {
+  swipeStyle,
+  pullDistance,
+  refreshing,
+  pullThreshold,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+} = useSwipeNavigation({
+  hasPrevious,
+  hasNext,
+  onSwipeRight: goToPrevious,
+  onSwipeLeft: goToNext,
+  onPullRefresh: fetchToday,
 });
-
-const transitionClasses = computed(() => {
-  if (swipeTransition.value === "slide-left") {
-    return "-translate-x-4 opacity-90";
-  }
-  if (swipeTransition.value === "slide-right") {
-    return "translate-x-4 opacity-90";
-  }
-  return "";
-});
-
-function onTouchStart(e: TouchEvent) {
-  const touch = e.touches[0];
-  if (!touch) return;
-  touchStartX = touch.clientX;
-  touchStartY = touch.clientY;
-}
-
-async function onTouchEnd(e: TouchEvent) {
-  const touch = e.changedTouches[0];
-  if (transitioning.value || !touch) return;
-
-  const dx = touch.clientX - touchStartX;
-  const dy = touch.clientY - touchStartY;
-
-  if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) < Math.abs(dy)) return;
-
-  transitioning.value = true;
-
-  if (dx > 0 && hasPrevious.value) {
-    swipeTransition.value = "slide-right";
-    await goToPrevious();
-  } else if (dx < 0 && hasNext.value) {
-    swipeTransition.value = "slide-left";
-    await goToNext();
-  }
-
-  transitionTimeout = setTimeout(() => {
-    swipeTransition.value = "none";
-    transitioning.value = false;
-    transitionTimeout = null;
-  }, TRANSITION_DURATION);
-}
 
 onMounted(() => {
   fetchToday();
@@ -80,20 +50,49 @@ onMounted(() => {
 
 <template>
   <div
-    class="min-h-screen bg-gray-950"
+    class="min-h-[100dvh] bg-gray-950"
     @touchstart="onTouchStart"
+    @touchmove="onTouchMove"
     @touchend="onTouchEnd"
   >
-    <!-- Loading state -->
+    <!-- Pull-to-refresh indicator -->
+    <div
+      v-if="pullDistance > 0"
+      class="fixed top-0 right-0 left-0 z-20 flex items-center justify-center transition-transform duration-200"
+      :style="{ transform: `translateY(${pullDistance - 40}px)` }"
+    >
+      <div
+        :class="[
+          'h-8 w-8 rounded-full border-2 border-gray-600 border-t-white',
+          refreshing ? 'animate-spin' : '',
+        ]"
+        :style="{
+          opacity: Math.min(1, pullDistance / pullThreshold),
+          transform: `rotate(${pullDistance * 3}deg)`,
+        }"
+      />
+    </div>
+
+    <!-- Loading skeleton -->
     <div
       v-if="loading"
-      class="flex h-screen items-center justify-center"
+      class="h-[100dvh] overflow-hidden pt-22"
     >
-      <div class="flex flex-col items-center gap-3">
+      <div class="mx-auto flex max-w-lg flex-col gap-3 px-4">
         <div
-          class="h-8 w-8 animate-spin rounded-full border-2 border-gray-700 border-t-white"
-        />
-        <span class="text-sm text-gray-500">Loading digest...</span>
+          v-for="n in 5"
+          :key="n"
+          class="animate-pulse rounded-xl border border-gray-800/50 bg-gray-900/60 p-5"
+        >
+          <div class="mb-3 flex items-center gap-3">
+            <div class="h-5 w-10 rounded-full bg-gray-800" />
+            <div class="h-4 w-12 rounded bg-gray-800" />
+            <div class="ml-auto h-4 w-20 rounded bg-gray-800" />
+          </div>
+          <div class="h-5 w-3/4 rounded bg-gray-800" />
+          <div class="mt-3 h-4 w-full rounded bg-gray-800/60" />
+          <div class="mt-1.5 h-4 w-5/6 rounded bg-gray-800/60" />
+        </div>
       </div>
     </div>
 
@@ -114,16 +113,23 @@ onMounted(() => {
     <template v-else-if="digest">
       <DateHeader
         :date="formattedDate"
-        :item-count="digest.itemCount"
+        :item-count="filteredItems.length"
         :has-previous="hasPrevious"
         :has-next="hasNext"
         @previous="goToPrevious"
         @next="goToNext"
       />
-      <div
-        :class="['transition-transform duration-300 ease-out', transitionClasses]"
-      >
-        <DigestFeed :items="digest.items" />
+      <div class="fixed top-12 right-0 left-0 z-10 px-5 pb-2">
+        <div class="mx-auto max-w-lg">
+          <CategoryFilter
+            :items="digest.items"
+            :active-category="activeCategory"
+            @select="activeCategory = $event"
+          />
+        </div>
+      </div>
+      <div :style="swipeStyle">
+        <DigestFeed :items="filteredItems" />
       </div>
     </template>
   </div>
