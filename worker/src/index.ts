@@ -138,6 +138,11 @@ app.post("/api/rebuild/:date", async (c) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return c.json({ error: "Invalid date format, use YYYY-MM-DD" }, 400);
   }
+  // RSS feeds only contain recent items — rebuilding older digests would use today's feed data
+  const msAgo = Date.now() - new Date(date + "T00:00:00Z").getTime();
+  if (msAgo > 48 * 60 * 60 * 1000) {
+    return c.json({ error: "Can only rebuild digests from the last 48 hours" }, 400);
+  }
   return rebuildDigest(c.env, date);
 });
 
