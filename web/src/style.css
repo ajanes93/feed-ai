@@ -5,4 +5,20 @@ body,
 #app {
   height: 100%;
   overflow: hidden;
+  background-color: #030712;
+}
+
+/* Smooth scroll snap */
+.snap-y {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Hide scrollbar */
+.overflow-y-scroll::-webkit-scrollbar {
+  display: none;
+}
+.overflow-y-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

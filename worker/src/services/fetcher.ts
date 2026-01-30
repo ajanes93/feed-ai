@@ -110,10 +110,22 @@ export async function fetchAllSources(
     sources.map((source) => fetchSource(source))
   );
 
-  return results
+  const allItems = results
     .filter(
       (r): r is PromiseFulfilledResult<RawItem[]> =>
         r.status === "fulfilled"
     )
     .flatMap((r) => r.value);
+
+  // Filter to items published within the last 48 hours
+  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+  const recent = allItems.filter(
+    (item) => !item.publishedAt || item.publishedAt >= cutoff
+  );
+
+  console.log(
+    `Filtered ${allItems.length} items to ${recent.length} recent items (last 48h)`
+  );
+
+  return recent;
 }
