@@ -1,14 +1,7 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
 import { useDashboard } from "../composables/useDashboard";
 
-const { data, loading, error, adminKey, saveKey, fetchDashboard } =
-  useDashboard();
-
-function handleLogin() {
-  saveKey(adminKey.value);
-  fetchDashboard();
-}
+const { data, loading, error, adminKey, fetchDashboard } = useDashboard();
 
 function timeAgo(unixTs: number | null): string {
   if (!unixTs) return "Never";
@@ -24,10 +17,6 @@ function formatTokens(n: number | null): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
 }
-
-onMounted(() => {
-  if (adminKey.value) fetchDashboard();
-});
 </script>
 
 <template>
@@ -51,7 +40,7 @@ onMounted(() => {
       >
         <form
           class="flex flex-col gap-3"
-          @submit.prevent="handleLogin"
+          @submit.prevent="fetchDashboard"
         >
           <input
             v-model="adminKey"

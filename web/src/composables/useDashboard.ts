@@ -55,12 +55,7 @@ export function useDashboard() {
   const data = ref<DashboardData | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
-  const adminKey = ref(localStorage.getItem("adminKey") || "");
-
-  function saveKey(key: string) {
-    adminKey.value = key;
-    localStorage.setItem("adminKey", key);
-  }
+  const adminKey = ref("");
 
   async function fetchDashboard() {
     if (!adminKey.value) {
@@ -93,5 +88,5 @@ export function useDashboard() {
     }
   }
 
-  return { data, loading, error, adminKey, saveKey, fetchDashboard };
+  return { data, loading, error, adminKey, fetchDashboard };
 }

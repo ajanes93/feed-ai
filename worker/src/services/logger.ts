@@ -38,7 +38,7 @@ export async function logEvent(db: D1Database, entry: LogEntry) {
         entry.level,
         entry.category,
         entry.message,
-        entry.details ? JSON.stringify(entry.details) : null,
+        entry.details ? JSON.stringify(entry.details).slice(0, 5000) : null,
         entry.sourceId ?? null,
         entry.digestId ?? null
       )

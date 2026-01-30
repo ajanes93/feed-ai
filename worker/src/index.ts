@@ -15,6 +15,79 @@ function timingSafeEqual(a: string, b: string): boolean {
   return crypto.subtle.timingSafeEqual(aBuf, bBuf);
 }
 
+function isAuthorized(authHeader: string, adminKey?: string): boolean {
+  if (!adminKey) return false;
+  const expected = `Bearer ${adminKey}`;
+  return (
+    authHeader.length === expected.length &&
+    timingSafeEqual(authHeader, expected)
+  );
+}
+
+function safeJsonParse(json: string): unknown {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+// --- Shared mapping helpers ---
+
+function mapSourceHealth(row: Record<string, unknown>) {
+  const source = sources.find((s) => s.id === row.source_id);
+  const thresholdDays = source ? FRESHNESS_THRESHOLDS[source.category] : 14;
+  const thresholdSec = thresholdDays * 24 * 60 * 60;
+  const now = Math.floor(Date.now() / 1000);
+  const lastSuccess = row.last_success_at as number | null;
+  const stale = !lastSuccess || now - lastSuccess > thresholdSec;
+
+  return {
+    sourceId: row.source_id,
+    sourceName: source?.name ?? row.source_id,
+    category: source?.category ?? "unknown",
+    lastSuccessAt: lastSuccess,
+    lastErrorAt: row.last_error_at,
+    lastError: row.last_error,
+    itemCount: row.item_count,
+    consecutiveFailures: row.consecutive_failures,
+    stale,
+    thresholdDays,
+  };
+}
+
+function mapAIUsage(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    digestId: row.digest_id,
+    model: row.model,
+    provider: row.provider,
+    inputTokens: row.input_tokens,
+    outputTokens: row.output_tokens,
+    totalTokens: row.total_tokens,
+    latencyMs: row.latency_ms,
+    wasFallback: row.was_fallback === 1,
+    error: row.error,
+    status: row.status,
+    createdAt: row.created_at,
+  };
+}
+
+function mapErrorLog(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    level: row.level,
+    category: row.category,
+    message: row.message,
+    details: row.details ? safeJsonParse(row.details as string) : null,
+    sourceId: row.source_id,
+    digestId: row.digest_id,
+    createdAt: row.created_at,
+  };
+}
+
+// --- App ---
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.use(
@@ -93,15 +166,6 @@ app.get("/api/digests", async (c) => {
   return c.json(result.results);
 });
 
-function isAuthorized(authHeader: string, adminKey?: string): boolean {
-  if (!adminKey) return false;
-  const expected = `Bearer ${adminKey}`;
-  return (
-    authHeader.length === expected.length &&
-    timingSafeEqual(authHeader, expected)
-  );
-}
-
 app.get("/api/health", async (c) => {
   if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
     return c.json({ error: "Unauthorized" }, 401);
@@ -111,104 +175,10 @@ app.get("/api/health", async (c) => {
     "SELECT * FROM source_health ORDER BY last_success_at ASC"
   ).all();
 
-  const now = Math.floor(Date.now() / 1000);
-  const healthData = result.results.map((row) => {
-    const source = sources.find((s) => s.id === row.source_id);
-    const thresholdDays = source ? FRESHNESS_THRESHOLDS[source.category] : 14;
-    const thresholdSec = thresholdDays * 24 * 60 * 60;
-    const lastSuccess = row.last_success_at as number | null;
-    const stale = !lastSuccess || now - lastSuccess > thresholdSec;
-
-    return {
-      sourceId: row.source_id,
-      sourceName: source?.name ?? row.source_id,
-      category: source?.category ?? "unknown",
-      lastSuccessAt: lastSuccess,
-      lastErrorAt: row.last_error_at,
-      lastError: row.last_error,
-      itemCount: row.item_count,
-      consecutiveFailures: row.consecutive_failures,
-      stale,
-      thresholdDays,
-    };
-  });
-
-  return c.json(healthData);
+  return c.json(result.results.map((row) => mapSourceHealth(row as Record<string, unknown>)));
 });
 
-// --- Admin: AI Usage ---
-app.get("/api/admin/ai-usage", async (c) => {
-  if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
-
-  const result = await c.env.DB.prepare(
-    "SELECT * FROM ai_usage ORDER BY created_at DESC LIMIT 100"
-  ).all();
-
-  return c.json(
-    result.results.map((row) => ({
-      id: row.id,
-      digestId: row.digest_id,
-      model: row.model,
-      provider: row.provider,
-      inputTokens: row.input_tokens,
-      outputTokens: row.output_tokens,
-      totalTokens: row.total_tokens,
-      latencyMs: row.latency_ms,
-      wasFallback: row.was_fallback === 1,
-      error: row.error,
-      status: row.status,
-      createdAt: row.created_at,
-    }))
-  );
-});
-
-// --- Admin: Error Logs ---
-app.get("/api/admin/errors", async (c) => {
-  if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
-
-  const category = c.req.query("category");
-  const level = c.req.query("level");
-
-  let query = "SELECT * FROM error_logs";
-  const conditions: string[] = [];
-  const binds: string[] = [];
-
-  if (category) {
-    conditions.push("category = ?");
-    binds.push(category);
-  }
-  if (level) {
-    conditions.push("level = ?");
-    binds.push(level);
-  }
-
-  if (conditions.length > 0) {
-    query += " WHERE " + conditions.join(" AND ");
-  }
-  query += " ORDER BY created_at DESC LIMIT 200";
-
-  const stmt = c.env.DB.prepare(query);
-  const result = await (binds.length > 0 ? stmt.bind(...binds) : stmt).all();
-
-  return c.json(
-    result.results.map((row) => ({
-      id: row.id,
-      level: row.level,
-      category: row.category,
-      message: row.message,
-      details: row.details ? JSON.parse(row.details as string) : null,
-      sourceId: row.source_id,
-      digestId: row.digest_id,
-      createdAt: row.created_at,
-    }))
-  );
-});
-
-// --- Admin: Dashboard summary ---
+// --- Admin: Dashboard summary (single endpoint for all dashboard data) ---
 app.get("/api/admin/dashboard", async (c) => {
   if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
     return c.json({ error: "Unauthorized" }, 401);
@@ -227,24 +197,11 @@ app.get("/api/admin/dashboard", async (c) => {
     c.env.DB.prepare("SELECT COUNT(*) as count FROM digests").first(),
   ]);
 
-  const now = Math.floor(Date.now() / 1000);
+  const mappedUsage = aiUsage.results.map((row) => mapAIUsage(row as Record<string, unknown>));
 
   return c.json({
     ai: {
-      recentCalls: aiUsage.results.map((row) => ({
-        id: row.id,
-        digestId: row.digest_id,
-        model: row.model,
-        provider: row.provider,
-        inputTokens: row.input_tokens,
-        outputTokens: row.output_tokens,
-        totalTokens: row.total_tokens,
-        latencyMs: row.latency_ms,
-        wasFallback: row.was_fallback === 1,
-        error: row.error,
-        status: row.status,
-        createdAt: row.created_at,
-      })),
+      recentCalls: mappedUsage,
       totalTokens: aiUsage.results.reduce(
         (sum, r) => sum + ((r.total_tokens as number) || 0),
         0
@@ -255,33 +212,8 @@ app.get("/api/admin/dashboard", async (c) => {
       fallbackCount: aiUsage.results.filter((r) => r.was_fallback === 1)
         .length,
     },
-    sources: sourceHealth.results.map((row) => {
-      const source = sources.find((s) => s.id === row.source_id);
-      const thresholdDays = source ? FRESHNESS_THRESHOLDS[source.category] : 14;
-      const thresholdSec = thresholdDays * 24 * 60 * 60;
-      const lastSuccess = row.last_success_at as number | null;
-      const stale = !lastSuccess || now - lastSuccess > thresholdSec;
-      return {
-        sourceId: row.source_id,
-        sourceName: source?.name ?? row.source_id,
-        category: source?.category ?? "unknown",
-        lastSuccessAt: lastSuccess,
-        lastErrorAt: row.last_error_at,
-        lastError: row.last_error,
-        itemCount: row.item_count,
-        consecutiveFailures: row.consecutive_failures,
-        stale,
-      };
-    }),
-    errors: recentErrors.results.map((row) => ({
-      id: row.id,
-      level: row.level,
-      category: row.category,
-      message: row.message,
-      details: row.details ? JSON.parse(row.details as string) : null,
-      sourceId: row.source_id,
-      createdAt: row.created_at,
-    })),
+    sources: sourceHealth.results.map((row) => mapSourceHealth(row as Record<string, unknown>)),
+    errors: recentErrors.results.map((row) => mapErrorLog(row as Record<string, unknown>)),
     totalDigests: (digestCount as Record<string, unknown>)?.count ?? 0,
   });
 });
@@ -361,19 +293,21 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   );
   console.log(`Generated ${digestItems.length} digest items`);
 
-  // Record AI usage
-  for (const usage of aiUsages) {
-    await recordAIUsage(env.DB, usage);
-    if (usage.status !== "success") {
-      await logEvent(env.DB, {
-        level: usage.status === "rate_limited" ? "warn" : "error",
-        category: "ai",
-        message: `${usage.provider} ${usage.status}: ${usage.error || "unknown"}`,
-        details: { model: usage.model, latencyMs: usage.latencyMs },
-        digestId,
-      });
-    }
-  }
+  // Record AI usage in parallel
+  await Promise.all(
+    aiUsages.map(async (usage) => {
+      await recordAIUsage(env.DB, usage);
+      if (usage.status !== "success") {
+        await logEvent(env.DB, {
+          level: usage.status === "rate_limited" ? "warn" : "error",
+          category: "ai",
+          message: `${usage.provider} ${usage.status}: ${usage.error || "unknown"}`,
+          details: { model: usage.model, latencyMs: usage.latencyMs },
+          digestId,
+        });
+      }
+    })
+  );
 
   // Save to D1 using batch for atomicity
   const statements = [
@@ -425,17 +359,19 @@ async function recordSourceHealth(env: Env, results: SourceFetchResult[]) {
     ).bind(r.sourceId, now, r.error ?? null, now, r.error ?? null);
   });
 
-  // Log source failures
-  for (const r of results) {
-    if (!r.success) {
-      await logEvent(env.DB, {
-        level: "warn",
-        category: "fetch",
-        message: `Source fetch failed: ${r.error}`,
-        sourceId: r.sourceId,
-      });
-    }
-  }
+  // Log source failures in parallel
+  await Promise.all(
+    results
+      .filter((r) => !r.success)
+      .map((r) =>
+        logEvent(env.DB, {
+          level: "warn",
+          category: "fetch",
+          message: `Source fetch failed: ${r.error}`,
+          sourceId: r.sourceId,
+        })
+      )
+  );
 
   try {
     await env.DB.batch(statements);

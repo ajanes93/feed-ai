@@ -88,6 +88,7 @@ CREATE INDEX idx_ai_usage_created ON ai_usage(created_at);
 CREATE INDEX idx_ai_usage_digest ON ai_usage(digest_id);
 CREATE INDEX idx_error_logs_created ON error_logs(created_at);
 CREATE INDEX idx_error_logs_category ON error_logs(category);
+CREATE INDEX idx_error_logs_level ON error_logs(level);
 
 CREATE INDEX idx_digests_date ON digests(date);
 CREATE INDEX idx_items_digest ON items(digest_id);

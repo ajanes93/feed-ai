@@ -12,11 +12,6 @@ interface DigestItemRaw {
   source_url: string;
 }
 
-export interface AICallResult {
-  text: string;
-  usage: AIUsageEntry;
-}
-
 export interface DigestResult {
   items: DigestItem[];
   aiUsages: AIUsageEntry[];
@@ -65,7 +60,19 @@ Return ONLY a JSON array, no other text:
 ]`;
 }
 
-async function callGemini(prompt: string, apiKey: string): Promise<AICallResult> {
+function aiError(
+  model: string,
+  provider: "gemini" | "anthropic",
+  latencyMs: number,
+  wasFallback: boolean,
+  error: string,
+  status: "rate_limited" | "error" = "error"
+): never {
+  const usage: AIUsageEntry = { model, provider, latencyMs, wasFallback, error, status };
+  throw Object.assign(new Error(`${provider} error: ${error}`), { usage });
+}
+
+async function callGemini(prompt: string, apiKey: string): Promise<{ text: string; usage: AIUsageEntry }> {
   const start = Date.now();
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
@@ -86,31 +93,14 @@ async function callGemini(prompt: string, apiKey: string): Promise<AICallResult>
 
   if (!res.ok) {
     const body = await res.text();
-    const isRateLimit = res.status === 429;
-    const usage: AIUsageEntry = {
-      model: "gemini-2.0-flash",
-      provider: "gemini",
-      latencyMs,
-      wasFallback: false,
-      error: body.slice(0, 500),
-      status: isRateLimit ? "rate_limited" : "error",
-    };
-    throw Object.assign(new Error(`Gemini API error ${res.status}: ${body}`), { usage });
+    aiError("gemini-2.0-flash", "gemini", latencyMs, false, body.slice(0, 500), res.status === 429 ? "rate_limited" : "error");
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) {
-    const usage: AIUsageEntry = {
-      model: "gemini-2.0-flash",
-      provider: "gemini",
-      latencyMs,
-      wasFallback: false,
-      error: "Empty response",
-      status: "error",
-    };
-    throw Object.assign(new Error("Empty Gemini response"), { usage });
+    aiError("gemini-2.0-flash", "gemini", latencyMs, false, "Empty response");
   }
 
   const tokenMeta = data?.usageMetadata;
@@ -129,7 +119,7 @@ async function callGemini(prompt: string, apiKey: string): Promise<AICallResult>
   };
 }
 
-async function callClaude(prompt: string, apiKey: string, wasFallback: boolean): Promise<AICallResult> {
+async function callClaude(prompt: string, apiKey: string, wasFallback: boolean): Promise<{ text: string; usage: AIUsageEntry }> {
   const start = Date.now();
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
@@ -140,27 +130,11 @@ async function callClaude(prompt: string, apiKey: string, wasFallback: boolean):
   const latencyMs = Date.now() - start;
 
   if (!response.content || response.content.length === 0) {
-    const usage: AIUsageEntry = {
-      model: "claude-haiku-4-5-20251001",
-      provider: "anthropic",
-      latencyMs,
-      wasFallback,
-      error: "Empty response",
-      status: "error",
-    };
-    throw Object.assign(new Error("Empty Claude response"), { usage });
+    aiError("claude-haiku-4-5-20251001", "anthropic", latencyMs, wasFallback, "Empty response");
   }
   const content = response.content[0];
   if (content.type !== "text") {
-    const usage: AIUsageEntry = {
-      model: "claude-haiku-4-5-20251001",
-      provider: "anthropic",
-      latencyMs,
-      wasFallback,
-      error: "Unexpected response type",
-      status: "error",
-    };
-    throw Object.assign(new Error("Unexpected Claude response type"), { usage });
+    aiError("claude-haiku-4-5-20251001", "anthropic", latencyMs, wasFallback, "Unexpected response type");
   }
 
   return {
@@ -191,7 +165,6 @@ async function callAI(
       usages.push(result.usage);
       return { text: result.text, usages };
     } catch (err) {
-      // Capture usage from failed call if available
       const errWithUsage = err as Error & { usage?: AIUsageEntry };
       if (errWithUsage.usage) usages.push(errWithUsage.usage);
       console.error("Gemini failed, falling back to Claude:", err);
