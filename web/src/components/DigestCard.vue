@@ -3,117 +3,90 @@ import type { DigestItem } from "../types";
 
 defineProps<{
   item: DigestItem;
-  current: number;
-  total: number;
 }>();
 
-const categoryEmoji: Record<string, string> = {
-  ai: "🤖",
-  jobs: "💼",
-  dev: "⚡",
-  news: "📰",
-  competitors: "👀",
+const categoryStyle: Record<
+  string,
+  { label: string; bg: string; text: string }
+> = {
+  ai: { label: "AI", bg: "bg-purple-500/15", text: "text-purple-400" },
+  jobs: { label: "Jobs", bg: "bg-emerald-500/15", text: "text-emerald-400" },
+  dev: { label: "Dev", bg: "bg-blue-500/15", text: "text-blue-400" },
+  news: { label: "News", bg: "bg-amber-500/15", text: "text-amber-400" },
+  competitors: { label: "Watch", bg: "bg-red-500/15", text: "text-red-400" },
+};
+
+const fallbackStyle = {
+  label: "Other",
+  bg: "bg-gray-500/15",
+  text: "text-gray-400",
 };
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffH = Math.floor(diffMs / (1000 * 60 * 60));
 
-const categoryColor: Record<string, string> = {
-  ai: "text-purple-400",
-  jobs: "text-green-400",
-  dev: "text-blue-400",
-  news: "text-orange-400",
-  competitors: "text-red-400",
-};
+  if (diffH < 1) return "Just now";
+  if (diffH < 24) return `${diffH}h ago`;
+  if (diffH < 48) return "Yesterday";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
 </script>
 
 <template>
-  <div class="flex h-screen snap-start snap-always flex-col px-6 pt-16 pb-6">
-    <div class="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center">
-      <!-- Category badge -->
+  <article
+    class="rounded-xl border border-gray-800/50 bg-gray-900/60 p-5 transition-colors hover:border-gray-700/50"
+  >
+    <!-- Top row: category + time -->
+    <div class="mb-3 flex items-center gap-3">
       <span
         :class="[
-          'text-xs font-semibold tracking-wide uppercase',
-          categoryColor[item.category] || 'text-gray-400',
+          'rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wider uppercase',
+          (categoryStyle[item.category] || fallbackStyle).bg,
+          (categoryStyle[item.category] || fallbackStyle).text,
         ]"
       >
-        {{ categoryEmoji[item.category] || "📌" }}
-        {{ item.category }}
+        {{ (categoryStyle[item.category] || fallbackStyle).label }}
       </span>
+      <span
+        v-if="item.publishedAt"
+        class="text-xs text-gray-600"
+      >
+        {{ formatDate(item.publishedAt) }}
+      </span>
+      <span class="ml-auto text-xs text-gray-700">{{ item.sourceName }}</span>
+    </div>
 
-      <!-- Title -->
-      <a
-        :href="item.sourceUrl"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="mt-2 block text-xl leading-tight font-bold text-white transition-colors hover:text-blue-300"
+    <!-- Title -->
+    <a
+      :href="item.sourceUrl"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="group block"
+    >
+      <h2
+        class="text-lg leading-snug font-semibold tracking-tight text-white transition-colors group-hover:text-blue-400"
       >
         {{ item.title }}
-      </a>
+      </h2>
+    </a>
 
-      <!-- Summary -->
-      <p class="mt-3 text-base leading-relaxed text-gray-300">
-        {{ item.summary }}
-      </p>
+    <!-- Summary -->
+    <p class="mt-2 text-sm leading-relaxed text-gray-400">
+      {{ item.summary }}
+    </p>
 
-      <!-- Why it matters -->
-      <p
-        v-if="item.whyItMatters"
-        class="mt-3 text-sm text-blue-400 italic"
-      >
-        → {{ item.whyItMatters }}
-      </p>
-    </div>
-
-    <!-- Footer: source + position -->
-    <div class="mx-auto flex w-full max-w-lg items-center justify-between">
-      <div class="flex flex-col">
-        <a
-          :href="item.sourceUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="text-sm text-gray-500 transition-colors hover:text-gray-300"
-        >
-          {{ item.sourceName }} ↗
-        </a>
-        <span
-          v-if="item.publishedAt"
-          class="text-xs text-gray-600"
-        >
-          {{ formatDate(item.publishedAt) }}
-        </span>
-      </div>
-      <span class="text-xs text-gray-600">{{ current }} / {{ total }}</span>
-    </div>
-
-    <!-- Scroll hint (first card only) -->
+    <!-- Why it matters -->
     <div
-      v-if="current === 1"
-      class="mt-3 flex justify-center"
+      v-if="item.whyItMatters"
+      class="mt-3 rounded-lg border border-gray-800/40 bg-gray-800/20 px-3.5 py-2.5"
     >
-      <div class="animate-bounce text-gray-600">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-5 w-5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
-      </div>
+      <p class="text-xs leading-relaxed text-gray-500">
+        <span class="font-medium text-gray-400">Why it matters</span>
+        &mdash; {{ item.whyItMatters }}
+      </p>
     </div>
-  </div>
+  </article>
 </template>

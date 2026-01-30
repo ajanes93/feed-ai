@@ -36,11 +36,13 @@ export async function generateDigest(
         role: "user",
         content: `You are curating a daily digest for a senior software engineer interested in AI, Vue.js, and tech jobs.
 
-Here are today's ${items.length} items from various sources:
+Today's date is ${new Date().toISOString().split("T")[0]}.
+
+Here are ${items.length} recent items from various sources:
 
 ${itemList}
 
-Select the 8-10 most important/interesting items. Prioritize:
+Select the 8-10 most important/interesting items. Prefer items published today or yesterday. Prioritize:
 - Major AI announcements or breakthroughs
 - Relevant job opportunities (Vue, TypeScript, senior/lead, remote)
 - Significant open source releases

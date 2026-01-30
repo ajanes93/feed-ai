@@ -8,13 +8,13 @@ defineProps<{
 </script>
 
 <template>
-  <div class="h-screen snap-y snap-mandatory overflow-y-scroll">
-    <DigestCard
-      v-for="(item, index) in items"
-      :key="item.id"
-      :item="item"
-      :current="index + 1"
-      :total="items.length"
-    />
+  <div class="h-screen overflow-y-scroll pt-16 pb-8">
+    <div class="mx-auto flex max-w-lg flex-col gap-3 px-4">
+      <DigestCard
+        v-for="item in items"
+        :key="item.id"
+        :item="item"
+      />
+    </div>
   </div>
 </template>
