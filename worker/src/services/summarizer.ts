@@ -64,7 +64,7 @@ async function callGemini(prompt: string, apiKey: string): Promise<string> {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 4096,
+          maxOutputTokens: 8192,
           responseMimeType: "application/json",
         },
       }),
@@ -87,7 +87,7 @@ async function callClaude(prompt: string, apiKey: string): Promise<string> {
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 4096,
+    max_tokens: 8192,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -126,14 +126,27 @@ async function callAI(
 }
 
 function parseAIResponse(responseText: string): DigestItemRaw[] {
-  const cleaned = responseText.replace(/^```(?:json)?\n?|\n?```$/g, "").trim();
-  const parsed = JSON.parse(cleaned);
+  // Strip markdown fences if present
+  let cleaned = responseText.replace(/```(?:json)?\s*/g, "").trim();
 
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new Error("Expected non-empty JSON array from AI");
+  // Try parsing as-is first
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch {
+    // Response may be truncated — try to recover valid items
+    const lastComplete = cleaned.lastIndexOf("}");
+    if (lastComplete > 0) {
+      const recovered = cleaned.slice(0, lastComplete + 1) + "]";
+      const parsed = JSON.parse(recovered);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        console.warn(`Recovered ${parsed.length} items from truncated response`);
+        return parsed;
+      }
+    }
   }
 
-  return parsed;
+  throw new Error("Expected non-empty JSON array from AI");
 }
 
 function isValidDigestItem(item: DigestItemRaw): boolean {
