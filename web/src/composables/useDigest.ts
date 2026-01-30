@@ -29,8 +29,14 @@ export function useDigest() {
       await fetchDigestList();
       const res = await fetch(`${API_BASE}/api/today`);
       if (!res.ok) {
+        if (res.status === 404 && availableDates.value.length > 0) {
+          // No digest today — load the most recent available one
+          currentDateIndex.value = 0;
+          await fetchDate(availableDates.value[0]);
+          return;
+        }
         if (res.status === 404) {
-          error.value = "No digest yet today. Check back at 5pm!";
+          error.value = "No digests yet. Check back at 5pm!";
           return;
         }
         throw new Error("Failed to fetch");
