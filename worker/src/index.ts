@@ -211,17 +211,19 @@ app.get("/api/admin/dashboard", async (c) => {
   });
 });
 
-app.post("/api/generate", async (c) => {
+// Auth middleware for write endpoints
+app.use("/api/generate", "/api/rebuild", async (c, next) => {
   if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
     return c.json({ error: "Unauthorized" }, 401);
   }
+  await next();
+});
+
+app.post("/api/generate", async (c) => {
   return generateDailyDigest(c.env);
 });
 
 app.post("/api/rebuild", async (c) => {
-  if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
   const today = new Date().toISOString().split("T")[0];
   return rebuildDigest(c.env, today);
 });
@@ -286,8 +288,8 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   );
   console.log(`Generated ${digestItems.length} digest items`);
 
-  // Record AI usage in parallel
-  await Promise.all(
+  // Record AI usage (best-effort, don't fail digest on logging errors)
+  await Promise.allSettled(
     aiUsages.map(async (usage) => {
       await recordAIUsage(env.DB, usage);
       if (usage.status !== "success") {
@@ -352,8 +354,8 @@ async function recordSourceHealth(env: Env, results: SourceFetchResult[]) {
     ).bind(r.sourceId, now, r.error ?? null, now, r.error ?? null);
   });
 
-  // Log source failures in parallel
-  await Promise.all(
+  // Log source failures (best-effort)
+  await Promise.allSettled(
     results
       .filter((r) => !r.success)
       .map((r) =>
