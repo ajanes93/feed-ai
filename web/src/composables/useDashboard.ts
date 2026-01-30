@@ -55,26 +55,14 @@ export function useDashboard() {
   const data = ref<DashboardData | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
-  const adminKey = ref("");
 
   async function fetchDashboard() {
-    if (!adminKey.value) {
-      error.value = "Admin key required";
-      return;
-    }
-
     loading.value = true;
     error.value = null;
 
     try {
-      const res = await fetch(`${API_BASE}/api/admin/dashboard`, {
-        headers: { Authorization: `Bearer ${adminKey.value}` },
-      });
+      const res = await fetch(`${API_BASE}/api/admin/dashboard`);
 
-      if (res.status === 401) {
-        error.value = "Invalid admin key";
-        return;
-      }
       if (!res.ok) {
         error.value = "Failed to load dashboard";
         return;
@@ -88,5 +76,5 @@ export function useDashboard() {
     }
   }
 
-  return { data, loading, error, adminKey, fetchDashboard };
+  return { data, loading, error, fetchDashboard };
 }

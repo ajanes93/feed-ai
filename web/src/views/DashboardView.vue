@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { onMounted } from "vue";
 import { useDashboard } from "../composables/useDashboard";
 
-const { data, loading, error, adminKey, fetchDashboard } = useDashboard();
+const { data, loading, error, fetchDashboard } = useDashboard();
 
 function timeAgo(unixTs: number | null): string {
   if (!unixTs) return "Never";
@@ -17,6 +18,8 @@ function formatTokens(n: number | null): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
 }
+
+onMounted(fetchDashboard);
 </script>
 
 <template>
@@ -33,42 +36,20 @@ function formatTokens(n: number | null): string {
         </router-link>
       </div>
 
-      <!-- Auth -->
-      <div
-        v-if="!data && !loading"
-        class="mx-auto max-w-sm"
-      >
-        <form
-          class="flex flex-col gap-3"
-          @submit.prevent="fetchDashboard"
-        >
-          <input
-            v-model="adminKey"
-            type="password"
-            placeholder="Admin key"
-            class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
-          />
-          <button
-            type="submit"
-            class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Connect
-          </button>
-          <p
-            v-if="error"
-            class="text-center text-sm text-red-400"
-          >
-            {{ error }}
-          </p>
-        </form>
-      </div>
-
       <!-- Loading -->
       <div
-        v-else-if="loading"
+        v-if="loading"
         class="flex justify-center py-20"
       >
         <div class="h-8 w-8 animate-spin rounded-full border-2 border-gray-600 border-t-white" />
+      </div>
+
+      <!-- Error -->
+      <div
+        v-else-if="error"
+        class="py-20 text-center text-sm text-red-400"
+      >
+        {{ error }}
       </div>
 
       <!-- Dashboard content -->

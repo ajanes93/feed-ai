@@ -167,10 +167,6 @@ app.get("/api/digests", async (c) => {
 });
 
 app.get("/api/health", async (c) => {
-  if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
-
   const result = await c.env.DB.prepare(
     "SELECT * FROM source_health ORDER BY last_success_at ASC"
   ).all();
@@ -178,12 +174,8 @@ app.get("/api/health", async (c) => {
   return c.json(result.results.map((row) => mapSourceHealth(row as Record<string, unknown>)));
 });
 
-// --- Admin: Dashboard summary (single endpoint for all dashboard data) ---
+// --- Dashboard summary (single endpoint for all dashboard data) ---
 app.get("/api/admin/dashboard", async (c) => {
-  if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
-
   const [aiUsage, recentErrors, sourceHealth, digestCount] = await Promise.all([
     c.env.DB.prepare(
       "SELECT * FROM ai_usage ORDER BY created_at DESC LIMIT 30"
