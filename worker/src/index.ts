@@ -206,9 +206,9 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
         item.category,
         item.title,
         item.summary,
-        item.whyItMatters,
+        item.whyItMatters ?? null,
         item.sourceName,
-        item.sourceUrl,
+        item.sourceUrl ?? null,
         item.publishedAt ?? null,
         item.position
       )
