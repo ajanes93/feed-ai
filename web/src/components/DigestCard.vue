@@ -1,20 +1,55 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { ref, computed } from "vue";
 import type { DigestItem } from "../types";
 
 const props = defineProps<{
   item: DigestItem;
 }>();
 
+const showActions = ref(false);
+let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+
+function onPointerDown() {
+  longPressTimer = setTimeout(() => {
+    showActions.value = true;
+  }, 500);
+}
+
+function onPointerUp() {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+}
+
+function closeActions() {
+  showActions.value = false;
+}
+
+async function shareItem() {
+  closeActions();
+  if (navigator.share) {
+    await navigator.share({
+      title: props.item.title,
+      url: props.item.sourceUrl,
+    });
+  } else {
+    await navigator.clipboard.writeText(props.item.sourceUrl);
+  }
+}
+
+function openLink() {
+  closeActions();
+  window.open(props.item.sourceUrl, "_blank", "noopener,noreferrer");
+}
+
 const categoryStyle: Record<
   string,
   { label: string; bg: string; text: string }
 > = {
   ai: { label: "AI", bg: "bg-purple-500/15", text: "text-purple-400" },
-  jobs: { label: "Jobs", bg: "bg-emerald-500/15", text: "text-emerald-400" },
   dev: { label: "Dev", bg: "bg-blue-500/15", text: "text-blue-400" },
-  news: { label: "News", bg: "bg-amber-500/15", text: "text-amber-400" },
-  competitors: { label: "Watch", bg: "bg-red-500/15", text: "text-red-400" },
+  jobs: { label: "Jobs", bg: "bg-emerald-500/15", text: "text-emerald-400" },
 };
 
 const fallbackStyle = {
@@ -24,6 +59,15 @@ const fallbackStyle = {
 };
 
 const style = computed(() => categoryStyle[props.item.category] || fallbackStyle);
+
+const faviconUrl = computed(() => {
+  try {
+    const domain = new URL(props.item.sourceUrl).hostname;
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+  } catch {
+    return null;
+  }
+});
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -41,7 +85,11 @@ function formatDate(iso: string): string {
 
 <template>
   <article
-    class="rounded-xl border border-gray-800/50 bg-gray-900/60 p-5 transition-colors hover:border-gray-700/50"
+    class="relative rounded-xl border border-gray-800/50 bg-gray-900/60 p-5 transition-colors select-none hover:border-gray-700/50"
+    @pointerdown="onPointerDown"
+    @pointerup="onPointerUp"
+    @pointerleave="onPointerUp"
+    @contextmenu.prevent
   >
     <!-- Top row: category + time -->
     <div class="mb-3 flex items-center gap-3">
@@ -60,7 +108,16 @@ function formatDate(iso: string): string {
       >
         {{ formatDate(item.publishedAt) }}
       </span>
-      <span class="ml-auto text-xs text-gray-700">{{ item.sourceName }}</span>
+      <span class="ml-auto flex items-center gap-1.5 text-xs text-gray-700">
+        <img
+          v-if="faviconUrl"
+          :src="faviconUrl"
+          alt=""
+          class="h-4 w-4 rounded-sm"
+          loading="lazy"
+        />
+        {{ item.sourceName }}
+      </span>
     </div>
 
     <!-- Title -->
@@ -92,5 +149,38 @@ function formatDate(iso: string): string {
         &mdash; {{ item.whyItMatters }}
       </p>
     </div>
+    <!-- Long-press actions popover -->
+    <Teleport to="body">
+      <div
+        v-if="showActions"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        @click="closeActions"
+      >
+        <div
+          class="mx-6 w-full max-w-xs rounded-2xl border border-gray-700 bg-gray-900 p-1 shadow-xl"
+          @click.stop
+        >
+          <p class="truncate px-4 py-2 text-sm text-gray-400">{{ item.title }}</p>
+          <button
+            class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm text-white hover:bg-gray-800"
+            @click="shareItem"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+            </svg>
+            Share
+          </button>
+          <button
+            class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm text-white hover:bg-gray-800"
+            @click="openLink"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            Open original
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </article>
 </template>

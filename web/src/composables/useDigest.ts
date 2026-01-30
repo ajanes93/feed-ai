@@ -3,12 +3,18 @@ import type { Digest } from "../types";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8787";
 
+function todayDate(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
 export function useDigest() {
   const digest = ref<Digest | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
   const availableDates = ref<string[]>([]);
   const currentDateIndex = ref(0);
+  // True when viewing today with no digest (empty state after swipe forward)
+  const viewingToday = ref(false);
 
   async function fetchDigestList() {
     try {
@@ -24,6 +30,7 @@ export function useDigest() {
   async function fetchDigest(url: string, notFoundMessage?: string) {
     loading.value = true;
     error.value = null;
+    digest.value = null;
 
     try {
       const res = await fetch(url);
@@ -49,19 +56,35 @@ export function useDigest() {
 
   async function fetchToday() {
     await fetchDigestList();
-    await fetchDigest(
-      `${API_BASE}/api/today`,
-      "No digest yet today. Check back at 5pm!"
-    );
+    const today = todayDate();
+    const todayHasDigest = availableDates.value.includes(today);
+    if (todayHasDigest) {
+      viewingToday.value = false;
+      await fetchDigest(`${API_BASE}/api/digest/${today}`);
+    } else {
+      // Today has no digest — show empty state
+      viewingToday.value = true;
+      digest.value = null;
+      error.value = "No digest yet today. Check back at 5pm!";
+    }
   }
 
   async function fetchDate(date: string) {
+    viewingToday.value = false;
     await fetchDigest(`${API_BASE}/api/digest/${date}`);
   }
 
+  function showTodayEmpty() {
+    viewingToday.value = true;
+    digest.value = null;
+    loading.value = false;
+    error.value = "No digest yet today. Check back at 5pm!";
+    currentDateIndex.value = 0;
+  }
+
   async function goToPrevious() {
-    if (!digest.value) {
-      // No digest loaded (today 404) — load the most recent available
+    if (viewingToday.value) {
+      // Viewing today's empty state — go to most recent available digest
       if (availableDates.value.length === 0) return false;
       currentDateIndex.value = 0;
       await fetchDate(availableDates.value[0]);
@@ -75,6 +98,14 @@ export function useDigest() {
   }
 
   async function goToNext() {
+    if (viewingToday.value) return false;
+    const today = todayDate();
+    const todayHasDigest = availableDates.value.includes(today);
+    // At newest digest and today has no digest — swipe forward to today's empty state
+    if (currentDateIndex.value === 0 && !todayHasDigest) {
+      showTodayEmpty();
+      return true;
+    }
     const nextIdx = currentDateIndex.value - 1;
     if (nextIdx < 0) return false;
     currentDateIndex.value = nextIdx;
@@ -83,12 +114,18 @@ export function useDigest() {
   }
 
   const hasPrevious = computed(() => {
-    // When no digest is loaded (today 404), any available date is "previous"
-    if (!digest.value) return availableDates.value.length > 0;
+    if (viewingToday.value) return availableDates.value.length > 0;
     return currentDateIndex.value < availableDates.value.length - 1;
   });
 
-  const hasNext = computed(() => currentDateIndex.value > 0);
+  const hasNext = computed(() => {
+    if (viewingToday.value) return false;
+    const today = todayDate();
+    const todayHasDigest = availableDates.value.includes(today);
+    // Can swipe forward to today's empty state
+    if (currentDateIndex.value === 0 && !todayHasDigest) return true;
+    return currentDateIndex.value > 0;
+  });
 
   const formattedDate = computed(() => {
     const date = digest.value

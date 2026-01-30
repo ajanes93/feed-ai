@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { Env } from "./types";
-import { sources } from "./sources";
+import { sources, FRESHNESS_THRESHOLDS } from "./sources";
+import type { SourceFetchResult } from "./services/fetcher";
 import { fetchAllSources } from "./services/fetcher";
 import { generateDigest } from "./services/summarizer";
 
@@ -85,6 +86,47 @@ app.get("/api/digests", async (c) => {
   return c.json(result.results);
 });
 
+// Source health (protected)
+app.get("/api/health", async (c) => {
+  if (!c.env.ADMIN_KEY) {
+    return c.json({ error: "ADMIN_KEY not configured" }, 500);
+  }
+  const authHeader = c.req.header("Authorization");
+  if (authHeader !== `Bearer ${c.env.ADMIN_KEY}`) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  const result = await c.env.DB.prepare(
+    "SELECT * FROM source_health ORDER BY last_success_at ASC"
+  ).all();
+
+  const now = Math.floor(Date.now() / 1000);
+  const healthData = result.results.map((row) => {
+    const source = sources.find((s) => s.id === row.source_id);
+    const thresholdDays = source
+      ? FRESHNESS_THRESHOLDS[source.category]
+      : 14;
+    const thresholdSec = thresholdDays * 24 * 60 * 60;
+    const lastSuccess = row.last_success_at as number | null;
+    const stale = !lastSuccess || now - lastSuccess > thresholdSec;
+
+    return {
+      sourceId: row.source_id,
+      sourceName: source?.name ?? row.source_id,
+      category: source?.category ?? "unknown",
+      lastSuccessAt: lastSuccess,
+      lastErrorAt: row.last_error_at,
+      lastError: row.last_error,
+      itemCount: row.item_count,
+      consecutiveFailures: row.consecutive_failures,
+      stale,
+      thresholdDays,
+    };
+  });
+
+  return c.json(healthData);
+});
+
 // Manual trigger (protected)
 app.post("/api/generate", async (c) => {
   if (!c.env.ADMIN_KEY) {
@@ -113,18 +155,21 @@ async function generateDailyDigest(env: Env): Promise<Response> {
 
   // Fetch all sources
   console.log("Fetching sources...");
-  const rawItems = await fetchAllSources(sources);
+  const { items: rawItems, health } = await fetchAllSources(sources);
   console.log(`Fetched ${rawItems.length} items`);
+
+  // Record source health
+  await recordSourceHealth(env, health);
 
   if (rawItems.length === 0) {
     return new Response("No items fetched", { status: 500 });
   }
 
-  // Generate digest with Claude
+  // Generate digest with AI (Gemini primary, Claude fallback)
   console.log("Generating digest...");
   const digestItems = await generateDigest(
     rawItems,
-    env.ANTHROPIC_API_KEY,
+    { gemini: env.GEMINI_API_KEY, anthropic: env.ANTHROPIC_API_KEY },
     digestId
   );
   console.log(`Generated ${digestItems.length} digest items`);
@@ -157,6 +202,33 @@ async function generateDailyDigest(env: Env): Promise<Response> {
   return new Response(`Generated digest with ${digestItems.length} items`, {
     status: 200,
   });
+}
+
+async function recordSourceHealth(env: Env, results: SourceFetchResult[]) {
+  const now = Math.floor(Date.now() / 1000);
+  const statements = results.map((r) => {
+    if (r.success) {
+      return env.DB.prepare(
+        `INSERT INTO source_health (source_id, last_success_at, item_count, consecutive_failures)
+         VALUES (?, ?, ?, 0)
+         ON CONFLICT(source_id) DO UPDATE SET
+           last_success_at = ?, item_count = ?, consecutive_failures = 0`
+      ).bind(r.sourceId, now, r.itemCount, now, r.itemCount);
+    }
+    return env.DB.prepare(
+      `INSERT INTO source_health (source_id, last_error_at, last_error, consecutive_failures)
+       VALUES (?, ?, ?, 1)
+       ON CONFLICT(source_id) DO UPDATE SET
+         last_error_at = ?, last_error = ?,
+         consecutive_failures = source_health.consecutive_failures + 1`
+    ).bind(r.sourceId, now, r.error ?? null, now, r.error ?? null);
+  });
+
+  try {
+    await env.DB.batch(statements);
+  } catch (err) {
+    console.error("Failed to record source health:", err);
+  }
 }
 
 export default {
