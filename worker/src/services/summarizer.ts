@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { RawItem, DigestItem } from "../types";
+import { CATEGORY_LIMITS } from "../sources";
 
 interface ClaudeDigestItem {
   title: string;
@@ -42,7 +43,7 @@ Here are ${items.length} recent items from various sources:
 
 ${itemList}
 
-Select the 8-10 most important/interesting items. Prefer items published today or yesterday. Prioritize:
+Select up to ${CATEGORY_LIMITS.ai} AI items, ${CATEGORY_LIMITS.dev} Dev items, and ${CATEGORY_LIMITS.jobs} Jobs items (${Object.values(CATEGORY_LIMITS).reduce((a, b) => a + b, 0)} max total). Prefer items published today or yesterday. Prioritize:
 - Major AI announcements or breakthroughs
 - Relevant job opportunities (Vue, TypeScript, senior/lead, remote)
 - Significant open source releases
@@ -52,7 +53,7 @@ For each selected item, provide:
 - title: A clear, concise title (rewrite if needed)
 - summary: 2-3 sentence summary of why this matters
 - why_it_matters: 1 sentence on personal relevance (optional, only if genuinely relevant)
-- category: One of "ai", "jobs", "dev", "news"
+- category: One of "ai", "jobs", "dev"
 - source_name: Original source name
 - source_url: Original URL
 
