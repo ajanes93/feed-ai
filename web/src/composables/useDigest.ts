@@ -35,11 +35,8 @@ export function useDigest() {
     try {
       const res = await fetch(url);
       if (!res.ok) {
-        if (res.status === 404) {
-          error.value = notFoundMessage || "Failed to load digest";
-          return;
-        }
-        throw new Error("Failed to fetch");
+        error.value = res.status === 404 ? notFoundMessage || "Failed to load digest" : "Failed to load digest";
+        return;
       }
       digest.value = await res.json();
       if (digest.value) {
@@ -80,7 +77,6 @@ export function useDigest() {
 
   async function goToPrevious() {
     if (viewingToday.value) {
-      // Viewing today's empty state — go to most recent available digest
       if (availableDates.value.length === 0) return false;
       currentDateIndex.value = 0;
       await fetchDate(availableDates.value[0]);
@@ -95,13 +91,15 @@ export function useDigest() {
 
   async function goToNext() {
     if (viewingToday.value) return false;
-    if (
-      currentDateIndex.value === 0 &&
-      !availableDates.value.includes(todayDate())
-    ) {
+
+    const isNewestDigest = currentDateIndex.value === 0;
+    const todayHasNoDigest = !availableDates.value.includes(todayDate());
+
+    if (isNewestDigest && todayHasNoDigest) {
       showTodayEmpty();
       return true;
     }
+
     const nextIdx = currentDateIndex.value - 1;
     if (nextIdx < 0) return false;
     currentDateIndex.value = nextIdx;
@@ -116,12 +114,9 @@ export function useDigest() {
 
   const hasNext = computed(() => {
     if (viewingToday.value) return false;
-    if (
-      currentDateIndex.value === 0 &&
-      !availableDates.value.includes(todayDate())
-    )
-      return true;
-    return currentDateIndex.value > 0;
+    const isNewestDigest = currentDateIndex.value === 0;
+    const todayHasNoDigest = !availableDates.value.includes(todayDate());
+    return isNewestDigest ? todayHasNoDigest : currentDateIndex.value > 0;
   });
 
   const formattedDate = computed(() => {

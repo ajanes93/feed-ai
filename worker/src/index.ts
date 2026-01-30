@@ -33,19 +33,6 @@ app.get("/api/today", async (c) => {
   return c.redirect(`/api/digest/${today}`);
 });
 
-interface DbItem {
-  id: string;
-  category: string;
-  title: string;
-  summary: string;
-  why_it_matters: string | null;
-  source_name: string;
-  source_url: string;
-  published_at: string | null;
-  position: number;
-}
-
-// Get digest by date
 app.get("/api/digest/:date", async (c) => {
   const date = c.req.param("date");
 
@@ -68,17 +55,17 @@ app.get("/api/digest/:date", async (c) => {
     date: digest.date,
     itemCount: digest.item_count,
     items: items.results.map((row) => {
-      const item = row as unknown as DbItem;
+      const r = row as Record<string, unknown>;
       return {
-        id: item.id,
-        category: item.category,
-        title: item.title,
-        summary: item.summary,
-        whyItMatters: item.why_it_matters,
-        sourceName: item.source_name,
-        sourceUrl: item.source_url,
-        publishedAt: item.published_at,
-        position: item.position,
+        id: r.id,
+        category: r.category,
+        title: r.title,
+        summary: r.summary,
+        whyItMatters: r.why_it_matters,
+        sourceName: r.source_name,
+        sourceUrl: r.source_url,
+        publishedAt: r.published_at,
+        position: r.position,
       };
     }),
   });
@@ -93,22 +80,17 @@ app.get("/api/digests", async (c) => {
   return c.json(result.results);
 });
 
-// Source health (protected)
-function checkAuth(c: {
-  req: { header: (name: string) => string | undefined };
-  env: Env;
-}): boolean {
-  const authHeader = c.req.header("Authorization") ?? "";
-  const expected = c.env.ADMIN_KEY ? `Bearer ${c.env.ADMIN_KEY}` : "";
+function isAuthorized(authHeader: string, adminKey?: string): boolean {
+  if (!adminKey) return false;
+  const expected = `Bearer ${adminKey}`;
   return (
-    expected !== "" &&
     authHeader.length === expected.length &&
     timingSafeEqual(authHeader, expected)
   );
 }
 
 app.get("/api/health", async (c) => {
-  if (!checkAuth(c)) {
+  if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
     return c.json({ error: "Unauthorized" }, 401);
   }
 
@@ -141,17 +123,15 @@ app.get("/api/health", async (c) => {
   return c.json(healthData);
 });
 
-// Manual trigger (protected)
 app.post("/api/generate", async (c) => {
-  if (!checkAuth(c)) {
+  if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   return generateDailyDigest(c.env);
 });
 
-// Rebuild digest for a specific date (protected)
 app.post("/api/rebuild/:date", async (c) => {
-  if (!checkAuth(c)) {
+  if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   const date = c.req.param("date");
@@ -247,22 +227,23 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
 
 async function recordSourceHealth(env: Env, results: SourceFetchResult[]) {
   const now = Math.floor(Date.now() / 1000);
-  const statements = results.map((r) =>
-    r.success
-      ? env.DB.prepare(
-          `INSERT INTO source_health (source_id, last_success_at, item_count, consecutive_failures)
-           VALUES (?, ?, ?, 0)
-           ON CONFLICT(source_id) DO UPDATE SET
-             last_success_at = ?, item_count = ?, consecutive_failures = 0`
-        ).bind(r.sourceId, now, r.itemCount, now, r.itemCount)
-      : env.DB.prepare(
-          `INSERT INTO source_health (source_id, last_error_at, last_error, consecutive_failures)
-           VALUES (?, ?, ?, 1)
-           ON CONFLICT(source_id) DO UPDATE SET
-             last_error_at = ?, last_error = ?,
-             consecutive_failures = source_health.consecutive_failures + 1`
-        ).bind(r.sourceId, now, r.error ?? null, now, r.error ?? null)
-  );
+  const statements = results.map((r) => {
+    if (r.success) {
+      return env.DB.prepare(
+        `INSERT INTO source_health (source_id, last_success_at, item_count, consecutive_failures)
+         VALUES (?, ?, ?, 0)
+         ON CONFLICT(source_id) DO UPDATE SET
+           last_success_at = ?, item_count = ?, consecutive_failures = 0`
+      ).bind(r.sourceId, now, r.itemCount, now, r.itemCount);
+    }
+    return env.DB.prepare(
+      `INSERT INTO source_health (source_id, last_error_at, last_error, consecutive_failures)
+       VALUES (?, ?, ?, 1)
+       ON CONFLICT(source_id) DO UPDATE SET
+         last_error_at = ?, last_error = ?,
+         consecutive_failures = source_health.consecutive_failures + 1`
+    ).bind(r.sourceId, now, r.error ?? null, now, r.error ?? null);
+  });
 
   try {
     await env.DB.batch(statements);

@@ -63,7 +63,7 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
 
     if (!isHorizontalSwipe) {
       if (dy > 0 && !refreshing.value) {
-        const scrollEl = document.querySelector(".overflow-y-scroll");
+        const scrollEl = document.querySelector("[data-scroll-container]");
         if (scrollEl && scrollEl.scrollTop === 0) {
           pullDistance.value = Math.min(120, dy * 0.4);
         }
@@ -78,18 +78,51 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
     lastTouchTime = Date.now();
   }
 
+  async function handlePullRefresh() {
+    if (pullDistance.value >= PULL_THRESHOLD && !refreshing.value) {
+      refreshing.value = true;
+      pullDistance.value = 40;
+      await options.onPullRefresh();
+      refreshing.value = false;
+    }
+    pullDistance.value = 0;
+  }
+
+  async function animateSwipeTransition(goingRight: boolean) {
+    transitioning.value = true;
+    try {
+      swipeAnimating.value = true;
+      swipeOffset.value = goingRight ? window.innerWidth : -window.innerWidth;
+
+      await new Promise((r) => setTimeout(r, SPRING_DURATION / 2));
+
+      if (goingRight) {
+        await options.onSwipeRight();
+      } else {
+        await options.onSwipeLeft();
+      }
+
+      swipeAnimating.value = false;
+      swipeOffset.value = goingRight
+        ? -window.innerWidth / 3
+        : window.innerWidth / 3;
+
+      await new Promise((r) => requestAnimationFrame(r));
+      swipeAnimating.value = true;
+      swipeOffset.value = 0;
+
+      await new Promise((r) => setTimeout(r, SPRING_DURATION));
+    } finally {
+      swipeAnimating.value = false;
+      transitioning.value = false;
+    }
+  }
+
   async function onTouchEnd(e: TouchEvent) {
     const touch = e.changedTouches[0];
     if (!touch || transitioning.value || !isHorizontalSwipe) {
       swipeOffset.value = 0;
-      // Handle pull-to-refresh on vertical release
-      if (pullDistance.value >= PULL_THRESHOLD && !refreshing.value) {
-        refreshing.value = true;
-        pullDistance.value = 40;
-        await options.onPullRefresh();
-        refreshing.value = false;
-      }
-      pullDistance.value = 0;
+      await handlePullRefresh();
       return;
     }
 
@@ -107,36 +140,11 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
         : options.hasNext.value;
 
       if (canGo) {
-        transitioning.value = true;
-        swipeAnimating.value = true;
-        swipeOffset.value = goingRight ? window.innerWidth : -window.innerWidth;
-
-        await new Promise((r) => setTimeout(r, SPRING_DURATION / 2));
-
-        if (goingRight) {
-          await options.onSwipeRight();
-        } else {
-          await options.onSwipeLeft();
-        }
-
-        swipeAnimating.value = false;
-        swipeOffset.value = goingRight
-          ? -window.innerWidth / 3
-          : window.innerWidth / 3;
-
-        await new Promise((r) => requestAnimationFrame(r));
-        swipeAnimating.value = true;
-        swipeOffset.value = 0;
-
-        setTimeout(() => {
-          swipeAnimating.value = false;
-          transitioning.value = false;
-        }, SPRING_DURATION);
+        await animateSwipeTransition(goingRight);
         return;
       }
     }
 
-    // Spring back
     swipeAnimating.value = true;
     swipeOffset.value = 0;
     setTimeout(() => {

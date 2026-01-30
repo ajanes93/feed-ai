@@ -9,6 +9,7 @@ defineProps<{
 
 <template>
   <div
+    data-scroll-container
     class="h-[100dvh] overflow-y-scroll pt-22 pb-[calc(2rem+env(safe-area-inset-bottom))]"
   >
     <TransitionGroup
@@ -19,8 +20,8 @@ defineProps<{
       <DigestCard
         v-for="(item, idx) in items"
         :key="item.id"
-        :item="item"
         v-motion
+        :item="item"
         :initial="{ opacity: 0, y: 8 }"
         :enter="{ opacity: 1, y: 0, transition: { delay: idx * 50, duration: 300 } }"
       />

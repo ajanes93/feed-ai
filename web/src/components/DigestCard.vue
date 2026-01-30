@@ -62,13 +62,12 @@ const faviconUrl = computed(() => {
 function formatDate(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "Recently";
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffH = Math.floor(diffMs / (1000 * 60 * 60));
 
-  if (diffH < 1) return "Just now";
-  if (diffH < 24) return `${diffH}h ago`;
-  if (diffH < 48) return "Yesterday";
+  const hoursAgo = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60));
+
+  if (hoursAgo < 1) return "Just now";
+  if (hoursAgo < 24) return `${hoursAgo}h ago`;
+  if (hoursAgo < 48) return "Yesterday";
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 </script>

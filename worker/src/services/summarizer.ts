@@ -101,77 +101,91 @@ async function callClaude(prompt: string, apiKey: string): Promise<string> {
   return content.text;
 }
 
+async function callAI(
+  prompt: string,
+  apiKeys: { gemini?: string; anthropic?: string }
+): Promise<string> {
+  if (apiKeys.gemini) {
+    try {
+      console.log("Calling Gemini...");
+      return await callGemini(prompt, apiKeys.gemini);
+    } catch (err) {
+      console.error("Gemini failed, falling back to Claude:", err);
+      if (!apiKeys.anthropic) throw err;
+    }
+  }
+
+  if (apiKeys.anthropic) {
+    console.log("Calling Claude...");
+    return await callClaude(prompt, apiKeys.anthropic);
+  }
+
+  throw new Error(
+    "No AI API key configured (GEMINI_API_KEY or ANTHROPIC_API_KEY)"
+  );
+}
+
+function parseAIResponse(responseText: string): DigestItemRaw[] {
+  const cleaned = responseText.replace(/^```(?:json)?\n?|\n?```$/g, "").trim();
+  const parsed = JSON.parse(cleaned);
+
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error("Expected non-empty JSON array from AI");
+  }
+
+  return parsed;
+}
+
+function isValidDigestItem(item: DigestItemRaw): boolean {
+  return (
+    typeof item.title === "string" &&
+    typeof item.summary === "string" &&
+    typeof item.category === "string" &&
+    typeof item.source_name === "string" &&
+    typeof item.source_url === "string"
+  );
+}
+
+function applyCategoryLimits(items: DigestItemRaw[]): DigestItemRaw[] {
+  const counts: Record<string, number> = {};
+  return items.filter((item) => {
+    const count = (counts[item.category] = (counts[item.category] || 0) + 1);
+    const limit = CATEGORY_LIMITS[item.category as keyof typeof CATEGORY_LIMITS];
+    return !limit || count <= limit;
+  });
+}
+
 export async function generateDigest(
   items: RawItem[],
   apiKeys: { gemini?: string; anthropic?: string },
   digestId: string
 ): Promise<DigestItem[]> {
   const prompt = buildPrompt(items);
-  let responseText: string;
-
-  // Try Gemini first (free tier), fall back to Claude
-  if (apiKeys.gemini) {
-    try {
-      console.log("Calling Gemini...");
-      responseText = await callGemini(prompt, apiKeys.gemini);
-    } catch (err) {
-      console.error("Gemini failed, falling back to Claude:", err);
-      if (!apiKeys.anthropic) throw err;
-      responseText = await callClaude(prompt, apiKeys.anthropic);
-    }
-  } else if (apiKeys.anthropic) {
-    console.log("Calling Claude...");
-    responseText = await callClaude(prompt, apiKeys.anthropic);
-  } else {
-    throw new Error(
-      "No AI API key configured (GEMINI_API_KEY or ANTHROPIC_API_KEY)"
-    );
-  }
+  const responseText = await callAI(prompt, apiKeys);
 
   let parsed: DigestItemRaw[];
   try {
-    const cleaned = responseText
-      .replace(/^```(?:json)?\n?|\n?```$/g, "")
-      .trim();
-    parsed = JSON.parse(cleaned);
+    parsed = parseAIResponse(responseText);
   } catch {
     console.error("Failed to parse AI response:", responseText);
     throw new Error("Failed to parse digest response as JSON");
   }
 
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new Error("Expected non-empty JSON array from AI");
-  }
-
-  // Validate required fields
-  parsed = parsed.filter((item) => {
-    const valid =
-      typeof item.title === "string" &&
-      typeof item.summary === "string" &&
-      typeof item.category === "string" &&
-      typeof item.source_name === "string" &&
-      typeof item.source_url === "string";
+  const validated = parsed.filter((item) => {
+    const valid = isValidDigestItem(item);
     if (!valid) console.warn("Dropping malformed digest item:", item);
     return valid;
   });
 
-  // Enforce per-category limits
-  const categoryCounts: Record<string, number> = {};
-  parsed = parsed.filter((item) => {
-    const cat = item.category;
-    categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
-    const limit = CATEGORY_LIMITS[cat as keyof typeof CATEGORY_LIMITS];
-    return limit === undefined || categoryCounts[cat] <= limit;
-  });
+  const limited = applyCategoryLimits(validated);
 
-  // Build URL → publishedAt lookup from raw items
   const pubDateByUrl = new Map(
     items
       .filter((raw) => raw.publishedAt && !isNaN(raw.publishedAt) && raw.link)
       .map((raw) => [raw.link, new Date(raw.publishedAt!).toISOString()])
   );
 
-  return parsed.map((item, index) => ({
+  return limited.map((item, index) => ({
     id: `${digestId}-${index}`,
     digestId,
     category: item.category,

@@ -38,9 +38,8 @@ interface FeedItem {
 }
 
 function extractLink(link: FeedItem["link"]): string {
-  if (!link) return "";
   if (typeof link === "string") return link;
-  return link["@_href"] || "";
+  return link?.["@_href"] || "";
 }
 
 function extractItems(parsed: Record<string, unknown>): FeedItem[] {
@@ -52,6 +51,8 @@ function extractItems(parsed: Record<string, unknown>): FeedItem[] {
   if (!items) return [];
   return Array.isArray(items) ? items : [items];
 }
+
+const ITEM_LIMIT = 20;
 
 async function fetchRssFeed(source: Source): Promise<RawItem[]> {
   const response = await fetch(source.url, {
@@ -67,7 +68,7 @@ async function fetchRssFeed(source: Source): Promise<RawItem[]> {
   const parsed = xmlParser.parse(xml);
   const items = extractItems(parsed);
 
-  return items.slice(0, 20).map((item) => ({
+  return items.slice(0, ITEM_LIMIT).map((item) => ({
     id: crypto.randomUUID(),
     sourceId: source.id,
     title: stripHtml(String(item.title || "Untitled")),
@@ -112,7 +113,7 @@ async function fetchJsonApi(source: Source): Promise<RawItem[]> {
   const data: JobicyResponse = await response.json();
   const jobs = data.jobs || [];
 
-  return jobs.slice(0, 20).map((job) => ({
+  return jobs.slice(0, ITEM_LIMIT).map((job) => ({
     id: crypto.randomUUID(),
     sourceId: source.id,
     title: job.jobTitle || "Untitled",
