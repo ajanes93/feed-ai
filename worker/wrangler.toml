@@ -12,4 +12,7 @@ database_name = "feed-ai"
 database_id = "1b13de90-ca8b-4e8f-aac0-e32e07945060"
 migrations_dir = "migrations"
 
+[observability]
+enabled = true
+
 # ANTHROPIC_API_KEY — set via Cloudflare dashboard (Workers > Settings > Secrets)
