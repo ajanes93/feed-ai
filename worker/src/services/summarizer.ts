@@ -126,23 +126,32 @@ async function callAI(
 }
 
 function parseAIResponse(responseText: string): DigestItemRaw[] {
-  // Strip markdown fences if present
-  let cleaned = responseText.replace(/```(?:json)?\s*/g, "").trim();
+  // Strip markdown fences (opening and closing)
+  const cleaned = responseText
+    .replace(/```(?:json)?\s*/g, "")
+    .replace(/```\s*$/g, "")
+    .trim();
 
   // Try parsing as-is first
   try {
     const parsed = JSON.parse(cleaned);
     if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-  } catch {
+  } catch (err) {
+    console.warn("Initial JSON parse failed, attempting truncation recovery:", (err as Error).message);
+
     // Response may be truncated — try to recover valid items
-    const lastComplete = cleaned.lastIndexOf("}");
-    if (lastComplete > 0) {
-      const recovered = cleaned.slice(0, lastComplete + 1) + "]";
-      const parsed = JSON.parse(recovered);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        console.warn(`Recovered ${parsed.length} items from truncated response`);
-        return parsed;
+    try {
+      const lastComplete = cleaned.lastIndexOf("}");
+      if (lastComplete > 0) {
+        const recovered = cleaned.slice(0, lastComplete + 1) + "]";
+        const parsed = JSON.parse(recovered);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          console.warn(`Recovered ${parsed.length} items from truncated response`);
+          return parsed;
+        }
       }
+    } catch (recoveryErr) {
+      console.error("Truncation recovery also failed:", (recoveryErr as Error).message);
     }
   }
 
