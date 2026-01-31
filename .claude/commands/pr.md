@@ -9,17 +9,13 @@ Create a new PR or update an existing one with title and description.
 
 ## Instructions
 
-### Step 1: Read the PR template
-
-Read `.claude/pr-template.md` for the body structure. Fill in each section based on the changes.
-
-### Step 2: Check if PR already exists
+### Step 1: Check if PR already exists
 
 ```bash
 gh pr view --json number,title,body,url 2>/dev/null
 ```
 
-### Step 3: Analyze changes
+### Step 2: Analyze changes
 
 ```bash
 git log main..HEAD --oneline
@@ -29,15 +25,34 @@ git diff main...HEAD
 
 Review ALL commits to understand full scope of changes.
 
-### Step 4: If PR EXISTS - Update it
+### Step 3: If PR EXISTS - Update it
 
-Use `gh pr edit` with the filled-in template as the body.
+```bash
+gh pr edit --title "feat: new title" --body "$(cat <<'EOF'
+## What?
+Summary of changes
 
-### Step 5: If NO PR - Create new one
+## Why?
+Context and value delivered
+EOF
+)"
+```
 
-Push the branch and use `gh pr create` with the filled-in template as the body.
+### Step 4: If NO PR - Create new one
 
-### Step 6: Return the PR URL
+```bash
+git push -u origin HEAD
+gh pr create --title "feat: description" --body "$(cat <<'EOF'
+## What?
+- Summary of changes
+
+## Why?
+- Context for the changes
+EOF
+)"
+```
+
+### Step 5: Return the PR URL
 
 Always provide the PR URL at the end.
 
