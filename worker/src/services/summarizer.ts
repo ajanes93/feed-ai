@@ -9,7 +9,8 @@ interface DigestItemRaw {
   why_it_matters?: string;
   category: string;
   source_name: string;
-  source_url: string;
+  source_url?: string;
+  item_index: number;
 }
 
 export interface DigestResult {
@@ -20,17 +21,18 @@ export interface DigestResult {
 type DigestType = "news" | "jobs";
 
 function groupBySource(items: RawItem[]): string {
-  const groups = new Map<string, RawItem[]>();
-  for (const item of items) {
+  const groups = new Map<string, { index: number; item: RawItem }[]>();
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     const arr = groups.get(item.sourceId) || [];
-    arr.push(item);
+    arr.push({ index: i, item });
     groups.set(item.sourceId, arr);
   }
 
   return Array.from(groups.entries())
     .map(([sourceId, sourceItems]) => {
       const itemLines = sourceItems
-        .map((item, i) => `  ${i + 1}. ${item.title}\n     ${item.content?.slice(0, 200) || "No description"}\n     URL: ${item.link}`)
+        .map(({ index, item }) => `  [${index}] ${item.title}\n     ${item.content?.slice(0, 200) || "No description"}\n     URL: ${item.link}`)
         .join("\n\n");
       return `### ${sourceId}\n${itemLines}`;
     })
@@ -56,15 +58,15 @@ Select up to ${maxItems} items total (up to ${CATEGORY_LIMITS.ai} AI, up to ${CA
 - Ensure diversity across sources — don't pick all items from one source
 
 For each selected item, provide:
+- item_index: The [number] shown before the item above
 - title: A clear, concise title (rewrite if needed)
 - summary: 2-3 sentence summary of why this matters
 - why_it_matters: 1 sentence on personal relevance (optional, only if genuinely relevant)
 - category: One of "ai", "dev"
 - source_name: Original source name
-- source_url: Original URL
 
 Return ONLY a JSON array, no other text:
-[{"title": "...", "summary": "...", "why_it_matters": "...", "category": "...", "source_name": "...", "source_url": "..."}]`;
+[{"item_index": 0, "title": "...", "summary": "...", "why_it_matters": "...", "category": "...", "source_name": "..."}]`;
 }
 
 function buildJobsPrompt(items: RawItem[]): string {
@@ -84,15 +86,15 @@ Select up to ${CATEGORY_LIMITS.jobs} relevant job listings. Prioritize:
 - Exclude roles that are clearly US-only, on-site only, or junior level
 
 For each selected job, provide:
+- item_index: The [number] shown before the item above
 - title: Job title and company (e.g. "Senior Vue.js Engineer — Acme Corp")
 - summary: 2-3 sentences about the role, including salary/location if available
 - why_it_matters: Why this role is a good fit (optional)
 - category: "jobs"
 - source_name: Original source name
-- source_url: Original URL
 
 Return ONLY a JSON array, no other text:
-[{"title": "...", "summary": "...", "why_it_matters": "...", "category": "jobs", "source_name": "...", "source_url": "..."}]`;
+[{"item_index": 0, "title": "...", "summary": "...", "why_it_matters": "...", "category": "jobs", "source_name": "..."}]`;
 }
 
 class AIError extends Error {
@@ -262,11 +264,11 @@ function parseAIResponse(responseText: string): DigestItemRaw[] {
 
 function isValidDigestItem(item: DigestItemRaw): boolean {
   return (
+    typeof item.item_index === "number" &&
     typeof item.title === "string" &&
     typeof item.summary === "string" &&
     typeof item.category === "string" &&
-    typeof item.source_name === "string" &&
-    typeof item.source_url === "string"
+    typeof item.source_name === "string"
   );
 }
 
@@ -303,26 +305,8 @@ export async function generateDigest(
 
   const limited = applyCategoryLimits(validated);
 
-  // Build a map from raw link → raw item for matching AI output back to originals
-  const rawByLink = new Map(items.filter((r) => r.link).map((r) => [r.link, r]));
-
-  // Match AI-generated source_url back to the original raw URL.
-  // AI sometimes rewrites URLs, so try exact match first, then hostname+path prefix match.
-  function resolveRawUrl(aiUrl: string): string {
-    if (rawByLink.has(aiUrl)) return aiUrl;
-    try {
-      const ai = new URL(aiUrl);
-      for (const link of rawByLink.keys()) {
-        const raw = new URL(link);
-        if (raw.hostname === ai.hostname && raw.pathname === ai.pathname) return link;
-      }
-    } catch { /* invalid URL, fall through */ }
-    return aiUrl;
-  }
-
   const digestItems: DigestItem[] = limited.map((item, index) => {
-    const rawLink = resolveRawUrl(item.source_url);
-    const rawItem = rawByLink.get(rawLink);
+    const rawItem = items[item.item_index];
     return {
       id: String(index),
       digestId: "",
@@ -331,7 +315,7 @@ export async function generateDigest(
       summary: item.summary,
       whyItMatters: item.why_it_matters,
       sourceName: item.source_name,
-      sourceUrl: rawLink,
+      sourceUrl: rawItem?.link ?? item.source_url ?? "",
       publishedAt: rawItem?.publishedAt ? new Date(rawItem.publishedAt).toISOString() : undefined,
       position: index,
     };
