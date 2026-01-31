@@ -303,24 +303,39 @@ export async function generateDigest(
 
   const limited = applyCategoryLimits(validated);
 
-  const pubDateByUrl = new Map(
-    items
-      .filter((raw) => raw.publishedAt && !isNaN(raw.publishedAt) && raw.link)
-      .map((raw) => [raw.link, new Date(raw.publishedAt!).toISOString()])
-  );
+  // Build a map from raw link → raw item for matching AI output back to originals
+  const rawByLink = new Map(items.filter((r) => r.link).map((r) => [r.link, r]));
 
-  const digestItems: DigestItem[] = limited.map((item, index) => ({
-    id: String(index),
-    digestId: "",
-    category: item.category,
-    title: item.title,
-    summary: item.summary,
-    whyItMatters: item.why_it_matters,
-    sourceName: item.source_name,
-    sourceUrl: item.source_url,
-    publishedAt: pubDateByUrl.get(item.source_url),
-    position: index,
-  }));
+  // Match AI-generated source_url back to the original raw URL.
+  // AI sometimes rewrites URLs, so try exact match first, then hostname+path prefix match.
+  function resolveRawUrl(aiUrl: string): string {
+    if (rawByLink.has(aiUrl)) return aiUrl;
+    try {
+      const ai = new URL(aiUrl);
+      for (const link of rawByLink.keys()) {
+        const raw = new URL(link);
+        if (raw.hostname === ai.hostname && raw.pathname === ai.pathname) return link;
+      }
+    } catch { /* invalid URL, fall through */ }
+    return aiUrl;
+  }
+
+  const digestItems: DigestItem[] = limited.map((item, index) => {
+    const rawLink = resolveRawUrl(item.source_url);
+    const rawItem = rawByLink.get(rawLink);
+    return {
+      id: String(index),
+      digestId: "",
+      category: item.category,
+      title: item.title,
+      summary: item.summary,
+      whyItMatters: item.why_it_matters,
+      sourceName: item.source_name,
+      sourceUrl: rawLink,
+      publishedAt: rawItem?.publishedAt ? new Date(rawItem.publishedAt).toISOString() : undefined,
+      position: index,
+    };
+  });
 
   return { items: digestItems, aiUsages: usages };
 }
