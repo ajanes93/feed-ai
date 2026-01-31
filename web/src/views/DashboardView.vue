@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
+import { motion } from "motion-v";
 import { useDashboard } from "../composables/useDashboard";
 import { timeAgo, formatTokens } from "../utils/formatting";
 import DataTable from "../components/DataTable.vue";
@@ -73,25 +74,34 @@ onMounted(fetchDashboard);
           <StatCard
             :value="data.totalDigests"
             label="Total Digests"
+            :index="0"
           />
           <StatCard
             :value="formatTokens(data.ai.totalTokens)"
             label="Tokens (last 30)"
+            :index="1"
           />
           <StatCard
             :value="data.ai.rateLimitCount"
             label="Rate Limits (last 30)"
             :highlight="data.ai.rateLimitCount > 0"
+            :index="2"
           />
           <StatCard
             :value="data.ai.fallbackCount"
             label="Fallbacks (last 30)"
             :highlight="data.ai.fallbackCount > 0"
+            :index="3"
           />
         </div>
 
         <!-- AI Usage -->
-        <section class="mb-6">
+        <motion.section
+          class="mb-6"
+          :initial="{ opacity: 0, y: 12 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ duration: 0.35, delay: 0.15 }"
+        >
           <h2 class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase">
             AI Usage
           </h2>
@@ -140,10 +150,15 @@ onMounted(fetchDashboard);
               </td>
             </tr>
           </DataTable>
-        </section>
+        </motion.section>
 
         <!-- Source Health -->
-        <section class="mb-6">
+        <motion.section
+          class="mb-6"
+          :initial="{ opacity: 0, y: 12 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ duration: 0.35, delay: 0.25 }"
+        >
           <h2 class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase">
             Source Health
           </h2>
@@ -195,10 +210,15 @@ onMounted(fetchDashboard);
               </td>
             </tr>
           </DataTable>
-        </section>
+        </motion.section>
 
         <!-- Error Logs -->
-        <section class="mb-6">
+        <motion.section
+          class="mb-6"
+          :initial="{ opacity: 0, y: 12 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ duration: 0.35, delay: 0.35 }"
+        >
           <h2 class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase">
             Recent Errors
           </h2>
@@ -232,7 +252,7 @@ onMounted(fetchDashboard);
               </td>
             </tr>
           </DataTable>
-        </section>
+        </motion.section>
 
         <!-- Refresh -->
         <div class="text-center">

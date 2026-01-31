@@ -78,9 +78,11 @@ function formatDate(iso: string): string {
 </script>
 
 <template>
-  <article
+  <motion.article
     ref="card"
     class="relative rounded-xl border border-gray-800/50 bg-gray-900/60 p-5 transition-colors select-none hover:border-gray-700/50"
+    :press="{ scale: 0.98 }"
+    :transition="{ type: 'spring', duration: 0.2, bounce: 0.1 }"
     @contextmenu.prevent
   >
     <!-- Top row: category + time -->
@@ -210,5 +212,5 @@ function formatDate(iso: string): string {
         </motion.div>
       </AnimatePresence>
     </Teleport>
-  </article>
+  </motion.article>
 </template>
