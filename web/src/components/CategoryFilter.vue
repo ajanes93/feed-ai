@@ -47,12 +47,37 @@ function updateIndicator() {
 onMounted(() => nextTick(updateIndicator));
 watch(() => props.activeCategory, () => nextTick(updateIndicator));
 watch(() => props.items.length, () => nextTick(updateIndicator));
+
+// Swipe/drag on pill bar to switch categories
+let dragStartX = 0;
+let dragStartCategory = 0;
+
+function onPointerDown(e: PointerEvent) {
+  dragStartX = e.clientX;
+  dragStartCategory = categories.findIndex((c) => c.key === props.activeCategory);
+  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+}
+
+function onPointerUp(e: PointerEvent) {
+  const dx = e.clientX - dragStartX;
+  const threshold = 30;
+  if (Math.abs(dx) < threshold) return; // too short, was a tap
+
+  const dir = dx < 0 ? -1 : 1; // drag right = next category
+  const newIdx = Math.max(0, Math.min(categories.length - 1, dragStartCategory + dir));
+  if (newIdx !== dragStartCategory) {
+    emit("select", categories[newIdx].key);
+  }
+}
 </script>
 
 <template>
   <div
     ref="containerRef"
-    class="relative flex justify-center gap-1.5"
+    class="relative flex touch-pan-y justify-center gap-1.5"
+    @pointerdown="onPointerDown"
+    @pointerup="onPointerUp"
+    @pointercancel="onPointerUp"
   >
     <!-- Sliding active indicator -->
     <div
