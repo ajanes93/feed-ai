@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// We need to test the Hono app's route handlers.
-// Mock external services (fetcher, summarizer, logger) since they call external APIs.
 vi.mock("../services/fetcher", () => ({
   fetchAllSources: vi.fn(),
 }));
@@ -14,40 +12,7 @@ vi.mock("../services/logger", () => ({
 }));
 
 import app from "../index";
-
-// Helper to build a mock D1 database
-function mockDB(overrides = {}) {
-  const mockFirst = vi.fn().mockResolvedValue(null);
-  const mockAll = vi.fn().mockResolvedValue({ results: [] });
-  const mockRun = vi.fn().mockResolvedValue({});
-
-  return {
-    prepare: vi.fn().mockReturnValue({
-      bind: vi.fn().mockReturnValue({
-        first: mockFirst,
-        all: mockAll,
-        run: mockRun,
-      }),
-      first: mockFirst,
-      all: mockAll,
-    }),
-    batch: vi.fn().mockResolvedValue([]),
-    ...overrides,
-  };
-}
-
-function makeEnv(db = mockDB()) {
-  return {
-    DB: db as unknown as D1Database,
-    ADMIN_KEY: "test-admin-key",
-    ANTHROPIC_API_KEY: "test-anthropic",
-    GEMINI_API_KEY: "test-gemini",
-  };
-}
-
-function makeRequest(path: string, options: RequestInit = {}) {
-  return new Request(`http://localhost${path}`, options);
-}
+import { mockDB, makeEnv, makeRequest } from "./helpers";
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -55,8 +20,7 @@ beforeEach(() => {
 
 describe("API routes", () => {
   it("GET /api/today redirects to today's digest", async () => {
-    const env = makeEnv();
-    const res = await app.fetch(makeRequest("/api/today"), env);
+    const res = await app.fetch(makeRequest("/api/today"), makeEnv());
 
     expect(res.status).toBe(302);
     const today = new Date().toISOString().split("T")[0];
@@ -64,8 +28,7 @@ describe("API routes", () => {
   });
 
   it("GET /api/digest/:date returns 404 when no digest exists", async () => {
-    const env = makeEnv();
-    const res = await app.fetch(makeRequest("/api/digest/2025-01-28"), env);
+    const res = await app.fetch(makeRequest("/api/digest/2025-01-28"), makeEnv());
 
     expect(res.status).toBe(404);
     const body = await res.json();
@@ -87,8 +50,7 @@ describe("API routes", () => {
       }),
     });
 
-    const env = makeEnv(db);
-    const res = await app.fetch(makeRequest("/api/digest/2025-01-28"), env);
+    const res = await app.fetch(makeRequest("/api/digest/2025-01-28"), makeEnv(db));
 
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -109,8 +71,7 @@ describe("API routes", () => {
       prepare: vi.fn().mockReturnValue({ all: mockAll }),
     });
 
-    const env = makeEnv(db);
-    const res = await app.fetch(makeRequest("/api/digests"), env);
+    const res = await app.fetch(makeRequest("/api/digests"), makeEnv(db));
 
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -119,20 +80,18 @@ describe("API routes", () => {
   });
 
   it("POST /api/generate without auth does not return 200", async () => {
-    const env = makeEnv();
     const res = await app.fetch(
       makeRequest("/api/generate", { method: "POST" }),
-      env
+      makeEnv(),
     );
 
     expect(res.status).not.toBe(200);
   });
 
   it("POST /api/rebuild without auth does not return 200", async () => {
-    const env = makeEnv();
     const res = await app.fetch(
       makeRequest("/api/rebuild", { method: "POST" }),
-      env
+      makeEnv(),
     );
 
     expect(res.status).not.toBe(200);
@@ -144,8 +103,7 @@ describe("API routes", () => {
       prepare: vi.fn().mockReturnValue({ all: mockAll }),
     });
 
-    const env = makeEnv(db);
-    const res = await app.fetch(makeRequest("/api/health"), env);
+    const res = await app.fetch(makeRequest("/api/health"), makeEnv(db));
 
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -163,8 +121,7 @@ describe("API routes", () => {
       }),
     });
 
-    const env = makeEnv(db);
-    const res = await app.fetch(makeRequest("/api/admin/dashboard"), env);
+    const res = await app.fetch(makeRequest("/api/admin/dashboard"), makeEnv(db));
 
     expect(res.status).toBe(200);
     const body = await res.json();

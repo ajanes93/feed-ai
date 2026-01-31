@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useDashboard } from "../composables/useDashboard";
+import { stubFetchJson } from "./helpers";
 
 const DASHBOARD_DATA = {
   ai: {
@@ -21,10 +22,7 @@ beforeEach(() => {
 
 describe("useDashboard", () => {
   it("fetches dashboard data successfully", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(DASHBOARD_DATA),
-    }));
+    stubFetchJson(DASHBOARD_DATA);
 
     const { data, loading, error, fetchDashboard } = useDashboard();
 
@@ -39,13 +37,9 @@ describe("useDashboard", () => {
   });
 
   it("handles API errors", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-    }));
+    stubFetchJson(null, false);
 
     const { data, error, fetchDashboard } = useDashboard();
-
     await fetchDashboard();
 
     expect(data.value).toBeNull();
@@ -56,7 +50,6 @@ describe("useDashboard", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
 
     const { data, error, fetchDashboard } = useDashboard();
-
     await fetchDashboard();
 
     expect(data.value).toBeNull();
@@ -66,7 +59,7 @@ describe("useDashboard", () => {
   it("sets loading during fetch", async () => {
     let resolvePromise: (v: unknown) => void;
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(
-      new Promise((r) => { resolvePromise = r; })
+      new Promise((r) => { resolvePromise = r; }),
     ));
 
     const { loading, fetchDashboard } = useDashboard();
