@@ -141,6 +141,8 @@ watch(activeCategory, (cat) => {
 const pullDistance = ref(0);
 const refreshing = ref(false);
 const touchStartY = ref(0);
+const touchStartX = ref(0);
+const pullLocked = ref(false);
 const pullText = computed(() => {
   if (refreshing.value) return "Refreshing…";
   return pullDistance.value >= PULL_THRESHOLD ? "Release to refresh" : "Pull to refresh";
@@ -148,15 +150,23 @@ const pullText = computed(() => {
 
 function onTouchStart(e: TouchEvent) {
   touchStartY.value = e.touches[0]?.clientY ?? 0;
+  touchStartX.value = e.touches[0]?.clientX ?? 0;
+  pullLocked.value = false;
 }
 
 function onTouchMove(e: TouchEvent) {
-  if (refreshing.value || !touchStartY.value) return;
+  if (refreshing.value || !touchStartY.value || pullLocked.value) return;
+  const dy = (e.touches[0]?.clientY ?? 0) - touchStartY.value;
+  const dx = (e.touches[0]?.clientX ?? 0) - touchStartX.value;
+  // Lock out pull-to-refresh if swipe is more horizontal than vertical
+  if (pullDistance.value === 0 && Math.abs(dx) > Math.abs(dy)) {
+    pullLocked.value = true;
+    return;
+  }
   // Query the currently active slide's scroll container
   const activeSlide = swiperInstance?.slides?.[swiperInstance.activeIndex];
   const scrollEl = activeSlide?.querySelector("[data-scroll-container]");
   if (!scrollEl || scrollEl.scrollTop > 2) return;
-  const dy = (e.touches[0]?.clientY ?? 0) - touchStartY.value;
   if (dy > PULL_DEAD_ZONE) {
     pullDistance.value = Math.min(120, (dy - PULL_DEAD_ZONE) * 0.4);
   }
