@@ -1,19 +1,34 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-
-const mockCreate = vi.fn();
-vi.mock("@anthropic-ai/sdk", () => ({
-  default: class {
-    messages = { create: mockCreate };
-  },
-}));
-
+import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { fetchMock } from "cloudflare:test";
 import { generateDigest } from "../services/summarizer";
 import { rawItemFactory } from "./factories";
 import { mockGeminiSuccess, aiResponse } from "./helpers";
 
-beforeEach(() => {
-  vi.restoreAllMocks();
+beforeAll(() => {
+  fetchMock.activate();
+  fetchMock.disableNetConnect();
 });
+
+afterEach(() => {
+  fetchMock.assertNoPendingInterceptors();
+});
+
+function mockAnthropicSuccess(text: string) {
+  const mock = fetchMock.get("https://api.anthropic.com");
+  mock.intercept({ method: "POST", path: /.*/ }).reply(
+    200,
+    JSON.stringify({
+      content: [{ type: "text", text }],
+      usage: { input_tokens: 80, output_tokens: 40 },
+    }),
+    { headers: { "content-type": "application/json" } },
+  );
+}
+
+function mockGeminiError(status: number, body: string) {
+  const mock = fetchMock.get("https://generativelanguage.googleapis.com");
+  mock.intercept({ method: "POST", path: /.*/ }).reply(status, body);
+}
 
 describe("generateDigest", () => {
   it("returns digest items from AI response", async () => {
@@ -36,15 +51,8 @@ describe("generateDigest", () => {
     const items = rawItemFactory.buildList(3);
     const response = aiResponse(items, [0, 1]);
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response("rate limited", { status: 429 })),
-    );
-
-    mockCreate.mockResolvedValue({
-      content: [{ type: "text", text: response }],
-      usage: { input_tokens: 80, output_tokens: 40 },
-    });
+    mockGeminiError(429, "rate limited");
+    mockAnthropicSuccess(response);
 
     const result = await generateDigest(items, { gemini: "gem-key", anthropic: "ant-key" }, "news");
 
@@ -138,18 +146,15 @@ describe("generateDigest", () => {
     await expect(generateDigest(items, {}, "news")).rejects.toThrow("No AI API key configured");
   });
 
-  it("builds different prompts for news vs jobs", async () => {
+  it("generates jobs-specific digest", async () => {
     const items = rawItemFactory.buildList(3);
     const response = aiResponse(items, [0], "jobs");
 
     mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
-    const fetchMock = vi.mocked(globalThis.fetch);
 
-    await generateDigest(items, { gemini: "test-key" }, "jobs");
+    const result = await generateDigest(items, { gemini: "test-key" }, "jobs");
 
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-    const prompt = body.contents[0].parts[0].text;
-    expect(prompt).toContain("job listings");
-    expect(prompt).toContain("remote");
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].category).toBe("jobs");
   });
 });

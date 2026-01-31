@@ -1,18 +1,24 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { fetchMock } from "cloudflare:test";
 import { fetchSource, fetchAllSources } from "../services/fetcher";
 import { sourceFactory } from "./factories";
-import { stubFetchWith, RSS_FEED, ATOM_FEED, JOBICY_RESPONSE } from "./helpers";
+import { mockFetchResponse, RSS_FEED, ATOM_FEED, JOBICY_RESPONSE } from "./helpers";
 
 const rssSource = sourceFactory.build({ id: "test-rss", name: "Test RSS", type: "rss", url: "https://example.com/feed.xml" });
 const apiSource = sourceFactory.build({ id: "test-api", name: "Test API", type: "api", url: "https://example.com/api/jobs", category: "jobs" });
 
-beforeEach(() => {
-  vi.restoreAllMocks();
+beforeAll(() => {
+  fetchMock.activate();
+  fetchMock.disableNetConnect();
+});
+
+afterEach(() => {
+  fetchMock.assertNoPendingInterceptors();
 });
 
 describe("fetchSource", () => {
   it("parses RSS feed items", async () => {
-    stubFetchWith(RSS_FEED);
+    mockFetchResponse("https://example.com", "/feed.xml", RSS_FEED);
 
     const items = await fetchSource(rssSource);
 
@@ -24,7 +30,7 @@ describe("fetchSource", () => {
   });
 
   it("strips HTML from content", async () => {
-    stubFetchWith(RSS_FEED);
+    mockFetchResponse("https://example.com", "/feed.xml", RSS_FEED);
 
     const items = await fetchSource(rssSource);
 
@@ -32,7 +38,7 @@ describe("fetchSource", () => {
   });
 
   it("parses Atom feed items", async () => {
-    stubFetchWith(ATOM_FEED);
+    mockFetchResponse("https://example.com", "/feed.xml", ATOM_FEED);
 
     const items = await fetchSource(rssSource);
 
@@ -42,7 +48,9 @@ describe("fetchSource", () => {
   });
 
   it("parses JSON API (Jobicy) responses", async () => {
-    stubFetchWith(JOBICY_RESPONSE, 200, { "content-type": "application/json" });
+    mockFetchResponse("https://example.com", "/api/jobs", JOBICY_RESPONSE, 200, {
+      "content-type": "application/json",
+    });
 
     const items = await fetchSource(apiSource);
 
@@ -54,7 +62,7 @@ describe("fetchSource", () => {
   });
 
   it("returns empty array on HTTP error", async () => {
-    stubFetchWith("Not found", 404);
+    mockFetchResponse("https://example.com", "/feed.xml", "Not found", 404);
 
     const items = await fetchSource(rssSource);
 
@@ -62,7 +70,8 @@ describe("fetchSource", () => {
   });
 
   it("returns empty array on network error", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network failure")));
+    const mock = fetchMock.get("https://example.com");
+    mock.intercept({ method: "GET", path: "/feed.xml" }).replyWithError(new Error("Network failure"));
 
     const items = await fetchSource(rssSource);
 
@@ -76,7 +85,7 @@ describe("fetchSource", () => {
     ).join("");
     const feed = `<?xml version="1.0"?><rss><channel>${manyItems}</channel></rss>`;
 
-    stubFetchWith(feed);
+    mockFetchResponse("https://example.com", "/feed.xml", feed);
 
     const items = await fetchSource(rssSource);
 
@@ -95,7 +104,7 @@ describe("fetchAllSources", () => {
       <item><title>New</title><link>https://example.com/new</link><pubDate>${newDate}</pubDate></item>
     </channel></rss>`;
 
-    stubFetchWith(feed);
+    mockFetchResponse("https://example.com", "/feed.xml", feed);
 
     const { items, health } = await fetchAllSources([rssSource]);
 
@@ -110,7 +119,7 @@ describe("fetchAllSources", () => {
       <item><title>No Date</title><link>https://example.com/nodate</link></item>
     </channel></rss>`;
 
-    stubFetchWith(feed);
+    mockFetchResponse("https://example.com", "/feed.xml", feed);
 
     const { items } = await fetchAllSources([rssSource]);
 
@@ -119,14 +128,10 @@ describe("fetchAllSources", () => {
   });
 
   it("reports health for each source", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn()
-        .mockResolvedValueOnce(new Response(RSS_FEED, { status: 200 }))
-        .mockResolvedValueOnce(new Response("error", { status: 500 })),
-    );
+    mockFetchResponse("https://example.com", "/feed.xml", RSS_FEED);
+    mockFetchResponse("https://example2.com", "/feed2.xml", "error", 500);
 
-    const source2 = sourceFactory.build({ id: "test-rss-2", url: "https://example.com/feed2.xml" });
+    const source2 = sourceFactory.build({ id: "test-rss-2", url: "https://example2.com/feed2.xml" });
     const { health } = await fetchAllSources([rssSource, source2]);
 
     expect(health).toHaveLength(2);

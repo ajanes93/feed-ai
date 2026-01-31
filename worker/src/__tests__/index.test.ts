@@ -1,17 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import app from "../index";
-import { mockDB, makeEnv, makeRequest, stubFetchWith } from "./helpers";
-
-beforeEach(() => {
-  vi.restoreAllMocks();
-  // Stub fetch to prevent real network calls from POST routes
-  // that bypass auth due to Hono multi-path middleware bug
-  stubFetchWith("", 404);
-});
+import { describe, it, expect } from "vitest";
+import { env } from "cloudflare:test";
+import { app } from "../index";
+import { seedDigest } from "./helpers";
 
 describe("API routes", () => {
   it("GET /api/today redirects to today's digest", async () => {
-    const res = await app.fetch(makeRequest("/api/today"), makeEnv());
+    const res = await app.request("/api/today", {}, env);
 
     expect(res.status).toBe(302);
     const today = new Date().toISOString().split("T")[0];
@@ -19,7 +13,7 @@ describe("API routes", () => {
   });
 
   it("GET /api/digest/:date returns 404 when no digest exists", async () => {
-    const res = await app.fetch(makeRequest("/api/digest/2025-01-28"), makeEnv());
+    const res = await app.request("/api/digest/2025-01-28", {}, env);
 
     expect(res.status).toBe(404);
     const body = await res.json();
@@ -27,21 +21,16 @@ describe("API routes", () => {
   });
 
   it("GET /api/digest/:date returns digest with items", async () => {
-    const digestRow = { id: "digest-2025-01-28", date: "2025-01-28", item_count: 2 };
-    const itemRows = [
-      { id: "i1", category: "ai", title: "AI News", summary: "Big AI", why_it_matters: null, source_name: "HN", source_url: "https://hn.com/1", published_at: null, position: 0 },
-      { id: "i2", category: "dev", title: "Vue 4", summary: "New Vue", why_it_matters: "Vue dev", source_name: "Vue", source_url: "https://vue.com/1", published_at: null, position: 1 },
-    ];
+    await seedDigest(
+      env.DB,
+      { id: "digest-2025-01-28", date: "2025-01-28", itemCount: 2 },
+      [
+        { id: "i1", category: "ai", title: "AI News", summary: "Big AI", sourceName: "HN", sourceUrl: "https://hn.com/1", position: 0 },
+        { id: "i2", category: "dev", title: "Vue 4", summary: "New Vue", sourceName: "Vue", sourceUrl: "https://vue.com/1", position: 1, whyItMatters: "Vue dev" },
+      ],
+    );
 
-    const mockFirst = vi.fn().mockResolvedValue(digestRow);
-    const mockAll = vi.fn().mockResolvedValue({ results: itemRows });
-    const db = mockDB({
-      prepare: vi.fn().mockReturnValue({
-        bind: vi.fn().mockReturnValue({ first: mockFirst, all: mockAll }),
-      }),
-    });
-
-    const res = await app.fetch(makeRequest("/api/digest/2025-01-28"), makeEnv(db));
+    const res = await app.request("/api/digest/2025-01-28", {}, env);
 
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -49,52 +38,50 @@ describe("API routes", () => {
     expect(body.items).toHaveLength(2);
     expect(body.items[0].title).toBe("AI News");
     expect(body.items[1].title).toBe("Vue 4");
+    expect(body.items[1].whyItMatters).toBe("Vue dev");
   });
 
   it("GET /api/digests returns list of dates", async () => {
-    const mockAll = vi.fn().mockResolvedValue({
-      results: [
-        { date: "2025-01-28", item_count: 10 },
-        { date: "2025-01-27", item_count: 8 },
-      ],
-    });
-    const db = mockDB({
-      prepare: vi.fn().mockReturnValue({ all: mockAll }),
-    });
+    await seedDigest(env.DB, { id: "d1", date: "2025-01-28", itemCount: 1 }, [
+      { id: "i1", category: "ai", title: "T", summary: "S", sourceName: "N", sourceUrl: "https://x.com", position: 0 },
+    ]);
+    await seedDigest(env.DB, { id: "d2", date: "2025-01-27", itemCount: 1 }, [
+      { id: "i2", category: "ai", title: "T", summary: "S", sourceName: "N", sourceUrl: "https://x.com", position: 0 },
+    ]);
 
-    const res = await app.fetch(makeRequest("/api/digests"), makeEnv(db));
+    const res = await app.request("/api/digests", {}, env);
 
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveLength(2);
     expect(body[0].date).toBe("2025-01-28");
+    expect(body[1].date).toBe("2025-01-27");
   });
 
-  it("POST /api/generate without auth does not return 200", async () => {
-    const res = await app.fetch(
-      makeRequest("/api/generate", { method: "POST" }),
-      makeEnv(),
-    );
+  it("POST /api/generate requires auth", async () => {
+    const res = await app.request("/api/generate", { method: "POST" }, env);
 
-    expect(res.status).not.toBe(200);
+    expect(res.status).toBe(401);
   });
 
-  it("POST /api/rebuild without auth does not return 200", async () => {
-    const res = await app.fetch(
-      makeRequest("/api/rebuild", { method: "POST" }),
-      makeEnv(),
+  it("POST /api/generate rejects wrong token", async () => {
+    const res = await app.request(
+      "/api/generate",
+      { method: "POST", headers: { Authorization: "Bearer wrong-key" } },
+      env,
     );
 
-    expect(res.status).not.toBe(200);
+    expect(res.status).toBe(401);
+  });
+
+  it("POST /api/rebuild requires auth", async () => {
+    const res = await app.request("/api/rebuild", { method: "POST" }, env);
+
+    expect(res.status).toBe(401);
   });
 
   it("GET /api/health returns source health", async () => {
-    const mockAll = vi.fn().mockResolvedValue({ results: [] });
-    const db = mockDB({
-      prepare: vi.fn().mockReturnValue({ all: mockAll }),
-    });
-
-    const res = await app.fetch(makeRequest("/api/health"), makeEnv(db));
+    const res = await app.request("/api/health", {}, env);
 
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -102,23 +89,13 @@ describe("API routes", () => {
   });
 
   it("GET /api/admin/dashboard returns dashboard data", async () => {
-    const mockAll = vi.fn().mockResolvedValue({ results: [] });
-    const mockFirst = vi.fn().mockResolvedValue({ count: 5 });
-    const db = mockDB({
-      prepare: vi.fn().mockReturnValue({
-        all: mockAll,
-        first: mockFirst,
-        bind: vi.fn().mockReturnValue({ all: mockAll, first: mockFirst }),
-      }),
-    });
-
-    const res = await app.fetch(makeRequest("/api/admin/dashboard"), makeEnv(db));
+    const res = await app.request("/api/admin/dashboard", {}, env);
 
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveProperty("ai");
     expect(body).toHaveProperty("sources");
     expect(body).toHaveProperty("errors");
-    expect(body).toHaveProperty("totalDigests");
+    expect(body.totalDigests).toBe(0);
   });
 });

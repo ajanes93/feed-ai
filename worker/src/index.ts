@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context, type Next } from "hono";
 import { cors } from "hono/cors";
 import { Env, RawItem, DigestItem } from "./types";
 import { sources, FRESHNESS_THRESHOLDS } from "./sources";
@@ -114,7 +114,7 @@ async function logSettledFailures(db: D1Database, label: string, results: Promis
 
 // --- App ---
 
-const app = new Hono<{ Bindings: Env }>();
+export const app = new Hono<{ Bindings: Env }>();
 
 app.use(
   "/*",
@@ -224,12 +224,14 @@ app.get("/api/admin/dashboard", async (c) => {
 });
 
 // Auth middleware for write endpoints
-app.use("/api/generate", "/api/rebuild", async (c, next) => {
+const authMiddleware = async (c: Context<{ Bindings: Env }>, next: Next) => {
   if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   await next();
-});
+};
+app.use("/api/generate", authMiddleware);
+app.use("/api/rebuild", authMiddleware);
 
 app.post("/api/generate", async (c) => {
   return generateDailyDigest(c.env);

@@ -1,15 +1,4 @@
-import { vi } from "vitest";
-import { timingSafeEqual } from "crypto";
+import { applyD1Migrations, env } from "cloudflare:test";
 
-// Polyfill crypto.subtle.timingSafeEqual for Node (Cloudflare Workers API)
-const originalCrypto = globalThis.crypto;
-vi.stubGlobal("crypto", {
-  ...originalCrypto,
-  subtle: {
-    ...originalCrypto.subtle,
-    timingSafeEqual(a: ArrayBuffer, b: ArrayBuffer): boolean {
-      return timingSafeEqual(Buffer.from(a), Buffer.from(b));
-    },
-  },
-  randomUUID: () => originalCrypto.randomUUID(),
-});
+// Apply D1 migrations before tests run
+await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);

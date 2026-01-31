@@ -1,31 +1,32 @@
-import { vi } from "vitest";
+import { fetchMock } from "cloudflare:test";
 import type { RawItem } from "../types";
 
-// -- Fetch helpers --
+// -- Fetch mock helpers --
 
-export function stubFetchWith(body: string, status = 200, headers: Record<string, string> = {}) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue(new Response(body, { status, headers })),
-  );
+export function mockFetchResponse(
+  origin: string,
+  path: string,
+  body: string,
+  status = 200,
+  headers: Record<string, string> = {},
+) {
+  const mock = fetchMock.get(origin);
+  mock.intercept({ method: "GET", path }).reply(status, body, { headers });
 }
 
 export function mockGeminiSuccess(text: string, tokens = { prompt: 100, candidates: 50 }) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          candidates: [{ content: { parts: [{ text }] } }],
-          usageMetadata: {
-            promptTokenCount: tokens.prompt,
-            candidatesTokenCount: tokens.candidates,
-            totalTokenCount: tokens.prompt + tokens.candidates,
-          },
-        }),
-        { status: 200 },
-      ),
-    ),
+  const mock = fetchMock.get("https://generativelanguage.googleapis.com");
+  mock.intercept({ method: "POST", path: /.*/ }).reply(
+    200,
+    JSON.stringify({
+      candidates: [{ content: { parts: [{ text }] } }],
+      usageMetadata: {
+        promptTokenCount: tokens.prompt,
+        candidatesTokenCount: tokens.candidates,
+        totalTokenCount: tokens.prompt + tokens.candidates,
+      },
+    }),
+    { headers: { "content-type": "application/json" } },
   );
 }
 
@@ -44,39 +45,44 @@ export function aiResponse(items: RawItem[], indices: number[], category = "dev"
   );
 }
 
-// -- D1 mock --
+// -- DB seed helpers --
 
-export function mockDB(overrides = {}) {
-  const mockFirst = vi.fn().mockResolvedValue(null);
-  const mockAll = vi.fn().mockResolvedValue({ results: [] });
-  const mockRun = vi.fn().mockResolvedValue({});
-
-  return {
-    prepare: vi.fn().mockReturnValue({
-      bind: vi.fn().mockReturnValue({
-        first: mockFirst,
-        all: mockAll,
-        run: mockRun,
-      }),
-      first: mockFirst,
-      all: mockAll,
-    }),
-    batch: vi.fn().mockResolvedValue([]),
-    ...overrides,
-  };
-}
-
-export function makeEnv(db = mockDB()) {
-  return {
-    DB: db as unknown as D1Database,
-    ADMIN_KEY: "test-admin-key",
-    ANTHROPIC_API_KEY: "test-anthropic",
-    GEMINI_API_KEY: "test-gemini",
-  };
-}
-
-export function makeRequest(path: string, options: RequestInit = {}) {
-  return new Request(`http://localhost${path}`, options);
+export async function seedDigest(
+  db: D1Database,
+  digest: { id: string; date: string; itemCount: number },
+  items: Array<{
+    id: string;
+    category: string;
+    title: string;
+    summary: string;
+    sourceName: string;
+    sourceUrl: string;
+    position: number;
+    whyItMatters?: string;
+  }>,
+) {
+  await db.batch([
+    db
+      .prepare("INSERT INTO digests (id, date, item_count) VALUES (?, ?, ?)")
+      .bind(digest.id, digest.date, digest.itemCount),
+    ...items.map((item) =>
+      db
+        .prepare(
+          "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(
+          item.id,
+          digest.id,
+          item.category,
+          item.title,
+          item.summary,
+          item.whyItMatters ?? null,
+          item.sourceName,
+          item.sourceUrl,
+          item.position,
+        ),
+    ),
+  ]);
 }
 
 // -- Feed XML fixtures --
