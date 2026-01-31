@@ -33,6 +33,23 @@ export function mockGeminiSuccess(
   );
 }
 
+export function mockGeminiError(status: number, body: string) {
+  const mock = fetchMock.get("https://generativelanguage.googleapis.com");
+  mock.intercept({ method: "POST", path: /.*/ }).reply(status, body);
+}
+
+export function mockAnthropicSuccess(text: string) {
+  const mock = fetchMock.get("https://api.anthropic.com");
+  mock.intercept({ method: "POST", path: /.*/ }).reply(
+    200,
+    JSON.stringify({
+      content: [{ type: "text", text }],
+      usage: { input_tokens: 80, output_tokens: 40 },
+    }),
+    { headers: { "content-type": "application/json" } }
+  );
+}
+
 // -- AI response builder --
 
 export function aiResponse(

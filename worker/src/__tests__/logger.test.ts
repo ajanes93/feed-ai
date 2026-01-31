@@ -2,6 +2,12 @@ import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { logEvent, recordAIUsage } from "../services/logger";
 
+async function getLogByMessage(message: string) {
+  return env.DB.prepare("SELECT * FROM error_logs WHERE message = ?")
+    .bind(message)
+    .first();
+}
+
 describe("logEvent", () => {
   it("inserts a log entry into the database", async () => {
     await logEvent(env.DB, {
@@ -10,11 +16,7 @@ describe("logEvent", () => {
       message: "Source failed",
     });
 
-    const row = await env.DB.prepare(
-      "SELECT * FROM error_logs WHERE message = ?"
-    )
-      .bind("Source failed")
-      .first();
+    const row = await getLogByMessage("Source failed");
 
     expect(row).not.toBeNull();
     expect(row!.level).toBe("error");
@@ -33,11 +35,7 @@ describe("logEvent", () => {
       digestId: "digest-2025-01-28",
     });
 
-    const row = await env.DB.prepare(
-      "SELECT * FROM error_logs WHERE message = ?"
-    )
-      .bind("Rate limited")
-      .first();
+    const row = await getLogByMessage("Rate limited");
 
     expect(row!.source_id).toBe("src-1");
     expect(row!.digest_id).toBe("digest-2025-01-28");
@@ -51,11 +49,7 @@ describe("logEvent", () => {
       details: { count: 42, nested: { key: "value" } },
     });
 
-    const row = await env.DB.prepare(
-      "SELECT * FROM error_logs WHERE message = ?"
-    )
-      .bind("With details")
-      .first();
+    const row = await getLogByMessage("With details");
 
     const details = JSON.parse(row!.details as string);
     expect(details.count).toBe(42);
@@ -72,11 +66,7 @@ describe("logEvent", () => {
       details: largeDetails,
     });
 
-    const row = await env.DB.prepare(
-      "SELECT * FROM error_logs WHERE message = ?"
-    )
-      .bind("Large details")
-      .first();
+    const row = await getLogByMessage("Large details");
 
     expect((row!.details as string).length).toBe(5000);
   });

@@ -9,13 +9,14 @@ import {
   JOBICY_RESPONSE,
 } from "./helpers";
 
-const rssSource = sourceFactory.build({
+const RSS_SOURCE = sourceFactory.build({
   id: "test-rss",
   name: "Test RSS",
   type: "rss",
   url: "https://example.com/feed.xml",
 });
-const apiSource = sourceFactory.build({
+
+const API_SOURCE = sourceFactory.build({
   id: "test-api",
   name: "Test API",
   type: "api",
@@ -36,7 +37,7 @@ describe("fetchSource", () => {
   it("parses RSS feed items", async () => {
     mockFetchResponse("https://example.com", "/feed.xml", RSS_FEED);
 
-    const items = await fetchSource(rssSource);
+    const items = await fetchSource(RSS_SOURCE);
 
     expect(items).toHaveLength(2);
     expect(items[0].title).toBe("Article One");
@@ -48,7 +49,7 @@ describe("fetchSource", () => {
   it("strips HTML from content", async () => {
     mockFetchResponse("https://example.com", "/feed.xml", RSS_FEED);
 
-    const items = await fetchSource(rssSource);
+    const items = await fetchSource(RSS_SOURCE);
 
     expect(items[1].content).toBe("HTML content");
   });
@@ -56,7 +57,7 @@ describe("fetchSource", () => {
   it("parses Atom feed items", async () => {
     mockFetchResponse("https://example.com", "/feed.xml", ATOM_FEED);
 
-    const items = await fetchSource(rssSource);
+    const items = await fetchSource(RSS_SOURCE);
 
     expect(items).toHaveLength(1);
     expect(items[0].title).toBe("Atom Entry");
@@ -74,7 +75,7 @@ describe("fetchSource", () => {
       }
     );
 
-    const items = await fetchSource(apiSource);
+    const items = await fetchSource(API_SOURCE);
 
     expect(items).toHaveLength(2);
     expect(items[0].title).toBe("Senior Vue Dev");
@@ -86,7 +87,7 @@ describe("fetchSource", () => {
   it("returns empty array on HTTP error", async () => {
     mockFetchResponse("https://example.com", "/feed.xml", "Not found", 404);
 
-    const items = await fetchSource(rssSource);
+    const items = await fetchSource(RSS_SOURCE);
 
     expect(items).toEqual([]);
   });
@@ -97,7 +98,7 @@ describe("fetchSource", () => {
       .intercept({ method: "GET", path: "/feed.xml" })
       .replyWithError(new Error("Network failure"));
 
-    const items = await fetchSource(rssSource);
+    const items = await fetchSource(RSS_SOURCE);
 
     expect(items).toEqual([]);
   });
@@ -106,7 +107,7 @@ describe("fetchSource", () => {
     const emptyFeed = `<?xml version="1.0"?><rss><channel><title>Empty</title></channel></rss>`;
     mockFetchResponse("https://example.com", "/feed.xml", emptyFeed);
 
-    const items = await fetchSource(rssSource);
+    const items = await fetchSource(RSS_SOURCE);
 
     expect(items).toEqual([]);
   });
@@ -117,7 +118,7 @@ describe("fetchSource", () => {
     </channel></rss>`;
     mockFetchResponse("https://example.com", "/feed.xml", singleItem);
 
-    const items = await fetchSource(rssSource);
+    const items = await fetchSource(RSS_SOURCE);
 
     expect(items).toHaveLength(1);
     expect(items[0].title).toBe("Only One");
@@ -129,7 +130,7 @@ describe("fetchSource", () => {
     </channel></rss>`;
     mockFetchResponse("https://example.com", "/feed.xml", feed);
 
-    const items = await fetchSource(rssSource);
+    const items = await fetchSource(RSS_SOURCE);
 
     expect(items).toHaveLength(1);
     expect(items[0].title).toBe("Untitled");
@@ -145,7 +146,7 @@ describe("fetchSource", () => {
     </channel></rss>`;
     mockFetchResponse("https://example.com", "/feed.xml", feed);
 
-    const items = await fetchSource(rssSource);
+    const items = await fetchSource(RSS_SOURCE);
 
     expect(items[0].content).toBe(`Tom & Jerry <3 "quotes" 'apos'`);
   });
@@ -159,7 +160,7 @@ describe("fetchSource", () => {
       { "content-type": "application/json" }
     );
 
-    const items = await fetchSource(apiSource);
+    const items = await fetchSource(API_SOURCE);
 
     expect(items).toEqual([]);
   });
@@ -173,7 +174,7 @@ describe("fetchSource", () => {
       { "content-type": "application/json" }
     );
 
-    const items = await fetchSource(apiSource);
+    const items = await fetchSource(API_SOURCE);
 
     expect(items).toEqual([]);
   });
@@ -188,7 +189,7 @@ describe("fetchSource", () => {
 
     mockFetchResponse("https://example.com", "/feed.xml", feed);
 
-    const items = await fetchSource(rssSource);
+    const items = await fetchSource(RSS_SOURCE);
 
     expect(items).toHaveLength(20);
   });
@@ -207,7 +208,7 @@ describe("fetchAllSources", () => {
 
     mockFetchResponse("https://example.com", "/feed.xml", feed);
 
-    const { items, health } = await fetchAllSources([rssSource]);
+    const { items, health } = await fetchAllSources([RSS_SOURCE]);
 
     expect(items).toHaveLength(1);
     expect(items[0].title).toBe("New");
@@ -222,7 +223,7 @@ describe("fetchAllSources", () => {
 
     mockFetchResponse("https://example.com", "/feed.xml", feed);
 
-    const { items } = await fetchAllSources([rssSource]);
+    const { items } = await fetchAllSources([RSS_SOURCE]);
 
     expect(items).toHaveLength(1);
     expect(items[0].title).toBe("No Date");
@@ -236,7 +237,7 @@ describe("fetchAllSources", () => {
       id: "test-rss-2",
       url: "https://example2.com/feed2.xml",
     });
-    const { health } = await fetchAllSources([rssSource, source2]);
+    const { health } = await fetchAllSources([RSS_SOURCE, source2]);
 
     expect(health).toHaveLength(2);
     const successfulSource = health.find((h) => h.sourceId === "test-rss");

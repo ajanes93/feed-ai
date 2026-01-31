@@ -2,7 +2,12 @@ import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { fetchMock } from "cloudflare:test";
 import { generateDigest } from "../services/summarizer";
 import { rawItemFactory } from "./factories";
-import { mockGeminiSuccess, aiResponse } from "./helpers";
+import {
+  mockGeminiSuccess,
+  mockGeminiError,
+  mockAnthropicSuccess,
+  aiResponse,
+} from "./helpers";
 
 beforeAll(() => {
   fetchMock.activate();
@@ -12,23 +17,6 @@ beforeAll(() => {
 afterEach(() => {
   fetchMock.assertNoPendingInterceptors();
 });
-
-function mockAnthropicSuccess(text: string) {
-  const mock = fetchMock.get("https://api.anthropic.com");
-  mock.intercept({ method: "POST", path: /.*/ }).reply(
-    200,
-    JSON.stringify({
-      content: [{ type: "text", text }],
-      usage: { input_tokens: 80, output_tokens: 40 },
-    }),
-    { headers: { "content-type": "application/json" } }
-  );
-}
-
-function mockGeminiError(status: number, body: string) {
-  const mock = fetchMock.get("https://generativelanguage.googleapis.com");
-  mock.intercept({ method: "POST", path: /.*/ }).reply(status, body);
-}
 
 describe("generateDigest", () => {
   it("returns digest items from AI response", async () => {
@@ -73,7 +61,7 @@ describe("generateDigest", () => {
     const json = aiResponse(items, [1]);
     const wrappedResponse = "```json\n" + json + "\n```";
 
-    mockGeminiSuccess(wrappedResponse, { prompt: 50, candidates: 25 });
+    mockGeminiSuccess(wrappedResponse);
 
     const result = await generateDigest(items, { gemini: "test-key" }, "news");
 
@@ -107,7 +95,7 @@ describe("generateDigest", () => {
       },
     ]);
 
-    mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
+    mockGeminiSuccess(response);
 
     const result = await generateDigest(items, { gemini: "test-key" }, "news");
 
@@ -139,7 +127,7 @@ describe("generateDigest", () => {
       },
     ]);
 
-    mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
+    mockGeminiSuccess(response);
 
     const result = await generateDigest(items, { gemini: "test-key" }, "news");
 
@@ -159,7 +147,7 @@ describe("generateDigest", () => {
       }))
     );
 
-    mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
+    mockGeminiSuccess(response);
 
     const result = await generateDigest(items, { gemini: "test-key" }, "news");
 
@@ -170,7 +158,7 @@ describe("generateDigest", () => {
     const items = rawItemFactory.buildList(2);
     const response = aiResponse(items, [0, 1]);
 
-    mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
+    mockGeminiSuccess(response);
 
     const result = await generateDigest(items, { gemini: "test-key" }, "news");
 
@@ -190,7 +178,7 @@ describe("generateDigest", () => {
     const items = rawItemFactory.buildList(3);
     const response = aiResponse(items, [0], "jobs");
 
-    mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
+    mockGeminiSuccess(response);
 
     const result = await generateDigest(items, { gemini: "test-key" }, "jobs");
 
@@ -243,7 +231,7 @@ describe("generateDigest", () => {
     // Valid first item, truncated second item
     const truncated = `[{"item_index": 0, "title": "Recovered", "summary": "ok", "category": "dev", "source_name": "Src"}, {"item_index": 1, "title": "Trunc`;
 
-    mockGeminiSuccess(truncated, { prompt: 50, candidates: 25 });
+    mockGeminiSuccess(truncated);
 
     const result = await generateDigest(items, { gemini: "test-key" }, "news");
 
@@ -254,7 +242,7 @@ describe("generateDigest", () => {
   it("throws on completely invalid JSON response", async () => {
     const items = rawItemFactory.buildList(3);
 
-    mockGeminiSuccess("not json at all", { prompt: 50, candidates: 25 });
+    mockGeminiSuccess("not json at all");
 
     await expect(
       generateDigest(items, { gemini: "test-key" }, "news")
@@ -264,7 +252,7 @@ describe("generateDigest", () => {
   it("throws on empty array response", async () => {
     const items = rawItemFactory.buildList(3);
 
-    mockGeminiSuccess("[]", { prompt: 50, candidates: 25 });
+    mockGeminiSuccess("[]");
 
     await expect(
       generateDigest(items, { gemini: "test-key" }, "news")
