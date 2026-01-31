@@ -25,34 +25,19 @@ git diff main...HEAD
 
 Review ALL commits to understand full scope of changes.
 
-### Step 3: If PR EXISTS - Update it
+### Step 3: Read the PR template
 
-```bash
-gh pr edit --title "feat: new title" --body "$(cat <<'EOF'
-## What?
-Summary of changes
+Read `.claude/pr-template.md` for the PR body structure. Fill in each section based on the changes analyzed in Step 2.
 
-## Why?
-Context and value delivered
-EOF
-)"
-```
+### Step 4: If PR EXISTS - Update it
 
-### Step 4: If NO PR - Create new one
+Use `gh pr edit` with the filled-in template as the body.
 
-```bash
-git push -u origin HEAD
-gh pr create --title "feat: description" --body "$(cat <<'EOF'
-## What?
-- Summary of changes
+### Step 5: If NO PR - Create new one
 
-## Why?
-- Context for the changes
-EOF
-)"
-```
+Push the branch and use `gh pr create` with the filled-in template as the body.
 
-### Step 5: Return the PR URL
+### Step 6: Return the PR URL
 
 Always provide the PR URL at the end.
 

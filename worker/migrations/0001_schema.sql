@@ -1,5 +1,5 @@
 -- Sources to monitor
-CREATE TABLE sources (
+CREATE TABLE IF NOT EXISTS sources (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   type TEXT NOT NULL,  -- 'rss', 'reddit', 'github', 'hn'
@@ -10,7 +10,7 @@ CREATE TABLE sources (
 );
 
 -- Daily digests
-CREATE TABLE digests (
+CREATE TABLE IF NOT EXISTS digests (
   id TEXT PRIMARY KEY,
   date TEXT NOT NULL UNIQUE,  -- '2026-01-29'
   item_count INTEGER,
@@ -18,7 +18,7 @@ CREATE TABLE digests (
 );
 
 -- Digest items
-CREATE TABLE items (
+CREATE TABLE IF NOT EXISTS items (
   id TEXT PRIMARY KEY,
   digest_id TEXT NOT NULL,
   category TEXT NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE items (
 );
 
 -- Raw fetched items (for debugging/reprocessing)
-CREATE TABLE raw_items (
+CREATE TABLE IF NOT EXISTS raw_items (
   id TEXT PRIMARY KEY,
   source_id TEXT NOT NULL,
   title TEXT,
@@ -82,12 +82,12 @@ CREATE TABLE IF NOT EXISTS error_logs (
   created_at INTEGER DEFAULT (unixepoch())
 );
 
-CREATE INDEX idx_ai_usage_created ON ai_usage(created_at);
-CREATE INDEX idx_error_logs_created ON error_logs(created_at);
-CREATE INDEX idx_error_logs_category ON error_logs(category);
-CREATE INDEX idx_error_logs_level ON error_logs(level);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage(created_at);
+CREATE INDEX IF NOT EXISTS idx_error_logs_created ON error_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_error_logs_category ON error_logs(category);
+CREATE INDEX IF NOT EXISTS idx_error_logs_level ON error_logs(level);
 
-CREATE INDEX idx_digests_date ON digests(date);
-CREATE INDEX idx_items_digest ON items(digest_id);
-CREATE INDEX idx_items_position ON items(position);
-CREATE INDEX idx_raw_items_fetched ON raw_items(fetched_at);
+CREATE INDEX IF NOT EXISTS idx_digests_date ON digests(date);
+CREATE INDEX IF NOT EXISTS idx_items_digest ON items(digest_id);
+CREATE INDEX IF NOT EXISTS idx_items_position ON items(position);
+CREATE INDEX IF NOT EXISTS idx_raw_items_fetched ON raw_items(fetched_at);
