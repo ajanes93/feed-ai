@@ -8,9 +8,6 @@ on:
 jobs:
   worker:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: worker
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,14 +15,14 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npx eslint src
+        working-directory: worker
       - run: npx prettier --check src
+        working-directory: worker
       - run: npm test
+        working-directory: worker
 
   web:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,15 +30,16 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npx eslint src
+        working-directory: web
       - run: npx prettier --check src
+        working-directory: web
       - run: npm test
+        working-directory: web
       - run: npx vue-tsc --noEmit
+        working-directory: web
 
   e2e:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -49,7 +47,9 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npx playwright install chromium --with-deps
+        working-directory: web
       - run: npm run test:e2e
+        working-directory: web
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
