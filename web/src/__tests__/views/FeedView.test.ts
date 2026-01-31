@@ -201,8 +201,8 @@ describe("FeedView", () => {
 
       // No call should have written today's date with a category query param
       const badCall = calls.find(
-        (c: [{ params?: { date: string }; query?: { category?: string } }]) =>
-          c[0].params?.date === "2025-01-28" && c[0].query?.category
+        (c: { params?: { date: string }; query?: { category?: string } }[]) =>
+          c[0]?.params?.date === "2025-01-28" && c[0]?.query?.category
       );
       expect(badCall).toBeUndefined();
     });
