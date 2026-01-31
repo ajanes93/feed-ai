@@ -43,7 +43,10 @@ function getButtonRects() {
   });
 }
 
-function findClosestButton(localX: number, rects: ReturnType<typeof getButtonRects>) {
+function findClosestButton(
+  localX: number,
+  rects: ReturnType<typeof getButtonRects>
+) {
   let closestIdx = 0;
   let closestDist = Infinity;
   for (let i = 0; i < rects.length; i++) {
@@ -67,8 +70,14 @@ function updateIndicator() {
 }
 
 onMounted(() => nextTick(updateIndicator));
-watch(() => props.activeCategory, () => nextTick(updateIndicator));
-watch(() => props.items.length, () => nextTick(updateIndicator));
+watch(
+  () => props.activeCategory,
+  () => nextTick(updateIndicator)
+);
+watch(
+  () => props.items.length,
+  () => nextTick(updateIndicator)
+);
 
 // --- Swipe progress interpolation ---
 watch(
@@ -82,9 +91,11 @@ watch(
     const ceil = Math.min(floor + 1, rects.length - 1);
     const t = progress - floor;
 
-    indicatorLeft.value = rects[floor].left + (rects[ceil].left - rects[floor].left) * t;
-    indicatorWidth.value = rects[floor].width + (rects[ceil].width - rects[floor].width) * t;
-  },
+    indicatorLeft.value =
+      rects[floor].left + (rects[ceil].left - rects[floor].left) * t;
+    indicatorWidth.value =
+      rects[floor].width + (rects[ceil].width - rects[floor].width) * t;
+  }
 );
 
 // --- Draggable indicator ---
@@ -103,7 +114,8 @@ function onPointerDown(e: PointerEvent) {
 }
 
 function onPointerMove(e: PointerEvent) {
-  if (!dragging.value || e.pointerId !== dragPointerId || !containerRef.value) return;
+  if (!dragging.value || e.pointerId !== dragPointerId || !containerRef.value)
+    return;
 
   const containerRect = containerRef.value.getBoundingClientRect();
   const localX = e.clientX - containerRect.left;
@@ -116,12 +128,16 @@ function onPointerMove(e: PointerEvent) {
   const lastLeft = rects[rects.length - 1].left;
   const halfWidth = rects[closestIdx].width / 2;
 
-  indicatorLeft.value = Math.max(firstLeft, Math.min(localX - halfWidth, lastLeft));
+  indicatorLeft.value = Math.max(
+    firstLeft,
+    Math.min(localX - halfWidth, lastLeft)
+  );
   indicatorWidth.value = rects[closestIdx].width;
 }
 
 function onPointerUp(e: PointerEvent) {
-  if (!dragging.value || e.pointerId !== dragPointerId || !containerRef.value) return;
+  if (!dragging.value || e.pointerId !== dragPointerId || !containerRef.value)
+    return;
   dragging.value = false;
 
   const containerRect = containerRef.value.getBoundingClientRect();
@@ -144,7 +160,7 @@ function onClick(key: string) {
 <template>
   <div
     ref="containerRef"
-    class="relative flex justify-center gap-1.5 touch-none"
+    class="relative flex touch-none justify-center gap-1.5"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
@@ -153,7 +169,11 @@ function onClick(key: string) {
     <!-- Draggable indicator -->
     <div
       class="absolute top-0 h-full rounded-full bg-white shadow-sm"
-      :class="dragging || (swipeProgress !== undefined && swipeProgress >= 0) ? '' : 'transition-all duration-250 ease-[cubic-bezier(0.25,1,0.5,1)]'"
+      :class="
+        dragging || (swipeProgress !== undefined && swipeProgress >= 0)
+          ? ''
+          : 'transition-all duration-250 ease-[cubic-bezier(0.25,1,0.5,1)]'
+      "
       :style="{ left: `${indicatorLeft}px`, width: `${indicatorWidth}px` }"
     />
     <button

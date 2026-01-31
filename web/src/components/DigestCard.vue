@@ -11,9 +11,13 @@ const props = defineProps<{
 const showActions = ref(false);
 const cardRef = useTemplateRef("card");
 
-onLongPress(cardRef, () => {
-  showActions.value = true;
-}, { delay: 500 });
+onLongPress(
+  cardRef,
+  () => {
+    showActions.value = true;
+  },
+  { delay: 500 }
+);
 
 async function shareItem() {
   showActions.value = false;
