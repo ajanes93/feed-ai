@@ -5,6 +5,7 @@ import type { DigestItem } from "../types";
 const props = defineProps<{
   items: DigestItem[];
   activeCategory: string;
+  swipeProgress?: number; // -1 or undefined = not swiping, 0..3 = interpolated category index
 }>();
 
 const emit = defineEmits<{
@@ -55,17 +56,35 @@ onMounted(() => nextTick(updateIndicator));
 watch(() => props.activeCategory, () => nextTick(updateIndicator));
 watch(() => props.items.length, () => nextTick(updateIndicator));
 
+// --- Swipe progress interpolation ---
+watch(
+  () => props.swipeProgress,
+  (progress) => {
+    if (progress === undefined || progress < 0 || dragging.value) return;
+    const rects = getButtonRects();
+    if (rects.length === 0) return;
+
+    const floor = Math.floor(progress);
+    const ceil = Math.min(floor + 1, rects.length - 1);
+    const t = progress - floor;
+
+    indicatorLeft.value = rects[floor].left + (rects[ceil].left - rects[floor].left) * t;
+    indicatorWidth.value = rects[floor].width + (rects[ceil].width - rects[floor].width) * t;
+  },
+);
+
 // --- Draggable indicator ---
 let dragPointerId = -1;
+let didDrag = false;
 
 function onPointerDown(e: PointerEvent) {
-  // Only start drag if touching near the active indicator
   const rects = getButtonRects();
   const idx = categories.findIndex((c) => c.key === props.activeCategory);
   if (!rects[idx] || !containerRef.value) return;
 
   dragPointerId = e.pointerId;
   dragging.value = true;
+  didDrag = false;
   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 }
 
@@ -87,6 +106,8 @@ function onPointerMove(e: PointerEvent) {
       closestIdx = i;
     }
   }
+
+  didDrag = true;
 
   // Clamp indicator within pill bar bounds
   const clampedLeft = Math.max(
@@ -121,7 +142,10 @@ function onPointerUp(e: PointerEvent) {
 }
 
 function onClick(key: string) {
-  if (dragging.value) return;
+  if (didDrag) {
+    didDrag = false;
+    return;
+  }
   emit("select", key);
 }
 </script>
@@ -138,7 +162,7 @@ function onClick(key: string) {
     <!-- Draggable indicator -->
     <div
       class="absolute top-0 h-full rounded-full bg-white shadow-sm"
-      :class="dragging ? '' : 'transition-all duration-250 ease-[cubic-bezier(0.25,1,0.5,1)]'"
+      :class="dragging || (swipeProgress !== undefined && swipeProgress >= 0) ? '' : 'transition-all duration-250 ease-[cubic-bezier(0.25,1,0.5,1)]'"
       :style="{ left: `${indicatorLeft}px`, width: `${indicatorWidth}px` }"
     />
     <button

@@ -83,6 +83,25 @@ async function onSlideChange(swiper: Swiper_T) {
   }
 }
 
+// Track Swiper progress for pill indicator interpolation
+const swiperProgress = ref(-1); // -1 means not swiping
+
+function onSwiperProgress(_swiper: Swiper_T, progress: number) {
+  // progress: 0 = first slide, 1 = last slide
+  // Map to category float index (0..CATEGORIES.length-1)
+  const totalSlides = CATEGORIES.length + 2;
+  const slidePos = progress * (totalSlides - 1); // 0..5
+  const catFloat = slidePos - CAT_OFFSET; // -1..4
+  // Only send progress within category range
+  if (catFloat >= -0.5 && catFloat <= CATEGORIES.length - 0.5) {
+    swiperProgress.value = Math.max(0, Math.min(CATEGORIES.length - 1, catFloat));
+  }
+}
+
+function onTouchEndSwiper() {
+  swiperProgress.value = -1;
+}
+
 // Pill tap/drag → slide Swiper to that category
 function setCategory(cat: string) {
   activeCategory.value = cat;
@@ -147,7 +166,9 @@ function onTouchStart(e: TouchEvent) {
 
 function onTouchMove(e: TouchEvent) {
   if (refreshing.value || !touchStartY.value) return;
-  const scrollEl = document.querySelector("[data-scroll-container]");
+  // Query the currently active slide's scroll container
+  const activeSlide = swiperInstance?.slides?.[swiperInstance.activeIndex];
+  const scrollEl = activeSlide?.querySelector("[data-scroll-container]");
   if (!scrollEl || scrollEl.scrollTop > 2) return;
   const dy = (e.touches[0]?.clientY ?? 0) - touchStartY.value;
   if (dy > PULL_DEAD_ZONE) {
@@ -244,6 +265,7 @@ onMounted(async () => {
         <CategoryFilter
           :items="digest.items"
           :active-category="activeCategory"
+          :swipe-progress="swiperProgress"
           @select="setCategory"
         />
       </div>
@@ -260,6 +282,8 @@ onMounted(async () => {
         class="h-[100dvh]"
         @swiper="onSwiperInit"
         @slide-change="onSlideChange"
+        @progress="onSwiperProgress"
+        @touch-end="onTouchEndSwiper"
       >
         <!-- Prev digest boundary -->
         <SwiperSlide>
