@@ -63,7 +63,7 @@ function onPointerUp(e: PointerEvent) {
   const threshold = 30;
   if (Math.abs(dx) < threshold) return; // too short, was a tap
 
-  const dir = dx < 0 ? 1 : -1; // drag left = next category
+  const dir = dx < 0 ? -1 : 1; // drag right = next category
   const newIdx = Math.max(0, Math.min(categories.length - 1, dragStartCategory + dir));
   if (newIdx !== dragStartCategory) {
     emit("select", categories[newIdx].key);
@@ -75,8 +75,9 @@ function onPointerUp(e: PointerEvent) {
   <div
     ref="containerRef"
     class="relative flex touch-pan-y justify-center gap-1.5"
-    @pointerdown.passive="onPointerDown"
+    @pointerdown="onPointerDown"
     @pointerup="onPointerUp"
+    @pointercancel="onPointerUp"
   >
     <!-- Sliding active indicator -->
     <div

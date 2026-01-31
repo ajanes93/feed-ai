@@ -60,7 +60,7 @@ async function onSlideChangeTransitionEnd(swiper: Swiper_T) {
     }
   } finally {
     // Reset to center slide without animation
-    swiper.slideToLoop(1, 0);
+    swiper.slideTo(1, 0);
     swiperTransitioning.value = false;
   }
 }
@@ -82,9 +82,6 @@ async function navNext() {
 }
 
 // --- Category ---
-function setCategory(cat: string) {
-  activeCategory.value = cat;
-}
 
 // Sync URL when digest changes
 watch(
@@ -111,26 +108,20 @@ watch(activeCategory, (cat) => {
 // --- Pull to refresh ---
 const pullDistance = ref(0);
 const refreshing = ref(false);
+const touchStartY = ref(0);
 const PULL_THRESHOLD = 80;
 
-function onTouchMove(e: TouchEvent) {
-  if (refreshing.value) return;
-  const scrollEl = document.querySelector("[data-scroll-container]");
-  if (!scrollEl || scrollEl.scrollTop > 2) return;
-  const touch = e.touches[0];
-  if (!touch) return;
-  const startY = (e.target as HTMLElement)?.dataset?.touchStartY;
-  if (!startY) return;
-  const dy = touch.clientY - Number(startY);
-  if (dy > 0) {
-    pullDistance.value = Math.min(120, dy * 0.4);
-  }
+function onTouchStart(e: TouchEvent) {
+  touchStartY.value = e.touches[0]?.clientY ?? 0;
 }
 
-function onTouchStart(e: TouchEvent) {
-  const touch = e.touches[0];
-  if (touch) {
-    (e.target as HTMLElement).dataset.touchStartY = String(touch.clientY);
+function onTouchMove(e: TouchEvent) {
+  if (refreshing.value || !touchStartY.value) return;
+  const scrollEl = document.querySelector("[data-scroll-container]");
+  if (!scrollEl || scrollEl.scrollTop > 2) return;
+  const dy = (e.touches[0]?.clientY ?? 0) - touchStartY.value;
+  if (dy > 0) {
+    pullDistance.value = Math.min(120, dy * 0.4);
   }
 }
 
@@ -142,6 +133,7 @@ async function onTouchEnd() {
     refreshing.value = false;
   }
   pullDistance.value = 0;
+  touchStartY.value = 0;
 }
 
 onMounted(async () => {
@@ -232,24 +224,18 @@ onMounted(async () => {
           <CategoryFilter
             :items="digest.items"
             :active-category="activeCategory"
-            @select="setCategory"
+            @select="(cat) => (activeCategory = cat)"
           />
         </template>
       </DateHeader>
 
       <Swiper
         :initial-slide="1"
-        :slides-per-view="1"
         :speed="300"
-        :resistance="true"
         :resistance-ratio="0.6"
         :threshold="10"
         :touch-angle="35"
-        :short-swipes="true"
-        :long-swipes="true"
         :long-swipes-ratio="0.25"
-        :follow-finger="true"
-        :css-mode="false"
         class="h-[100dvh]"
         @swiper="onSwiperInit"
         @slide-change-transition-end="onSlideChangeTransitionEnd"
