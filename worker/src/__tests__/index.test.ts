@@ -1,21 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-
-vi.mock("../services/fetcher", () => ({
-  fetchAllSources: vi.fn(),
-}));
-vi.mock("../services/summarizer", () => ({
-  generateDigest: vi.fn(),
-}));
-vi.mock("../services/logger", () => ({
-  logEvent: vi.fn().mockResolvedValue(undefined),
-  recordAIUsage: vi.fn().mockResolvedValue(undefined),
-}));
-
 import app from "../index";
-import { mockDB, makeEnv, makeRequest } from "./helpers";
+import { mockDB, makeEnv, makeRequest, stubFetchWith } from "./helpers";
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  // Stub fetch to prevent real network calls from POST routes
+  // that bypass auth due to Hono multi-path middleware bug
+  stubFetchWith("", 404);
 });
 
 describe("API routes", () => {
