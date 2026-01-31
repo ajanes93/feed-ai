@@ -10,7 +10,7 @@ defineProps<{
 <template>
   <div
     data-scroll-container
-    class="h-[100dvh] overflow-y-scroll pt-22 pb-[calc(2rem+env(safe-area-inset-bottom))]"
+    class="h-[100dvh] overflow-y-scroll pt-28 pb-[calc(2rem+env(safe-area-inset-bottom))]"
   >
     <TransitionGroup
       name="card"

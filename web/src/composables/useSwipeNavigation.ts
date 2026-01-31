@@ -3,9 +3,12 @@ import { ref, computed, type Ref } from "vue";
 interface SwipeNavigationOptions {
   hasPrevious: Ref<boolean>;
   hasNext: Ref<boolean>;
+  categories: string[];
+  activeCategory: Ref<string>;
   onSwipeRight: () => Promise<unknown>;
   onSwipeLeft: () => Promise<unknown>;
   onPullRefresh: () => Promise<unknown>;
+  onCategoryChange: (category: string) => void;
 }
 
 const SWIPE_THRESHOLD = 40;
@@ -22,6 +25,7 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
 
   let touchStartX = 0;
   let touchStartY = 0;
+  let touchStartScrollTop = 0;
   let lastTouchX = 0;
   let lastTouchTime = 0;
   let isHorizontalSwipe: boolean | null = null;
@@ -48,6 +52,9 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
     isHorizontalSwipe = null;
     swipeAnimating.value = false;
     swipeOffset.value = 0;
+
+    const scrollEl = document.querySelector("[data-scroll-container]");
+    touchStartScrollTop = scrollEl?.scrollTop ?? 0;
   }
 
   function onTouchMove(e: TouchEvent) {
@@ -62,7 +69,7 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
     }
 
     if (!isHorizontalSwipe) {
-      if (dy > 0 && !refreshing.value) {
+      if (dy > 0 && !refreshing.value && touchStartScrollTop === 0) {
         const scrollEl = document.querySelector("[data-scroll-container]");
         if (scrollEl && scrollEl.scrollTop === 0) {
           pullDistance.value = Math.min(120, dy * 0.4);
@@ -71,8 +78,22 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
       return;
     }
 
-    const canGo = dx > 0 ? options.hasPrevious.value : options.hasNext.value;
-    swipeOffset.value = dx * (canGo ? 1 : 0.2);
+    // For horizontal swipes, check if we should change category or navigate digests
+    const catIdx = options.categories.indexOf(options.activeCategory.value);
+    const atLeftEdge = catIdx === 0;
+    const atRightEdge = catIdx === options.categories.length - 1;
+
+    const isDigestNav =
+      (dx > 0 && atLeftEdge && options.hasPrevious.value) ||
+      (dx < 0 && atRightEdge && options.hasNext.value);
+
+    if (isDigestNav) {
+      const canGo = dx > 0 ? options.hasPrevious.value : options.hasNext.value;
+      swipeOffset.value = dx * (canGo ? 1 : 0.2);
+    } else {
+      // Show subtle resistance for category swipe
+      swipeOffset.value = dx * 0.15;
+    }
 
     lastTouchX = touch.clientX;
     lastTouchTime = Date.now();
@@ -130,18 +151,32 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
     const dt = Math.max(1, Date.now() - lastTouchTime);
     const velocity = (touch.clientX - lastTouchX) / dt;
 
-    const shouldNavigate =
+    const shouldAct =
       Math.abs(dx) > SWIPE_THRESHOLD || Math.abs(velocity) > VELOCITY_THRESHOLD;
 
-    if (shouldNavigate) {
+    if (shouldAct) {
       const goingRight = dx > 0;
-      const canGo = goingRight
-        ? options.hasPrevious.value
-        : options.hasNext.value;
+      const catIdx = options.categories.indexOf(options.activeCategory.value);
+      const atLeftEdge = catIdx === 0;
+      const atRightEdge = catIdx === options.categories.length - 1;
 
-      if (canGo) {
+      // Check if this should be a digest navigation (at edge of categories)
+      const isDigestNav =
+        (goingRight && atLeftEdge && options.hasPrevious.value) ||
+        (!goingRight && atRightEdge && options.hasNext.value);
+
+      if (isDigestNav) {
         await animateSwipeTransition(goingRight);
+        // Reset to "all" when navigating to a new digest
+        options.onCategoryChange(options.categories[0]);
         return;
+      }
+
+      // Otherwise, change category
+      if (goingRight && catIdx > 0) {
+        options.onCategoryChange(options.categories[catIdx - 1]);
+      } else if (!goingRight && catIdx < options.categories.length - 1) {
+        options.onCategoryChange(options.categories[catIdx + 1]);
       }
     }
 

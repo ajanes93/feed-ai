@@ -7,6 +7,7 @@ import DateHeader from "../components/DateHeader.vue";
 import EmptyState from "../components/EmptyState.vue";
 import CategoryFilter from "../components/CategoryFilter.vue";
 
+const CATEGORIES = ["all", "ai", "dev", "jobs"];
 const activeCategory = ref("all");
 
 const filteredItems = computed(() => {
@@ -38,9 +39,12 @@ const {
 } = useSwipeNavigation({
   hasPrevious,
   hasNext,
+  categories: CATEGORIES,
+  activeCategory,
   onSwipeRight: goToPrevious,
   onSwipeLeft: goToNext,
   onPullRefresh: fetchToday,
+  onCategoryChange: (cat: string) => { activeCategory.value = cat; },
 });
 
 onMounted(() => {
@@ -118,16 +122,15 @@ onMounted(() => {
         :has-next="hasNext"
         @previous="goToPrevious"
         @next="goToNext"
-      />
-      <div class="fixed top-12 right-0 left-0 z-10 px-5 pb-2">
-        <div class="mx-auto max-w-lg">
+      >
+        <template #filters>
           <CategoryFilter
             :items="digest.items"
             :active-category="activeCategory"
             @select="activeCategory = $event"
           />
-        </div>
-      </div>
+        </template>
+      </DateHeader>
       <div :style="swipeStyle">
         <DigestFeed :items="filteredItems" />
       </div>
