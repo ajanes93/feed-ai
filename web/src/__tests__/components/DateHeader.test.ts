@@ -37,27 +37,34 @@ describe("DateHeader", () => {
   });
 
   describe("navigation buttons", () => {
-    it("enables previous button when hasPrevious is true", () => {
-      const { getPreviousButton } = render();
-      expect(getPreviousButton().attributes("disabled")).toBeUndefined();
-    });
-
-    it("disables previous button when hasPrevious is false", () => {
-      const { getPreviousButton } = render({
-        props: { hasPrevious: false },
-      });
-      expect(getPreviousButton().attributes("disabled")).toBeDefined();
-    });
-
-    it("enables next button when hasNext is true", () => {
-      const { getNextButton } = render();
-      expect(getNextButton().attributes("disabled")).toBeUndefined();
-    });
-
-    it("disables next button when hasNext is false", () => {
-      const { getNextButton } = render({ props: { hasNext: false } });
-      expect(getNextButton().attributes("disabled")).toBeDefined();
-    });
+    it.each([
+      {
+        prop: "hasPrevious",
+        value: true,
+        button: "previous",
+        disabled: false,
+      },
+      {
+        prop: "hasPrevious",
+        value: false,
+        button: "previous",
+        disabled: true,
+      },
+      { prop: "hasNext", value: true, button: "next", disabled: false },
+      { prop: "hasNext", value: false, button: "next", disabled: true },
+    ])(
+      "$button button is ${ disabled ? 'disabled' : 'enabled' } when $prop=$value",
+      ({ prop, value, button, disabled }) => {
+        const getButton =
+          button === "previous" ? "getPreviousButton" : "getNextButton";
+        const { [getButton]: get } = render({ props: { [prop]: value } });
+        if (disabled) {
+          expect(get().attributes("disabled")).toBeDefined();
+        } else {
+          expect(get().attributes("disabled")).toBeUndefined();
+        }
+      }
+    );
   });
 
   describe("events", () => {

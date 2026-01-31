@@ -35,6 +35,12 @@ config.global.directives = {
   "auto-animate": {},
 };
 
+// Stub pointer capture APIs missing from happy-dom
+if (typeof HTMLElement.prototype.setPointerCapture === "undefined") {
+  HTMLElement.prototype.setPointerCapture = () => {};
+  HTMLElement.prototype.releasePointerCapture = () => {};
+}
+
 // Extend VueWrapper prototype with test-id helpers
 VueWrapper.prototype.findByTestId = function (testId: string) {
   return this.find(`[data-testid="${testId}"]`);

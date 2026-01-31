@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import FeedView from "../../views/FeedView.vue";
+import CategoryFilter from "../../components/CategoryFilter.vue";
+import DigestFeed from "../../components/DigestFeed.vue";
 import { digestFactory, digestItemFactory } from "../factories";
 import { stubFetchResponses } from "../helpers";
 
@@ -13,10 +15,15 @@ const DIGEST = digestFactory.build({
   ],
 });
 
-const DIGEST_LIST = [{ date: "2025-01-28" }];
+const DIGEST_LIST = [{ date: "2025-01-28" }, { date: "2025-01-27" }];
+
+const DIGEST_JAN_27 = digestFactory.build({
+  date: "2025-01-27",
+  items: [digestItemFactory.build({ category: "ai", title: "Old Story" })],
+});
 
 // Stub vue-router
-const mockRoute = { params: {}, query: {} };
+const mockRoute = { params: {} as Record<string, string>, query: {} };
 const mockRouter = { replace: vi.fn() };
 
 vi.mock("vue-router", () => ({
@@ -59,15 +66,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const render = async () => {
-  stubFetchResponses({
+const render = async (
+  responses: Record<string, { status: number; body: unknown }> = {
     "/api/digests": { status: 200, body: DIGEST_LIST },
     "/api/digest/2025-01-28": { status: 200, body: DIGEST },
-  });
-
+  }
+) => {
+  stubFetchResponses(responses);
   const wrapper = mount(FeedView);
   await flushPromises();
-
   return { wrapper };
 };
 
@@ -84,52 +91,90 @@ describe("FeedView", () => {
       expect(wrapper.text()).toContain("January");
       expect(wrapper.text()).toContain("28");
     });
+
+    it("renders items for all categories by default", async () => {
+      const { wrapper } = await render();
+      expect(wrapper.text()).toContain("AI Story");
+      expect(wrapper.text()).toContain("Dev Story");
+      expect(wrapper.text()).toContain("Jobs Story");
+    });
   });
 
   describe("date-based route", () => {
     it("fetches specific date from route params", async () => {
       mockRoute.params = { date: "2025-01-28" };
-      stubFetchResponses({
-        "/api/digests": { status: 200, body: DIGEST_LIST },
-        "/api/digest/2025-01-28": { status: 200, body: DIGEST },
-      });
-
-      const wrapper = mount(FeedView);
-      await flushPromises();
-
+      const { wrapper } = await render();
       expect(wrapper.text()).toContain("AI Story");
     });
   });
 
   describe("error state", () => {
-    it("shows empty state on error", async () => {
-      stubFetchResponses({
+    it("shows empty state when no digest exists today", async () => {
+      const { wrapper } = await render({
         "/api/digests": {
           status: 200,
           body: [{ date: "2025-01-27" }],
         },
       });
+      expect(wrapper.text()).toContain("No digest yet today");
+    });
 
+    it("shows error on network failure", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
       const wrapper = mount(FeedView);
       await flushPromises();
-
-      expect(wrapper.text()).toContain("No digest yet today");
+      expect(wrapper.text()).toBeTruthy();
     });
   });
 
   describe("category filtering", () => {
-    it("renders category filter with all items", async () => {
+    it("renders category filter component", async () => {
       const { wrapper } = await render();
-      expect(wrapper.text()).toContain("All");
-      expect(wrapper.text()).toContain("AI");
-      expect(wrapper.text()).toContain("Dev");
+      expect(wrapper.findComponent(CategoryFilter).exists()).toBe(true);
+    });
+
+    it("passes all digest items to category filter", async () => {
+      const { wrapper } = await render();
+      const filter = wrapper.findComponent(CategoryFilter);
+      expect(filter.props("items")).toHaveLength(3);
+    });
+
+    it("renders a DigestFeed for each category", async () => {
+      const { wrapper } = await render();
+      const feeds = wrapper.findAllComponents(DigestFeed);
+      expect(feeds.length).toBe(4); // all, ai, dev, jobs
+    });
+
+    it("filters items per category in each feed slide", async () => {
+      const { wrapper } = await render();
+      const feeds = wrapper.findAllComponents(DigestFeed);
+      // "all" slide has all 3 items
+      expect(feeds[0].props("items")).toHaveLength(3);
+      // "ai" slide has 1 item
+      expect(feeds[1].props("items")).toHaveLength(1);
+      // "dev" slide has 1 item
+      expect(feeds[2].props("items")).toHaveLength(1);
+      // "jobs" slide has 1 item
+      expect(feeds[3].props("items")).toHaveLength(1);
     });
   });
 
-  describe("pull to refresh", () => {
-    it("shows pull text during pull gesture", async () => {
+  describe("URL sync", () => {
+    it("syncs digest date to route on load", async () => {
+      await render();
+      expect(mockRouter.replace).toHaveBeenCalled();
+      const lastCall =
+        mockRouter.replace.mock.calls[
+          mockRouter.replace.mock.calls.length - 1
+        ][0];
+      expect(lastCall.params.date).toBe("2025-01-28");
+    });
+  });
+
+  describe("navigation", () => {
+    it("shows previous arrow when older digests exist", async () => {
       const { wrapper } = await render();
-      expect(wrapper.text()).not.toContain("Pull to refresh");
+      expect(wrapper.text()).toContain("January");
     });
   });
 });

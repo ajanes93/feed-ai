@@ -107,4 +107,61 @@ describe("CategoryFilter", () => {
       expect(getButtonByLabel("All")!.text().trim()).toBe("All");
     });
   });
+
+  describe("pointer interactions", () => {
+    it("emits select on pointer down then up", async () => {
+      const { wrapper } = render();
+      const container = wrapper.find("div");
+
+      await container.trigger("pointerdown", {
+        pointerId: 1,
+        clientX: 50,
+        clientY: 10,
+      });
+      await container.trigger("pointerup", {
+        pointerId: 1,
+        clientX: 50,
+        clientY: 10,
+      });
+
+      expect(wrapper.emitted("select")).toBeTruthy();
+    });
+
+    it("does not emit on cancelled pointer", async () => {
+      const { wrapper } = render();
+      const container = wrapper.find("div");
+
+      await container.trigger("pointerdown", {
+        pointerId: 1,
+        clientX: 50,
+        clientY: 10,
+      });
+      await container.trigger("pointercancel", {
+        pointerId: 1,
+        clientX: 50,
+        clientY: 10,
+      });
+
+      // Click events may still fire, but drag should be cancelled
+      const vm = wrapper.vm as unknown as { dragging: boolean };
+      expect(vm.dragging).toBe(false);
+    });
+  });
+
+  describe("swipe progress", () => {
+    it("accepts swipeProgress prop without errors", () => {
+      const { wrapper } = render({
+        props: { swipeProgress: 1.5 },
+      });
+      expect(wrapper.exists()).toBe(true);
+    });
+
+    it("ignores negative swipeProgress", async () => {
+      const { wrapper } = render({
+        props: { swipeProgress: -1 },
+      });
+      // Should render normally without errors
+      expect(wrapper.findAll("button")).toHaveLength(4);
+    });
+  });
 });

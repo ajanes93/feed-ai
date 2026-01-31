@@ -3,54 +3,9 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import DashboardView from "../../views/DashboardView.vue";
 import { stubFetchJson } from "../helpers";
+import { dashboardDataFactory, sourceHealthFactory } from "../factories";
 
-const DASHBOARD_DATA = {
-  ai: {
-    recentCalls: [
-      {
-        id: "1",
-        model: "gemini-2.0-flash",
-        provider: "gemini",
-        inputTokens: 100,
-        outputTokens: 50,
-        totalTokens: 150,
-        latencyMs: 2500,
-        wasFallback: false,
-        error: null,
-        status: "success",
-        createdAt: 1706443200,
-      },
-    ],
-    totalTokens: 150,
-    rateLimitCount: 0,
-    fallbackCount: 0,
-  },
-  sources: [
-    {
-      sourceId: "s1",
-      sourceName: "Hacker News",
-      category: "dev",
-      lastSuccessAt: 1706443200,
-      lastErrorAt: null,
-      lastError: null,
-      itemCount: 10,
-      consecutiveFailures: 0,
-      stale: false,
-    },
-  ],
-  errors: [
-    {
-      id: "e1",
-      level: "error",
-      category: "fetch",
-      message: "Connection timeout",
-      details: null,
-      sourceId: null,
-      createdAt: 1706443200,
-    },
-  ],
-  totalDigests: 25,
-};
+const DASHBOARD_DATA = dashboardDataFactory.build();
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -66,11 +21,7 @@ const render = async (data = DASHBOARD_DATA) => {
   stubFetchJson(data);
   const wrapper = mount(DashboardView);
   await flushPromises();
-
-  return {
-    wrapper,
-    getStatCards: () => wrapper.findAll(".rounded-xl.border.border-gray-800"),
-  };
+  return { wrapper };
 };
 
 describe("DashboardView", () => {
@@ -134,12 +85,20 @@ describe("DashboardView", () => {
 
     it("shows source name", async () => {
       const { wrapper } = await render();
-      expect(wrapper.text()).toContain("Hacker News");
+      expect(wrapper.text()).toContain("Source 1");
     });
 
     it("shows OK status for healthy source", async () => {
       const { wrapper } = await render();
       expect(wrapper.text()).toContain("OK");
+    });
+
+    it("shows Stale status for stale source", async () => {
+      const data = dashboardDataFactory.build({
+        sources: [sourceHealthFactory.build({ stale: true })],
+      });
+      const { wrapper } = await render(data);
+      expect(wrapper.text()).toContain("Stale");
     });
   });
 
@@ -174,9 +133,15 @@ describe("DashboardView", () => {
   });
 
   describe("refresh", () => {
-    it("renders refresh button", async () => {
+    it("re-fetches data when refresh button is clicked", async () => {
       const { wrapper } = await render();
-      expect(wrapper.find("button").text()).toContain("Refresh");
+
+      // Replace fetch with updated data
+      stubFetchJson(dashboardDataFactory.build({ totalDigests: 99 }));
+      await wrapper.find("button").trigger("click");
+      await flushPromises();
+
+      expect(wrapper.text()).toContain("99");
     });
   });
 });
