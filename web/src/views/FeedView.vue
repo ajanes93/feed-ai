@@ -198,7 +198,7 @@ onMounted(async () => {
 
 <template>
   <div
-    class="flex min-h-[100dvh] flex-col bg-gray-950"
+    class="flex h-[100dvh] flex-col bg-gray-950"
     @touchstart.passive="onTouchStart"
     @touchmove.passive="onTouchMove"
     @touchend="onTouchEnd"
