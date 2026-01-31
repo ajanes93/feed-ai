@@ -1,5 +1,13 @@
 import { test as base, type Page } from "@playwright/test";
 
+function todayDate(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function yesterdayDate(): string {
+  return new Date(Date.now() - 86400000).toISOString().split("T")[0];
+}
+
 /** Digest item matching the worker API shape */
 function buildDigestItem(
   overrides: Partial<{
@@ -28,52 +36,65 @@ function buildDigestItem(
   };
 }
 
-/** Standard test digest with items across all categories */
-const TEST_DIGEST = {
-  id: "digest-2025-01-28",
-  date: "2025-01-28",
-  itemCount: 5,
-  items: [
-    buildDigestItem({ category: "ai", title: "AI Breakthrough" }, 1),
-    buildDigestItem({ category: "ai", title: "Machine Learning Update" }, 2),
-    buildDigestItem({ category: "dev", title: "Rust 2.0 Released" }, 3),
-    buildDigestItem({ category: "dev", title: "TypeScript 6.0" }, 4),
-    buildDigestItem({ category: "jobs", title: "Senior Engineer at Acme" }, 5),
-  ],
-};
+/** Build test data with dynamic dates (today + yesterday) */
+function buildTestData() {
+  const today = todayDate();
+  const yesterday = yesterdayDate();
 
-const TEST_DIGEST_LIST = [{ date: "2025-01-28" }, { date: "2025-01-27" }];
+  const todayDigest = {
+    id: `digest-${today}`,
+    date: today,
+    itemCount: 5,
+    items: [
+      buildDigestItem({ category: "ai", title: "AI Breakthrough" }, 1),
+      buildDigestItem({ category: "ai", title: "Machine Learning Update" }, 2),
+      buildDigestItem({ category: "dev", title: "Rust 2.0 Released" }, 3),
+      buildDigestItem({ category: "dev", title: "TypeScript 6.0" }, 4),
+      buildDigestItem(
+        { category: "jobs", title: "Senior Engineer at Acme" },
+        5,
+      ),
+    ],
+  };
 
-const TEST_DIGEST_JAN_27 = {
-  id: "digest-2025-01-27",
-  date: "2025-01-27",
-  itemCount: 1,
-  items: [buildDigestItem({ category: "ai", title: "Yesterday Story" }, 1)],
-};
+  const yesterdayDigest = {
+    id: `digest-${yesterday}`,
+    date: yesterday,
+    itemCount: 1,
+    items: [buildDigestItem({ category: "ai", title: "Yesterday Story" }, 1)],
+  };
+
+  const digestList = [{ date: today }, { date: yesterday }];
+
+  return { today, yesterday, todayDigest, yesterdayDigest, digestList };
+}
 
 /** Mock all API routes with standard test data */
 async function mockApi(page: Page) {
+  const { today, yesterday, todayDigest, yesterdayDigest, digestList } =
+    buildTestData();
+
   await page.route("**/api/digests", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(TEST_DIGEST_LIST),
+      body: JSON.stringify(digestList),
     }),
   );
 
-  await page.route("**/api/digest/2025-01-28", (route) =>
+  await page.route(`**/api/digest/${today}`, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(TEST_DIGEST),
+      body: JSON.stringify(todayDigest),
     }),
   );
 
-  await page.route("**/api/digest/2025-01-27", (route) =>
+  await page.route(`**/api/digest/${yesterday}`, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(TEST_DIGEST_JAN_27),
+      body: JSON.stringify(yesterdayDigest),
     }),
   );
 }
@@ -89,5 +110,5 @@ export const test = base.extend<{ mockPage: Page }>({
   },
 });
 
-export { TEST_DIGEST, TEST_DIGEST_LIST, TEST_DIGEST_JAN_27, buildDigestItem };
+export { buildDigestItem, buildTestData };
 export { expect } from "@playwright/test";
