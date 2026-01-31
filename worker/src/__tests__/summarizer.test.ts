@@ -34,6 +34,25 @@ function aiResponse(items: RawItem[], indices: number[], category = "dev") {
   );
 }
 
+function mockGeminiSuccess(text: string, tokens = { prompt: 100, candidates: 50 }) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          candidates: [{ content: { parts: [{ text }] } }],
+          usageMetadata: {
+            promptTokenCount: tokens.prompt,
+            candidatesTokenCount: tokens.candidates,
+            totalTokenCount: tokens.prompt + tokens.candidates,
+          },
+        }),
+        { status: 200 }
+      )
+    )
+  );
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
 });
@@ -43,18 +62,7 @@ describe("generateDigest", () => {
     const items = makeItems(5);
     const response = aiResponse(items, [0, 2, 4]);
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            candidates: [{ content: { parts: [{ text: response }] } }],
-            usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50, totalTokenCount: 150 },
-          }),
-          { status: 200 }
-        )
-      )
-    );
+    mockGeminiSuccess(response);
 
     const result = await generateDigest(items, { gemini: "test-key" }, "news");
 
@@ -98,18 +106,7 @@ describe("generateDigest", () => {
     const json = aiResponse(items, [1]);
     const wrappedResponse = "```json\n" + json + "\n```";
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            candidates: [{ content: { parts: [{ text: wrappedResponse }] } }],
-            usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 25, totalTokenCount: 75 },
-          }),
-          { status: 200 }
-        )
-      )
-    );
+    mockGeminiSuccess(wrappedResponse, { prompt: 50, candidates: 25 });
 
     const result = await generateDigest(items, { gemini: "test-key" }, "news");
 
@@ -125,18 +122,7 @@ describe("generateDigest", () => {
       { item_index: -1, title: "Negative", summary: "bad", category: "dev", source_name: "Src" },
     ]);
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            candidates: [{ content: { parts: [{ text: response }] } }],
-            usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 25, totalTokenCount: 75 },
-          }),
-          { status: 200 }
-        )
-      )
-    );
+    mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
 
     const result = await generateDigest(items, { gemini: "test-key" }, "news");
 
@@ -152,18 +138,7 @@ describe("generateDigest", () => {
       { item_index: 2, title: "No summary", category: "dev", source_name: "Src" },
     ]);
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            candidates: [{ content: { parts: [{ text: response }] } }],
-            usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 25, totalTokenCount: 75 },
-          }),
-          { status: 200 }
-        )
-      )
-    );
+    mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
 
     const result = await generateDigest(items, { gemini: "test-key" }, "news");
 
@@ -184,18 +159,7 @@ describe("generateDigest", () => {
       }))
     );
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            candidates: [{ content: { parts: [{ text: response }] } }],
-            usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 25, totalTokenCount: 75 },
-          }),
-          { status: 200 }
-        )
-      )
-    );
+    mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
 
     const result = await generateDigest(items, { gemini: "test-key" }, "news");
 
@@ -206,18 +170,7 @@ describe("generateDigest", () => {
     const items = makeItems(2);
     const response = aiResponse(items, [0, 1]);
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            candidates: [{ content: { parts: [{ text: response }] } }],
-            usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 25, totalTokenCount: 75 },
-          }),
-          { status: 200 }
-        )
-      )
-    );
+    mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
 
     const result = await generateDigest(items, { gemini: "test-key" }, "news");
 
@@ -237,16 +190,8 @@ describe("generateDigest", () => {
     const items = makeItems(3);
     const response = aiResponse(items, [0], "jobs");
 
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          candidates: [{ content: { parts: [{ text: response }] } }],
-          usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 25, totalTokenCount: 75 },
-        }),
-        { status: 200 }
-      )
-    );
-    vi.stubGlobal("fetch", fetchMock);
+    mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
+    const fetchMock = vi.mocked(globalThis.fetch);
 
     await generateDigest(items, { gemini: "test-key" }, "jobs");
 

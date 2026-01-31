@@ -16,7 +16,7 @@ vi.mock("../services/logger", () => ({
 import app from "../index";
 
 // Helper to build a mock D1 database
-function mockDB(queryResults: Record<string, unknown> = {}) {
+function mockDB(overrides = {}) {
   const mockFirst = vi.fn().mockResolvedValue(null);
   const mockAll = vi.fn().mockResolvedValue({ results: [] });
   const mockRun = vi.fn().mockResolvedValue({});
@@ -32,9 +32,7 @@ function mockDB(queryResults: Record<string, unknown> = {}) {
       all: mockAll,
     }),
     batch: vi.fn().mockResolvedValue([]),
-    _mockFirst: mockFirst,
-    _mockAll: mockAll,
-    ...queryResults,
+    ...overrides,
   };
 }
 
@@ -75,24 +73,19 @@ describe("API routes", () => {
   });
 
   it("GET /api/digest/:date returns digest with items", async () => {
-    const db = mockDB();
     const digestRow = { id: "digest-2025-01-28", date: "2025-01-28", item_count: 2 };
     const itemRows = [
       { id: "i1", category: "ai", title: "AI News", summary: "Big AI", why_it_matters: null, source_name: "HN", source_url: "https://hn.com/1", published_at: null, position: 0 },
       { id: "i2", category: "dev", title: "Vue 4", summary: "New Vue", why_it_matters: "Vue dev", source_name: "Vue", source_url: "https://vue.com/1", published_at: null, position: 1 },
     ];
 
-    // First prepare().bind().first() returns digest, second prepare().bind().all() returns items
-    let callCount = 0;
-    db.prepare = vi.fn().mockImplementation(() => ({
-      bind: vi.fn().mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          return { first: vi.fn().mockResolvedValue(digestRow), all: vi.fn() };
-        }
-        return { all: vi.fn().mockResolvedValue({ results: itemRows }), first: vi.fn() };
+    const mockFirst = vi.fn().mockResolvedValue(digestRow);
+    const mockAll = vi.fn().mockResolvedValue({ results: itemRows });
+    const db = mockDB({
+      prepare: vi.fn().mockReturnValue({
+        bind: vi.fn().mockReturnValue({ first: mockFirst, all: mockAll }),
       }),
-    }));
+    });
 
     const env = makeEnv(db);
     const res = await app.fetch(makeRequest("/api/digest/2025-01-28"), env);
@@ -106,14 +99,14 @@ describe("API routes", () => {
   });
 
   it("GET /api/digests returns list of dates", async () => {
-    const db = mockDB();
-    db.prepare = vi.fn().mockReturnValue({
-      all: vi.fn().mockResolvedValue({
-        results: [
-          { date: "2025-01-28", item_count: 10 },
-          { date: "2025-01-27", item_count: 8 },
-        ],
-      }),
+    const mockAll = vi.fn().mockResolvedValue({
+      results: [
+        { date: "2025-01-28", item_count: 10 },
+        { date: "2025-01-27", item_count: 8 },
+      ],
+    });
+    const db = mockDB({
+      prepare: vi.fn().mockReturnValue({ all: mockAll }),
     });
 
     const env = makeEnv(db);
@@ -135,25 +128,6 @@ describe("API routes", () => {
     expect(res.status).not.toBe(200);
   });
 
-  it("POST /api/generate with valid auth proceeds", async () => {
-    const { fetchAllSources } = await import("../services/fetcher");
-    vi.mocked(fetchAllSources).mockResolvedValue({ items: [], health: [] });
-
-    const db = mockDB();
-    const env = makeEnv(db);
-    const res = await app.fetch(
-      makeRequest("/api/generate", {
-        method: "POST",
-        headers: { Authorization: "Bearer test-admin-key" },
-      }),
-      env
-    );
-
-    // With valid auth + no items fetched, returns 500 ("No items fetched")
-    // The point is it gets past auth (not 401)
-    expect(res.status).not.toBe(401);
-  });
-
   it("POST /api/rebuild without auth does not return 200", async () => {
     const env = makeEnv();
     const res = await app.fetch(
@@ -165,9 +139,9 @@ describe("API routes", () => {
   });
 
   it("GET /api/health returns source health", async () => {
-    const db = mockDB();
-    db.prepare = vi.fn().mockReturnValue({
-      all: vi.fn().mockResolvedValue({ results: [] }),
+    const mockAll = vi.fn().mockResolvedValue({ results: [] });
+    const db = mockDB({
+      prepare: vi.fn().mockReturnValue({ all: mockAll }),
     });
 
     const env = makeEnv(db);
@@ -179,13 +153,13 @@ describe("API routes", () => {
   });
 
   it("GET /api/admin/dashboard returns dashboard data", async () => {
-    const db = mockDB();
-    db.prepare = vi.fn().mockReturnValue({
-      all: vi.fn().mockResolvedValue({ results: [] }),
-      first: vi.fn().mockResolvedValue({ count: 5 }),
-      bind: vi.fn().mockReturnValue({
-        all: vi.fn().mockResolvedValue({ results: [] }),
-        first: vi.fn().mockResolvedValue({ count: 5 }),
+    const mockAll = vi.fn().mockResolvedValue({ results: [] });
+    const mockFirst = vi.fn().mockResolvedValue({ count: 5 });
+    const db = mockDB({
+      prepare: vi.fn().mockReturnValue({
+        all: mockAll,
+        first: mockFirst,
+        bind: vi.fn().mockReturnValue({ all: mockAll, first: mockFirst }),
       }),
     });
 

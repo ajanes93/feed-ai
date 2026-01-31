@@ -67,16 +67,20 @@ const JOBICY_RESPONSE = JSON.stringify({
   ],
 });
 
+function stubFetchWith(body: string, status = 200, headers = {}) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(new Response(body, { status, headers }))
+  );
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
 });
 
 describe("fetchSource", () => {
   it("parses RSS feed items", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response(RSS_FEED, { status: 200 }))
-    );
+    stubFetchWith(RSS_FEED);
 
     const items = await fetchSource(rssSource);
 
@@ -89,10 +93,7 @@ describe("fetchSource", () => {
   });
 
   it("strips HTML from content", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response(RSS_FEED, { status: 200 }))
-    );
+    stubFetchWith(RSS_FEED);
 
     const items = await fetchSource(rssSource);
 
@@ -101,10 +102,7 @@ describe("fetchSource", () => {
   });
 
   it("parses Atom feed items", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response(ATOM_FEED, { status: 200 }))
-    );
+    stubFetchWith(ATOM_FEED);
 
     const items = await fetchSource(rssSource);
 
@@ -114,10 +112,7 @@ describe("fetchSource", () => {
   });
 
   it("parses JSON API (Jobicy) responses", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response(JOBICY_RESPONSE, { status: 200, headers: { "content-type": "application/json" } }))
-    );
+    stubFetchWith(JOBICY_RESPONSE, 200, { "content-type": "application/json" });
 
     const items = await fetchSource(apiSource);
 
@@ -129,10 +124,7 @@ describe("fetchSource", () => {
   });
 
   it("returns empty array on HTTP error", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response("Not found", { status: 404 }))
-    );
+    stubFetchWith("Not found", 404);
 
     const items = await fetchSource(rssSource);
 
@@ -158,10 +150,7 @@ describe("fetchSource", () => {
       </item>`).join("");
     const feed = `<?xml version="1.0"?><rss><channel>${manyItems}</channel></rss>`;
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response(feed, { status: 200 }))
-    );
+    stubFetchWith(feed);
 
     const items = await fetchSource(rssSource);
 
@@ -180,10 +169,7 @@ describe("fetchAllSources", () => {
       <item><title>New</title><link>https://example.com/new</link><pubDate>${newDate}</pubDate></item>
     </channel></rss>`;
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response(feed, { status: 200 }))
-    );
+    stubFetchWith(feed);
 
     const { items, health } = await fetchAllSources([rssSource]);
 
@@ -198,10 +184,7 @@ describe("fetchAllSources", () => {
       <item><title>No Date</title><link>https://example.com/nodate</link></item>
     </channel></rss>`;
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response(feed, { status: 200 }))
-    );
+    stubFetchWith(feed);
 
     const { items } = await fetchAllSources([rssSource]);
 
