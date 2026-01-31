@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { Env } from "./types";
+import { Env, RawItem, DigestItem } from "./types";
 import { sources, FRESHNESS_THRESHOLDS } from "./sources";
 import type { SourceFetchResult } from "./services/fetcher";
 import { fetchAllSources } from "./services/fetcher";
 import { generateDigest } from "./services/summarizer";
-import { logEvent, recordAIUsage } from "./services/logger";
+import { logEvent, recordAIUsage, type AIUsageEntry } from "./services/logger";
 
 function timingSafeEqual(a: string, b: string): boolean {
   const encoder = new TextEncoder();
@@ -291,25 +291,70 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     .bind(new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0])
     .all();
   const seenUrls = new Set(recentUrls.results.map((r) => r.source_url as string));
-  const rawItems = allRawItems.filter((item) => !seenUrls.has(item.link));
-  console.log(`Deduped: ${allRawItems.length} → ${rawItems.length} items (${seenUrls.size} seen)`);
+  const dedupedItems = allRawItems.filter((item) => !seenUrls.has(item.link));
+  console.log(`Deduped: ${allRawItems.length} → ${dedupedItems.length} items (${seenUrls.size} seen)`);
 
-  if (rawItems.length === 0) {
+  if (dedupedItems.length === 0) {
     return new Response("All fetched items were duplicates of recent digests", { status: 200 });
   }
 
-  // Generate digest with AI (Gemini primary, Claude fallback)
-  console.log("Generating digest...");
-  const { items: digestItems, aiUsages } = await generateDigest(
-    rawItems,
-    { gemini: env.GEMINI_API_KEY, anthropic: env.ANTHROPIC_API_KEY },
-    digestId
-  );
-  console.log(`Generated ${digestItems.length} digest items`);
+  // Cap at 3 most recent items per source for balanced coverage
+  const bySource = new Map<string, RawItem[]>();
+  for (const item of dedupedItems) {
+    const arr = bySource.get(item.sourceId) || [];
+    arr.push(item);
+    bySource.set(item.sourceId, arr);
+  }
+  const rawItems: RawItem[] = [];
+  for (const items of bySource.values()) {
+    items.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
+    rawItems.push(...items.slice(0, 3));
+  }
+  console.log(`Capped per-source: ${dedupedItems.length} → ${rawItems.length} items (${bySource.size} sources)`);
+
+  // Split jobs from news/dev for separate processing
+  const jobItems = rawItems.filter((item) => {
+    const src = sources.find((s) => s.id === item.sourceId);
+    return src?.category === "jobs";
+  });
+  const newsItems = rawItems.filter((item) => {
+    const src = sources.find((s) => s.id === item.sourceId);
+    return src?.category !== "jobs";
+  });
+
+  // Generate news/dev digest
+  const apiKeys = { gemini: env.GEMINI_API_KEY, anthropic: env.ANTHROPIC_API_KEY };
+  const allDigestItems: DigestItem[] = [];
+  const allAiUsages: AIUsageEntry[] = [];
+
+  if (newsItems.length > 0) {
+    console.log(`Generating news digest from ${newsItems.length} items...`);
+    const { items, aiUsages } = await generateDigest(newsItems, apiKeys, digestId, "news");
+    allDigestItems.push(...items);
+    allAiUsages.push(...aiUsages);
+    console.log(`News: ${items.length} items`);
+  }
+
+  // Generate jobs digest separately with dedicated prompt
+  if (jobItems.length > 0) {
+    console.log(`Generating jobs digest from ${jobItems.length} items...`);
+    const { items, aiUsages } = await generateDigest(jobItems, apiKeys, digestId, "jobs");
+    // Re-index positions after news items
+    const offset = allDigestItems.length;
+    for (const item of items) {
+      item.position += offset;
+      item.id = `${digestId}-${item.position}`;
+    }
+    allDigestItems.push(...items);
+    allAiUsages.push(...aiUsages);
+    console.log(`Jobs: ${items.length} items`);
+  }
+
+  console.log(`Total digest: ${allDigestItems.length} items`);
 
   // Record AI usage (best-effort, don't fail digest on logging errors)
   const usageResults = await Promise.allSettled(
-    aiUsages.map(async (usage) => {
+    allAiUsages.map(async (usage) => {
       await recordAIUsage(env.DB, usage);
       if (usage.status !== "success") {
         await logEvent(env.DB, {
@@ -328,8 +373,8 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   const statements = [
     env.DB.prepare(
       "INSERT INTO digests (id, date, item_count) VALUES (?, ?, ?)"
-    ).bind(digestId, date, digestItems.length),
-    ...digestItems.map((item) =>
+    ).bind(digestId, date, allDigestItems.length),
+    ...allDigestItems.map((item) =>
       env.DB.prepare(
         "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, published_at, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(
@@ -349,7 +394,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
 
   await env.DB.batch(statements);
 
-  return new Response(`Generated digest with ${digestItems.length} items`, {
+  return new Response(`Generated digest with ${allDigestItems.length} items`, {
     status: 200,
   });
 }
