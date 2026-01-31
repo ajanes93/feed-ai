@@ -80,7 +80,7 @@ test.describe("Feed content", () => {
     await mockPage.goto("/");
 
     await expect(
-      feedSlide(mockPage).locator("article").first().getByText("AI"),
+      feedSlide(mockPage).locator("article").first().getByText("AI", { exact: true }),
     ).toBeVisible();
   });
 
