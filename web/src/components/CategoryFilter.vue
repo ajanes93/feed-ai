@@ -5,6 +5,7 @@ import type { DigestItem } from "../types";
 const props = defineProps<{
   items: DigestItem[];
   activeCategory: string;
+  swipeProgress?: number; // -1 or undefined = not swiping, 0..3 = interpolated category index
 }>();
 
 const emit = defineEmits<{
@@ -26,55 +27,114 @@ const counts = computed(() => {
   return map;
 });
 
-// Sliding indicator
+// --- Indicator positioning ---
 const containerRef = ref<HTMLElement | null>(null);
-const indicatorStyle = ref({ left: "0px", width: "0px" });
+const indicatorLeft = ref(0);
+const indicatorWidth = ref(0);
+const dragging = ref(false);
+
+function getButtonRects() {
+  if (!containerRef.value) return [];
+  const containerRect = containerRef.value.getBoundingClientRect();
+  const buttons = containerRef.value.querySelectorAll("button");
+  return Array.from(buttons).map((btn) => {
+    const r = btn.getBoundingClientRect();
+    return { left: r.left - containerRect.left, width: r.width };
+  });
+}
+
+function findClosestButton(localX: number, rects: ReturnType<typeof getButtonRects>) {
+  let closestIdx = 0;
+  let closestDist = Infinity;
+  for (let i = 0; i < rects.length; i++) {
+    const center = rects[i].left + rects[i].width / 2;
+    const dist = Math.abs(localX - center);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestIdx = i;
+    }
+  }
+  return closestIdx;
+}
 
 function updateIndicator() {
-  if (!containerRef.value) return;
-  const activeIdx = categories.findIndex((c) => c.key === props.activeCategory);
-  const buttons = containerRef.value.querySelectorAll("button");
-  const btn = buttons[activeIdx];
-  if (!btn) return;
-  const containerRect = containerRef.value.getBoundingClientRect();
-  const btnRect = btn.getBoundingClientRect();
-  indicatorStyle.value = {
-    left: `${btnRect.left - containerRect.left}px`,
-    width: `${btnRect.width}px`,
-  };
+  const rects = getButtonRects();
+  const idx = categories.findIndex((c) => c.key === props.activeCategory);
+  if (rects[idx]) {
+    indicatorLeft.value = rects[idx].left;
+    indicatorWidth.value = rects[idx].width;
+  }
 }
 
 onMounted(() => nextTick(updateIndicator));
 watch(() => props.activeCategory, () => nextTick(updateIndicator));
 watch(() => props.items.length, () => nextTick(updateIndicator));
 
-// Swipe on pill bar to switch categories
-let touchStartX = 0;
-let didSwipe = false;
+// --- Swipe progress interpolation ---
+watch(
+  () => props.swipeProgress,
+  (progress) => {
+    if (progress === undefined || progress < 0 || dragging.value) return;
+    const rects = getButtonRects();
+    if (rects.length === 0) return;
 
-function onTouchStart(e: TouchEvent) {
-  touchStartX = e.touches[0]?.clientX ?? 0;
-  didSwipe = false;
+    const floor = Math.floor(progress);
+    const ceil = Math.min(floor + 1, rects.length - 1);
+    const t = progress - floor;
+
+    indicatorLeft.value = rects[floor].left + (rects[ceil].left - rects[floor].left) * t;
+    indicatorWidth.value = rects[floor].width + (rects[ceil].width - rects[floor].width) * t;
+  },
+);
+
+// --- Draggable indicator ---
+let dragPointerId = -1;
+let didDrag = false;
+
+function onPointerDown(e: PointerEvent) {
+  const rects = getButtonRects();
+  const idx = categories.findIndex((c) => c.key === props.activeCategory);
+  if (!rects[idx] || !containerRef.value) return;
+
+  dragPointerId = e.pointerId;
+  dragging.value = true;
+  didDrag = false;
+  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 }
 
-function onTouchEnd(e: TouchEvent) {
-  const endX = e.changedTouches[0]?.clientX ?? 0;
-  const dx = endX - touchStartX;
-  if (Math.abs(dx) < 30) return; // tap, not swipe
+function onPointerMove(e: PointerEvent) {
+  if (!dragging.value || e.pointerId !== dragPointerId || !containerRef.value) return;
 
-  didSwipe = true;
-  const currentIdx = categories.findIndex((c) => c.key === props.activeCategory);
-  const dir = dx > 0 ? -1 : 1; // swipe left = next, swipe right = prev
-  const newIdx = Math.max(0, Math.min(categories.length - 1, currentIdx + dir));
-  if (newIdx !== currentIdx) {
-    emit("select", categories[newIdx].key);
-  }
+  const containerRect = containerRef.value.getBoundingClientRect();
+  const localX = e.clientX - containerRect.left;
+  const rects = getButtonRects();
+
+  const closestIdx = findClosestButton(localX, rects);
+  didDrag = true;
+
+  const firstLeft = rects[0].left;
+  const lastLeft = rects[rects.length - 1].left;
+  const halfWidth = rects[closestIdx].width / 2;
+
+  indicatorLeft.value = Math.max(firstLeft, Math.min(localX - halfWidth, lastLeft));
+  indicatorWidth.value = rects[closestIdx].width;
 }
 
-function onClick(e: Event, key: string) {
-  if (didSwipe) {
-    e.preventDefault();
-    didSwipe = false;
+function onPointerUp(e: PointerEvent) {
+  if (!dragging.value || e.pointerId !== dragPointerId || !containerRef.value) return;
+  dragging.value = false;
+
+  const containerRect = containerRef.value.getBoundingClientRect();
+  const localX = e.clientX - containerRect.left;
+  const rects = getButtonRects();
+
+  const closestIdx = findClosestButton(localX, rects);
+  emit("select", categories[closestIdx].key);
+}
+
+function onClick(key: string) {
+  if (didDrag) {
+    didDrag = false;
     return;
   }
   emit("select", key);
@@ -84,14 +144,17 @@ function onClick(e: Event, key: string) {
 <template>
   <div
     ref="containerRef"
-    class="relative flex justify-center gap-1.5"
-    @touchstart.passive="onTouchStart"
-    @touchend="onTouchEnd"
+    class="relative flex justify-center gap-1.5 touch-none"
+    @pointerdown="onPointerDown"
+    @pointermove="onPointerMove"
+    @pointerup="onPointerUp"
+    @pointercancel="onPointerUp"
   >
-    <!-- Sliding active indicator -->
+    <!-- Draggable indicator -->
     <div
-      class="absolute top-0 h-full rounded-full bg-white shadow-sm transition-all duration-250 ease-[cubic-bezier(0.25,1,0.5,1)]"
-      :style="indicatorStyle"
+      class="absolute top-0 h-full rounded-full bg-white shadow-sm"
+      :class="dragging || (swipeProgress !== undefined && swipeProgress >= 0) ? '' : 'transition-all duration-250 ease-[cubic-bezier(0.25,1,0.5,1)]'"
+      :style="{ left: `${indicatorLeft}px`, width: `${indicatorWidth}px` }"
     />
     <button
       v-for="cat in categories"
@@ -102,7 +165,7 @@ function onClick(e: Event, key: string) {
           ? 'text-gray-950'
           : 'text-gray-400 hover:text-gray-300',
       ]"
-      @click="onClick($event, cat.key)"
+      @click="onClick(cat.key)"
     >
       {{ cat.label }}
       <span
