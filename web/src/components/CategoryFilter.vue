@@ -39,8 +39,22 @@ function getButtonRects() {
   const buttons = containerRef.value.querySelectorAll("button");
   return Array.from(buttons).map((btn) => {
     const r = btn.getBoundingClientRect();
-    return { left: r.left - containerRect.left, width: r.width, centerX: r.left + r.width / 2 };
+    return { left: r.left - containerRect.left, width: r.width };
   });
+}
+
+function findClosestButton(localX: number, rects: ReturnType<typeof getButtonRects>) {
+  let closestIdx = 0;
+  let closestDist = Infinity;
+  for (let i = 0; i < rects.length; i++) {
+    const center = rects[i].left + rects[i].width / 2;
+    const dist = Math.abs(localX - center);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestIdx = i;
+    }
+  }
+  return closestIdx;
 }
 
 function updateIndicator() {
@@ -95,26 +109,14 @@ function onPointerMove(e: PointerEvent) {
   const localX = e.clientX - containerRect.left;
   const rects = getButtonRects();
 
-  // Find nearest button and interpolate indicator position
-  let closestIdx = 0;
-  let closestDist = Infinity;
-  for (let i = 0; i < rects.length; i++) {
-    const center = rects[i].left + rects[i].width / 2;
-    const dist = Math.abs(localX - center);
-    if (dist < closestDist) {
-      closestDist = dist;
-      closestIdx = i;
-    }
-  }
-
+  const closestIdx = findClosestButton(localX, rects);
   didDrag = true;
 
-  // Clamp indicator within pill bar bounds
-  const clampedLeft = Math.max(
-    rects[0].left,
-    Math.min(localX - rects[closestIdx].width / 2, rects[rects.length - 1].left),
-  );
-  indicatorLeft.value = clampedLeft;
+  const firstLeft = rects[0].left;
+  const lastLeft = rects[rects.length - 1].left;
+  const halfWidth = rects[closestIdx].width / 2;
+
+  indicatorLeft.value = Math.max(firstLeft, Math.min(localX - halfWidth, lastLeft));
   indicatorWidth.value = rects[closestIdx].width;
 }
 
@@ -126,18 +128,7 @@ function onPointerUp(e: PointerEvent) {
   const localX = e.clientX - containerRect.left;
   const rects = getButtonRects();
 
-  // Snap to nearest button
-  let closestIdx = 0;
-  let closestDist = Infinity;
-  for (let i = 0; i < rects.length; i++) {
-    const center = rects[i].left + rects[i].width / 2;
-    const dist = Math.abs(localX - center);
-    if (dist < closestDist) {
-      closestDist = dist;
-      closestIdx = i;
-    }
-  }
-
+  const closestIdx = findClosestButton(localX, rects);
   emit("select", categories[closestIdx].key);
 }
 

@@ -16,6 +16,15 @@ const router = useRouter();
 const CATEGORIES = ["all", "ai", "dev", "jobs"];
 const activeCategory = ref((route.query.category as string) || "all");
 
+// Swiper: slides = [prev-digest, all, ai, dev, jobs, next-digest]
+const CAT_OFFSET = 1;
+const SLIDE_COUNT = CATEGORIES.length + 2;
+const LAST_CAT_INDEX = CATEGORIES.length;
+
+// Pull-to-refresh
+const PULL_THRESHOLD = 80;
+const PULL_DEAD_ZONE = 25;
+
 const {
   digest,
   loading,
@@ -35,12 +44,6 @@ function itemsForCategory(cat: string) {
   return digest.value.items.filter((i) => i.category === cat);
 }
 
-// --- Swiper: slides = [prev-digest, all, ai, dev, jobs, next-digest] ---
-// Category slides at indices 1–4, boundary slides at 0 and 5
-const CAT_OFFSET = 1;
-const SLIDE_COUNT = CATEGORIES.length + 2;
-const LAST_CAT_INDEX = CATEGORIES.length; // index 4
-
 let swiperInstance: Swiper_T | null = null;
 const transitioning = ref(false);
 
@@ -56,27 +59,24 @@ async function onSlideChange(swiper: Swiper_T) {
   if (transitioning.value) return;
   const idx = swiper.activeIndex;
 
-  // Category slide — just update active category
+  // Category slide — update active category
   if (idx >= CAT_OFFSET && idx <= LAST_CAT_INDEX) {
     activeCategory.value = CATEGORIES[idx - CAT_OFFSET];
     return;
   }
 
   // Boundary slide — navigate digest
+  const isPrev = idx === 0;
+  const canNavigate = isPrev ? hasPrevious.value : hasNext.value;
+
   transitioning.value = true;
   try {
-    if (idx === 0 && hasPrevious.value) {
-      await goToPrevious();
-      activeCategory.value = CATEGORIES[CATEGORIES.length - 1];
-      swiper.slideTo(LAST_CAT_INDEX, 0);
-    } else if (idx === SLIDE_COUNT - 1 && hasNext.value) {
-      await goToNext();
-      activeCategory.value = CATEGORIES[0];
-      swiper.slideTo(CAT_OFFSET, 0);
+    if (canNavigate) {
+      await (isPrev ? goToPrevious() : goToNext());
+      activeCategory.value = CATEGORIES[isPrev ? CATEGORIES.length - 1 : 0];
+      swiper.slideTo(isPrev ? LAST_CAT_INDEX : CAT_OFFSET, 0);
     } else {
-      // At boundary but nothing to navigate to — bounce back
-      const nearest = idx === 0 ? CAT_OFFSET : LAST_CAT_INDEX;
-      swiper.slideTo(nearest, 200);
+      swiper.slideTo(isPrev ? CAT_OFFSET : LAST_CAT_INDEX, 200);
     }
   } finally {
     transitioning.value = false;
@@ -87,13 +87,11 @@ async function onSlideChange(swiper: Swiper_T) {
 const swiperProgress = ref(-1); // -1 means not swiping
 
 function onSwiperProgress(_swiper: Swiper_T, progress: number) {
-  // progress: 0 = first slide, 1 = last slide
-  // Map to category float index (0..CATEGORIES.length-1)
-  const totalSlides = CATEGORIES.length + 2;
-  const slidePos = progress * (totalSlides - 1); // 0..5
-  const catFloat = slidePos - CAT_OFFSET; // -1..4
-  // Only send progress within category range
-  if (catFloat >= -0.5 && catFloat <= CATEGORIES.length - 0.5) {
+  const slidePos = progress * (SLIDE_COUNT - 1);
+  const catFloat = slidePos - CAT_OFFSET;
+  const inCategoryRange = catFloat >= -0.5 && catFloat <= CATEGORIES.length - 0.5;
+
+  if (inCategoryRange) {
     swiperProgress.value = Math.max(0, Math.min(CATEGORIES.length - 1, catFloat));
   }
 }
@@ -108,21 +106,11 @@ function setCategory(cat: string) {
   swiperInstance?.slideTo(categorySlideIndex(cat), 250);
 }
 
-// Header arrow → digest navigation
-async function navPrevious() {
+// Header arrow navigation
+async function navigateDigest(direction: "prev" | "next") {
   transitioning.value = true;
   try {
-    await goToPrevious();
-    activeCategory.value = CATEGORIES[0];
-    swiperInstance?.slideTo(CAT_OFFSET, 0);
-  } finally {
-    transitioning.value = false;
-  }
-}
-async function navNext() {
-  transitioning.value = true;
-  try {
-    await goToNext();
+    await (direction === "prev" ? goToPrevious() : goToNext());
     activeCategory.value = CATEGORIES[0];
     swiperInstance?.slideTo(CAT_OFFSET, 0);
   } finally {
@@ -149,16 +137,14 @@ watch(activeCategory, (cat) => {
   router.replace({ ...route, query: cat !== "all" ? { category: cat } : {} });
 });
 
-// --- Pull to refresh ---
+// Pull-to-refresh state
 const pullDistance = ref(0);
 const refreshing = ref(false);
+const touchStartY = ref(0);
 const pullText = computed(() => {
   if (refreshing.value) return "Refreshing…";
   return pullDistance.value >= PULL_THRESHOLD ? "Release to refresh" : "Pull to refresh";
 });
-const touchStartY = ref(0);
-const PULL_THRESHOLD = 80;
-const PULL_DEAD_ZONE = 25;
 
 function onTouchStart(e: TouchEvent) {
   touchStartY.value = e.touches[0]?.clientY ?? 0;
@@ -252,8 +238,8 @@ onMounted(async () => {
         :item-count="0"
         :has-previous="hasPrevious"
         :has-next="hasNext"
-        @previous="navPrevious"
-        @next="navNext"
+        @previous="navigateDigest('prev')"
+        @next="navigateDigest('next')"
       />
       <EmptyState :message="error" />
     </template>
@@ -303,8 +289,8 @@ onMounted(async () => {
               :item-count="itemsForCategory(cat).length"
               :has-previous="hasPrevious"
               :has-next="hasNext"
-              @previous="navPrevious"
-              @next="navNext"
+              @previous="navigateDigest('prev')"
+              @next="navigateDigest('next')"
             />
             <DigestFeed :items="itemsForCategory(cat)" />
           </div>
