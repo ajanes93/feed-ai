@@ -266,7 +266,7 @@ onMounted(async () => {
       />
 
       <!-- Sticky filters -->
-      <div class="no-swiper sticky top-0 z-10 bg-gray-950/95 px-4 py-2 backdrop-blur-sm">
+      <div class="no-swiper sticky top-0 z-10 bg-gray-950 px-4 py-2">
         <CategoryFilter
           :items="digest.items"
           :active-category="activeCategory"
