@@ -268,13 +268,13 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
 
   // Fetch all sources
   console.log("Fetching sources...");
-  const { items: rawItems, health } = await fetchAllSources(sources);
-  console.log(`Fetched ${rawItems.length} items`);
+  const { items: allRawItems, health } = await fetchAllSources(sources);
+  console.log(`Fetched ${allRawItems.length} items`);
 
   // Record source health
   await recordSourceHealth(env, health);
 
-  if (rawItems.length === 0) {
+  if (allRawItems.length === 0) {
     await logEvent(env.DB, {
       level: "error",
       category: "fetch",
@@ -282,6 +282,20 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
       digestId,
     });
     return new Response("No items fetched", { status: 500 });
+  }
+
+  // Dedup: exclude items already in recent digests (last 7 days)
+  const recentUrls = await env.DB.prepare(
+    "SELECT source_url FROM items WHERE digest_id IN (SELECT id FROM digests WHERE date > ?)"
+  )
+    .bind(new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0])
+    .all();
+  const seenUrls = new Set(recentUrls.results.map((r) => r.source_url as string));
+  const rawItems = allRawItems.filter((item) => !seenUrls.has(item.link));
+  console.log(`Deduped: ${allRawItems.length} → ${rawItems.length} items (${seenUrls.size} seen)`);
+
+  if (rawItems.length === 0) {
+    return new Response("All fetched items were duplicates of recent digests", { status: 200 });
   }
 
   // Generate digest with AI (Gemini primary, Claude fallback)
