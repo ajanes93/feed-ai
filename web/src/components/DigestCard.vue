@@ -16,13 +16,17 @@ onLongPress(cardRef, () => {
 
 async function shareItem() {
   showActions.value = false;
-  if (navigator.share) {
-    await navigator.share({
-      title: props.item.title,
-      url: props.item.sourceUrl,
-    });
-  } else {
-    await navigator.clipboard.writeText(props.item.sourceUrl);
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: props.item.title,
+        url: props.item.sourceUrl,
+      });
+    } else {
+      await navigator.clipboard.writeText(props.item.sourceUrl);
+    }
+  } catch {
+    // User cancelled share dialog or clipboard permission denied
   }
 }
 

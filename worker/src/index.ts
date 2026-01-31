@@ -99,9 +99,16 @@ function mapDigestItem(row: Record<string, unknown>) {
   };
 }
 
-function logSettledFailures(label: string, results: PromiseSettledResult<unknown>[]) {
+async function logSettledFailures(db: D1Database, label: string, results: PromiseSettledResult<unknown>[]) {
   for (const r of results) {
-    if (r.status === "rejected") console.warn(`${label} failed:`, r.reason);
+    if (r.status === "rejected") {
+      console.warn(`${label} failed:`, r.reason);
+      await logEvent(db, {
+        level: "error",
+        category: "general",
+        message: `${label} failed: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`,
+      });
+    }
   }
 }
 
@@ -121,9 +128,9 @@ app.use(
 );
 
 // Catch-all error handler
-app.onError((err, c) => {
+app.onError(async (err, c) => {
   console.error("Unhandled error:", err);
-  logEvent(c.env.DB, {
+  await logEvent(c.env.DB, {
     level: "error",
     category: "general",
     message: err.message,
@@ -295,16 +302,9 @@ function capPerSource(items: RawItem[], max: number): RawItem[] {
   return capped;
 }
 
-function splitJobsAndNews(items: RawItem[]): { jobItems: RawItem[]; newsItems: RawItem[] } {
-  const jobItems: RawItem[] = [];
-  const newsItems: RawItem[] = [];
-  for (const item of items) {
-    if (sourceCategoryMap.get(item.sourceId) === "jobs") {
-      jobItems.push(item);
-    } else {
-      newsItems.push(item);
-    }
-  }
+function splitJobsAndNews(items: RawItem[]) {
+  const jobItems = items.filter((item) => sourceCategoryMap.get(item.sourceId) === "jobs");
+  const newsItems = items.filter((item) => sourceCategoryMap.get(item.sourceId) !== "jobs");
   return { jobItems, newsItems };
 }
 
@@ -329,6 +329,12 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
 
   const dedupedItems = await deduplicateItems(allRawItems, env.DB);
   if (dedupedItems.length === 0) {
+    await logEvent(env.DB, {
+      level: "warn",
+      category: "fetch",
+      message: "All fetched items were duplicates of recent digests",
+      details: { fetchedCount: allRawItems.length },
+    });
     return new Response("All fetched items were duplicates of recent digests", { status: 200 });
   }
 
@@ -379,7 +385,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
       }
     })
   );
-  logSettledFailures("AI usage recording", usageResults);
+  await logSettledFailures(env.DB, "AI usage recording", usageResults);
 
   await env.DB.batch([
     env.DB.prepare(
@@ -441,12 +447,17 @@ async function recordSourceHealth(env: Env, results: SourceFetchResult[]) {
         })
       )
   );
-  logSettledFailures("Source failure logging", logResults);
+  await logSettledFailures(env.DB, "Source failure logging", logResults);
 
   try {
     await env.DB.batch(statements);
   } catch (err) {
     console.error("Failed to record source health:", err);
+    await logEvent(env.DB, {
+      level: "error",
+      category: "general",
+      message: `Failed to record source health: ${err instanceof Error ? err.message : String(err)}`,
+    });
   }
 }
 
