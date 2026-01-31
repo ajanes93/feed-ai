@@ -130,7 +130,13 @@ watch(
 );
 
 watch(activeCategory, (cat) => {
-  router.replace({ ...route, query: cat !== "all" ? { category: cat } : {} });
+  const date = digest.value?.date;
+  if (!date) return;
+  router.replace({
+    name: "digest",
+    params: { date },
+    query: cat !== "all" ? { category: cat } : {},
+  });
 });
 
 // Pull-to-refresh state
