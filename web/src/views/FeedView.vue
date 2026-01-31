@@ -235,21 +235,8 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Error/Empty state -->
-    <template v-else-if="error">
-      <DateHeader
-        :date="formattedDate"
-        :item-count="0"
-        :has-previous="hasPrevious"
-        :has-next="hasNext"
-        @previous="navigateDigest('prev')"
-        @next="navigateDigest('next')"
-      />
-      <EmptyState :message="error" />
-    </template>
-
-    <!-- Digest with nested Swipers -->
-    <template v-else-if="digest">
+    <!-- Digest / Error with nested Swipers -->
+    <template v-else-if="digest || error">
       <!-- Outer Swiper: digest navigation -->
       <Swiper
         :initial-slide="DIGEST_SLIDE"
@@ -276,47 +263,53 @@ onMounted(async () => {
           <div class="flex h-full min-h-0 flex-col">
             <DateHeader
               :date="formattedDate"
-              :item-count="itemsForCategory(activeCategory).length"
+              :item-count="digest ? itemsForCategory(activeCategory).length : 0"
               :has-previous="hasPrevious"
               :has-next="hasNext"
               @previous="navigateDigest('prev')"
               @next="navigateDigest('next')"
             />
 
-            <!-- Fixed filters between header and category Swiper -->
-            <div class="no-swiper bg-gray-950 px-4 py-2">
-              <CategoryFilter
-                :items="digest.items"
-                :active-category="activeCategory"
-                :swipe-progress="swiperProgress"
-                @select="setCategory"
-              />
-            </div>
+            <!-- Empty/error state -->
+            <EmptyState v-if="error" :message="error" />
 
-            <!-- Inner Swiper: category navigation -->
-            <Swiper
-              :initial-slide="CATEGORIES.indexOf(activeCategory)"
-              :speed="250"
-              :threshold="10"
-              :touch-angle="35"
-              :long-swipes-ratio="0.25"
-              :nested="true"
-              :touch-release-on-edges="true"
-              class="w-full flex-1"
-              @swiper="onInnerInit"
-              @slide-change="onInnerSlideChange"
-              @progress="onInnerProgress"
-              @touch-end="onInnerTouchEnd"
-            >
-              <SwiperSlide v-for="cat in CATEGORIES" :key="cat">
-                <div
-                  data-scroll-container
-                  class="h-full overflow-y-scroll overscroll-contain pb-[calc(2rem+env(safe-area-inset-bottom))]"
-                >
-                  <DigestFeed :items="itemsForCategory(cat)" />
-                </div>
-              </SwiperSlide>
-            </Swiper>
+            <!-- Digest content -->
+            <template v-else-if="digest">
+              <!-- Fixed filters between header and category Swiper -->
+              <div class="no-swiper bg-gray-950 px-4 py-2">
+                <CategoryFilter
+                  :items="digest.items"
+                  :active-category="activeCategory"
+                  :swipe-progress="swiperProgress"
+                  @select="setCategory"
+                />
+              </div>
+
+              <!-- Inner Swiper: category navigation -->
+              <Swiper
+                :initial-slide="CATEGORIES.indexOf(activeCategory)"
+                :speed="250"
+                :threshold="10"
+                :touch-angle="35"
+                :long-swipes-ratio="0.25"
+                :nested="true"
+                :touch-release-on-edges="true"
+                class="w-full flex-1"
+                @swiper="onInnerInit"
+                @slide-change="onInnerSlideChange"
+                @progress="onInnerProgress"
+                @touch-end="onInnerTouchEnd"
+              >
+                <SwiperSlide v-for="cat in CATEGORIES" :key="cat">
+                  <div
+                    data-scroll-container
+                    class="h-full overflow-y-scroll overscroll-contain pb-[calc(2rem+env(safe-area-inset-bottom))]"
+                  >
+                    <DigestFeed :items="itemsForCategory(cat)" />
+                  </div>
+                </SwiperSlide>
+              </Swiper>
+            </template>
           </div>
         </SwiperSlide>
 
