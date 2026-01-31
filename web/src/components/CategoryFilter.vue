@@ -26,57 +26,102 @@ const counts = computed(() => {
   return map;
 });
 
-// Sliding indicator
+// --- Indicator positioning ---
 const containerRef = ref<HTMLElement | null>(null);
-const indicatorStyle = ref({ left: "0px", width: "0px" });
+const indicatorLeft = ref(0);
+const indicatorWidth = ref(0);
+const dragging = ref(false);
+
+function getButtonRects() {
+  if (!containerRef.value) return [];
+  const containerRect = containerRef.value.getBoundingClientRect();
+  const buttons = containerRef.value.querySelectorAll("button");
+  return Array.from(buttons).map((btn) => {
+    const r = btn.getBoundingClientRect();
+    return { left: r.left - containerRect.left, width: r.width, centerX: r.left + r.width / 2 };
+  });
+}
 
 function updateIndicator() {
-  if (!containerRef.value) return;
-  const activeIdx = categories.findIndex((c) => c.key === props.activeCategory);
-  const buttons = containerRef.value.querySelectorAll("button");
-  const btn = buttons[activeIdx];
-  if (!btn) return;
-  const containerRect = containerRef.value.getBoundingClientRect();
-  const btnRect = btn.getBoundingClientRect();
-  indicatorStyle.value = {
-    left: `${btnRect.left - containerRect.left}px`,
-    width: `${btnRect.width}px`,
-  };
+  const rects = getButtonRects();
+  const idx = categories.findIndex((c) => c.key === props.activeCategory);
+  if (rects[idx]) {
+    indicatorLeft.value = rects[idx].left;
+    indicatorWidth.value = rects[idx].width;
+  }
 }
 
 onMounted(() => nextTick(updateIndicator));
 watch(() => props.activeCategory, () => nextTick(updateIndicator));
 watch(() => props.items.length, () => nextTick(updateIndicator));
 
-// Swipe on pill bar to switch categories
-let touchStartX = 0;
-let didSwipe = false;
+// --- Draggable indicator ---
+let dragPointerId = -1;
 
-function onTouchStart(e: TouchEvent) {
-  touchStartX = e.touches[0]?.clientX ?? 0;
-  didSwipe = false;
+function onPointerDown(e: PointerEvent) {
+  // Only start drag if touching near the active indicator
+  const rects = getButtonRects();
+  const idx = categories.findIndex((c) => c.key === props.activeCategory);
+  if (!rects[idx] || !containerRef.value) return;
+
+  dragPointerId = e.pointerId;
+  dragging.value = true;
+  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 }
 
-function onTouchEnd(e: TouchEvent) {
-  const endX = e.changedTouches[0]?.clientX ?? 0;
-  const dx = endX - touchStartX;
-  if (Math.abs(dx) < 30) return; // tap, not swipe
+function onPointerMove(e: PointerEvent) {
+  if (!dragging.value || e.pointerId !== dragPointerId || !containerRef.value) return;
 
-  didSwipe = true;
-  const currentIdx = categories.findIndex((c) => c.key === props.activeCategory);
-  const dir = dx > 0 ? -1 : 1; // swipe left = next, swipe right = prev
-  const newIdx = Math.max(0, Math.min(categories.length - 1, currentIdx + dir));
-  if (newIdx !== currentIdx) {
-    emit("select", categories[newIdx].key);
+  const containerRect = containerRef.value.getBoundingClientRect();
+  const localX = e.clientX - containerRect.left;
+  const rects = getButtonRects();
+
+  // Find nearest button and interpolate indicator position
+  let closestIdx = 0;
+  let closestDist = Infinity;
+  for (let i = 0; i < rects.length; i++) {
+    const center = rects[i].left + rects[i].width / 2;
+    const dist = Math.abs(localX - center);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestIdx = i;
+    }
   }
+
+  // Clamp indicator within pill bar bounds
+  const clampedLeft = Math.max(
+    rects[0].left,
+    Math.min(localX - rects[closestIdx].width / 2, rects[rects.length - 1].left),
+  );
+  indicatorLeft.value = clampedLeft;
+  indicatorWidth.value = rects[closestIdx].width;
 }
 
-function onClick(e: Event, key: string) {
-  if (didSwipe) {
-    e.preventDefault();
-    didSwipe = false;
-    return;
+function onPointerUp(e: PointerEvent) {
+  if (!dragging.value || e.pointerId !== dragPointerId || !containerRef.value) return;
+  dragging.value = false;
+
+  const containerRect = containerRef.value.getBoundingClientRect();
+  const localX = e.clientX - containerRect.left;
+  const rects = getButtonRects();
+
+  // Snap to nearest button
+  let closestIdx = 0;
+  let closestDist = Infinity;
+  for (let i = 0; i < rects.length; i++) {
+    const center = rects[i].left + rects[i].width / 2;
+    const dist = Math.abs(localX - center);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestIdx = i;
+    }
   }
+
+  emit("select", categories[closestIdx].key);
+}
+
+function onClick(key: string) {
+  if (dragging.value) return;
   emit("select", key);
 }
 </script>
@@ -84,14 +129,17 @@ function onClick(e: Event, key: string) {
 <template>
   <div
     ref="containerRef"
-    class="relative flex justify-center gap-1.5"
-    @touchstart.passive="onTouchStart"
-    @touchend="onTouchEnd"
+    class="relative flex justify-center gap-1.5 touch-none"
+    @pointerdown="onPointerDown"
+    @pointermove="onPointerMove"
+    @pointerup="onPointerUp"
+    @pointercancel="onPointerUp"
   >
-    <!-- Sliding active indicator -->
+    <!-- Draggable indicator -->
     <div
-      class="absolute top-0 h-full rounded-full bg-white shadow-sm transition-all duration-250 ease-[cubic-bezier(0.25,1,0.5,1)]"
-      :style="indicatorStyle"
+      class="absolute top-0 h-full rounded-full bg-white shadow-sm"
+      :class="dragging ? '' : 'transition-all duration-250 ease-[cubic-bezier(0.25,1,0.5,1)]'"
+      :style="{ left: `${indicatorLeft}px`, width: `${indicatorWidth}px` }"
     />
     <button
       v-for="cat in categories"
@@ -102,7 +150,7 @@ function onClick(e: Event, key: string) {
           ? 'text-gray-950'
           : 'text-gray-400 hover:text-gray-300',
       ]"
-      @click="onClick($event, cat.key)"
+      @click="onClick(cat.key)"
     >
       {{ cat.label }}
       <span

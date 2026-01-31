@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from "vue";
+import { onMounted, ref, computed, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Swiper, SwiperSlide } from "swiper/vue";
 import type Swiper_T from "swiper";
@@ -37,48 +37,77 @@ const {
   goToNext,
 } = useDigest();
 
-// --- Swiper digest navigation ---
+// --- Swiper: digest-only navigation ---
 let swiperInstance: Swiper_T | null = null;
 const swiperTransitioning = ref(false);
 
-function onSwiperInit(swiper: Swiper_T) {
-  swiperInstance = swiper;
+// Only allow Swiper to slide when at category boundary AND there's a digest to go to
+const canSlideLeft = computed(() => {
+  const atLastCategory = CATEGORIES.indexOf(activeCategory.value) === CATEGORIES.length - 1;
+  return atLastCategory && hasNext.value;
+});
+const canSlideRight = computed(() => {
+  const atFirstCategory = CATEGORIES.indexOf(activeCategory.value) === 0;
+  return atFirstCategory && hasPrevious.value;
+});
+
+function updateSwiperAllowed() {
+  if (!swiperInstance) return;
+  swiperInstance.allowSlideNext = canSlideLeft.value;
+  swiperInstance.allowSlidePrev = canSlideRight.value;
 }
 
+function onSwiperInit(swiper: Swiper_T) {
+  swiperInstance = swiper;
+  updateSwiperAllowed();
+}
+
+// When Swiper slides, it's always a digest change (categories are blocked)
 async function onSlideChange(swiper: Swiper_T) {
   if (swiperTransitioning.value) return;
   const diff = swiper.activeIndex - 1;
   if (diff === 0) return;
 
-  const catIdx = CATEGORIES.indexOf(activeCategory.value);
-  const swipedLeft = diff > 0;
-  const swipedRight = diff < 0;
-
-  // Try category change first
-  if (swipedLeft && catIdx < CATEGORIES.length - 1) {
-    activeCategory.value = CATEGORIES[catIdx + 1];
-    swiper.slideTo(1, 0);
-    return;
-  }
-  if (swipedRight && catIdx > 0) {
-    activeCategory.value = CATEGORIES[catIdx - 1];
-    swiper.slideTo(1, 0);
-    return;
-  }
-
-  // At category boundary — navigate digests
   swiperTransitioning.value = true;
   try {
-    if (swipedRight && hasPrevious.value) {
+    if (diff < 0) {
       await goToPrevious();
       activeCategory.value = CATEGORIES[CATEGORIES.length - 1];
-    } else if (swipedLeft && hasNext.value) {
+    } else {
       await goToNext();
       activeCategory.value = CATEGORIES[0];
     }
   } finally {
     swiper.slideTo(1, 0);
     swiperTransitioning.value = false;
+    await nextTick();
+    updateSwiperAllowed();
+  }
+}
+
+// Update swiper allowed state when category changes
+watch([activeCategory, hasPrevious, hasNext], () => {
+  updateSwiperAllowed();
+});
+
+// --- Category swipe on feed content ---
+let feedTouchStartX = 0;
+
+function onFeedTouchStart(e: TouchEvent) {
+  feedTouchStartX = e.touches[0]?.clientX ?? 0;
+}
+
+function onFeedTouchEnd(e: TouchEvent) {
+  const dx = (e.changedTouches[0]?.clientX ?? 0) - feedTouchStartX;
+  if (Math.abs(dx) < 50) return; // too short
+
+  const catIdx = CATEGORIES.indexOf(activeCategory.value);
+  if (dx < 0 && catIdx < CATEGORIES.length - 1) {
+    // Swipe left → next category
+    activeCategory.value = CATEGORIES[catIdx + 1];
+  } else if (dx > 0 && catIdx > 0) {
+    // Swipe right → prev category
+    activeCategory.value = CATEGORIES[catIdx - 1];
   }
 }
 
@@ -94,9 +123,7 @@ async function navNext() {
   swiperInstance?.slideTo(1, 0);
 }
 
-// --- Category ---
-
-// Sync URL when digest changes
+// --- URL sync ---
 watch(
   () => digest.value?.date,
   (date) => {
@@ -112,7 +139,6 @@ watch(
   },
 );
 
-// Sync URL when category changes
 watch(activeCategory, (cat) => {
   const query = cat !== "all" ? { category: cat } : {};
   router.replace({ ...route, query });
@@ -127,6 +153,7 @@ const pullText = computed(() => {
 });
 const touchStartY = ref(0);
 const PULL_THRESHOLD = 80;
+const PULL_DEAD_ZONE = 25;
 
 function onTouchStart(e: TouchEvent) {
   touchStartY.value = e.touches[0]?.clientY ?? 0;
@@ -137,8 +164,8 @@ function onTouchMove(e: TouchEvent) {
   const scrollEl = document.querySelector("[data-scroll-container]");
   if (!scrollEl || scrollEl.scrollTop > 2) return;
   const dy = (e.touches[0]?.clientY ?? 0) - touchStartY.value;
-  if (dy > 0) {
-    pullDistance.value = Math.min(120, dy * 0.4);
+  if (dy > PULL_DEAD_ZONE) {
+    pullDistance.value = Math.min(120, (dy - PULL_DEAD_ZONE) * 0.4);
   }
 }
 
@@ -172,8 +199,9 @@ onMounted(async () => {
   >
     <!-- Pull-to-refresh drawer -->
     <div
+      v-if="pullDistance > 0 || refreshing"
       class="fixed top-0 right-0 left-0 z-20 flex items-center justify-center bg-gray-900/95 backdrop-blur-sm transition-transform duration-200 ease-out"
-      :style="{ transform: `translateY(${pullDistance > 0 ? 0 : -100}%)`, height: `${Math.max(40, pullDistance)}px` }"
+      :style="{ transform: `translateY(${pullDistance > 0 || refreshing ? 0 : -100}%)`, height: `${Math.max(40, pullDistance)}px` }"
     >
       <div class="flex items-center gap-2">
         <div
@@ -223,31 +251,35 @@ onMounted(async () => {
       <EmptyState :message="error" />
     </template>
 
-    <!-- Digest content with Swiper -->
+    <!-- Digest content with Swiper (digest nav only) -->
     <template v-else-if="digest">
       <Swiper
         :initial-slide="1"
         :speed="300"
-        :resistance-ratio="0.6"
-        :threshold="10"
-        :touch-angle="35"
-        :long-swipes-ratio="0.25"
+        :resistance-ratio="0.5"
+        :threshold="15"
+        :touch-angle="30"
+        :long-swipes-ratio="0.3"
         :no-swiping="true"
         no-swiping-selector=".no-swiper"
         class="h-[100dvh]"
         @swiper="onSwiperInit"
         @slide-change="onSlideChange"
       >
+        <!-- Previous digest placeholder -->
         <SwiperSlide>
-          <div class="flex h-full items-center justify-center text-gray-600">
-            <span v-if="hasPrevious">Previous digest</span>
+          <div class="flex h-full items-center justify-center">
+            <div class="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-gray-400" />
           </div>
         </SwiperSlide>
 
+        <!-- Current digest -->
         <SwiperSlide>
           <div
             data-scroll-container
             class="h-full overflow-y-scroll overscroll-contain pb-[calc(2rem+env(safe-area-inset-bottom))]"
+            @touchstart.passive="onFeedTouchStart"
+            @touchend="onFeedTouchEnd"
           >
             <!-- Date header (scrolls with content) -->
             <DateHeader
@@ -264,7 +296,7 @@ onMounted(async () => {
               <CategoryFilter
                 :items="digest.items"
                 :active-category="activeCategory"
-                @select="(cat) => (activeCategory = cat)"
+                @select="(cat: string) => (activeCategory = cat)"
               />
             </div>
 
@@ -273,9 +305,10 @@ onMounted(async () => {
           </div>
         </SwiperSlide>
 
+        <!-- Next digest placeholder -->
         <SwiperSlide>
-          <div class="flex h-full items-center justify-center text-gray-600">
-            <span v-if="hasNext">Next digest</span>
+          <div class="flex h-full items-center justify-center">
+            <div class="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-gray-400" />
           </div>
         </SwiperSlide>
       </Swiper>
