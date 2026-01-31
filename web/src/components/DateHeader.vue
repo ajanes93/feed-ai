@@ -21,6 +21,7 @@ defineEmits<{
     <div class="mx-auto flex max-w-lg items-center justify-between">
       <motion.button
         :disabled="!hasPrevious"
+        aria-label="Previous digest"
         class="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-800 hover:text-white disabled:invisible"
         :press="{ scale: 0.85 }"
         @click="$emit('previous')"
@@ -32,6 +33,7 @@ defineEmits<{
           viewBox="0 0 24 24"
           stroke="currentColor"
           stroke-width="2"
+          aria-hidden="true"
         >
           <path
             stroke-linecap="round"
@@ -50,6 +52,7 @@ defineEmits<{
 
       <motion.button
         :disabled="!hasNext"
+        aria-label="Next digest"
         class="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-800 hover:text-white disabled:invisible"
         :press="{ scale: 0.85 }"
         @click="$emit('next')"
@@ -61,6 +64,7 @@ defineEmits<{
           viewBox="0 0 24 24"
           stroke="currentColor"
           stroke-width="2"
+          aria-hidden="true"
         >
           <path
             stroke-linecap="round"
