@@ -58,7 +58,6 @@ CREATE TABLE IF NOT EXISTS source_health (
 -- AI usage tracking per digest generation
 CREATE TABLE IF NOT EXISTS ai_usage (
   id TEXT PRIMARY KEY,
-  digest_id TEXT,
   model TEXT NOT NULL,
   provider TEXT NOT NULL,       -- 'gemini' or 'anthropic'
   input_tokens INTEGER,
@@ -68,8 +67,7 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   was_fallback INTEGER DEFAULT 0,
   error TEXT,
   status TEXT NOT NULL,         -- 'success', 'rate_limited', 'error'
-  created_at INTEGER DEFAULT (unixepoch()),
-  FOREIGN KEY (digest_id) REFERENCES digests(id)
+  created_at INTEGER DEFAULT (unixepoch())
 );
 
 -- General error/event log
@@ -85,7 +83,6 @@ CREATE TABLE IF NOT EXISTS error_logs (
 );
 
 CREATE INDEX idx_ai_usage_created ON ai_usage(created_at);
-CREATE INDEX idx_ai_usage_digest ON ai_usage(digest_id);
 CREATE INDEX idx_error_logs_created ON error_logs(created_at);
 CREATE INDEX idx_error_logs_category ON error_logs(category);
 CREATE INDEX idx_error_logs_level ON error_logs(level);

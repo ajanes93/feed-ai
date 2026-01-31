@@ -258,9 +258,6 @@ export async function generateDigest(
   const prompt = buildPrompt(items);
   const { text: responseText, usages } = await callAI(prompt, apiKeys);
 
-  // Tag all usages with the digest ID
-  for (const u of usages) u.digestId = digestId;
-
   let parsed: DigestItemRaw[];
   try {
     parsed = parseAIResponse(responseText);

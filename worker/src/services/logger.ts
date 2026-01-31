@@ -11,7 +11,6 @@ interface LogEntry {
 }
 
 export interface AIUsageEntry {
-  digestId?: string;
   model: string;
   provider: "gemini" | "anthropic";
   inputTokens?: number;
@@ -53,11 +52,10 @@ export async function recordAIUsage(db: D1Database, usage: AIUsageEntry) {
   try {
     await db
       .prepare(
-        "INSERT INTO ai_usage (id, digest_id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       )
       .bind(
         id,
-        usage.digestId ?? null,
         usage.model,
         usage.provider,
         usage.inputTokens ?? null,
