@@ -62,13 +62,17 @@ async function onOuterSlideChange(swiper: Swiper_T) {
   try {
     if (canNavigate) {
       await (isPrev ? goToPrevious() : goToNext());
-      activeCategory.value = CATEGORIES[0];
-      innerSwiper?.slideTo(0, 0);
+      resetToFirstCategory();
     }
     swiper.slideTo(DIGEST_SLIDE, canNavigate ? 0 : 200);
   } finally {
     transitioning.value = false;
   }
+}
+
+function resetToFirstCategory() {
+  activeCategory.value = CATEGORIES[0];
+  innerSwiper?.slideTo(0, 0);
 }
 
 // --- Inner Swiper (category navigation) ---
@@ -105,8 +109,7 @@ async function navigateDigest(direction: "prev" | "next") {
   transitioning.value = true;
   try {
     await (direction === "prev" ? goToPrevious() : goToNext());
-    activeCategory.value = CATEGORIES[0];
-    innerSwiper?.slideTo(0, 0);
+    resetToFirstCategory();
   } finally {
     transitioning.value = false;
   }
@@ -171,8 +174,7 @@ async function onTouchEnd() {
     await fetchToday();
     refreshing.value = false;
     await nextTick();
-    innerSwiper?.slideTo(0, 0);
-    activeCategory.value = CATEGORIES[0];
+    resetToFirstCategory();
   }
   pullDistance.value = 0;
   touchStartY.value = 0;
@@ -290,7 +292,7 @@ onMounted(async () => {
               :nested="true"
               :no-swiping="true"
               no-swiping-selector=".no-swiper"
-              class="w-full flex-1"
+              class="h-full w-full flex-1"
               @swiper="onInnerInit"
               @slide-change="onInnerSlideChange"
               @progress="onInnerProgress"
