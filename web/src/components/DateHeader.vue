@@ -66,7 +66,7 @@ defineEmits<{
         </svg>
       </button>
     </div>
-    <div class="mx-auto mt-2 max-w-lg">
+    <div class="mx-auto mt-3 max-w-lg">
       <slot name="filters" />
     </div>
   </div>

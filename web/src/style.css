@@ -6,9 +6,11 @@ body,
   height: 100dvh;
   overflow: hidden;
   background-color: #030712;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Smooth scroll snap */
+/* Smooth scroll with momentum */
 .snap-y {
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
@@ -21,4 +23,10 @@ body,
 .overflow-y-scroll {
   -ms-overflow-style: none;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* GPU-accelerated transitions */
+* {
+  -webkit-tap-highlight-color: transparent;
 }
