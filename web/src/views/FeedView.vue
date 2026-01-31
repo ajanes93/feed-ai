@@ -271,7 +271,7 @@ onMounted(async () => {
 
         <!-- Current digest -->
         <SwiperSlide>
-          <div class="flex h-full flex-col">
+          <div class="flex h-full min-h-0 flex-col">
             <DateHeader
               :date="formattedDate"
               :item-count="itemsForCategory(activeCategory).length"
@@ -281,18 +281,26 @@ onMounted(async () => {
               @next="navigateDigest('next')"
             />
 
+            <!-- Fixed filters between header and category Swiper -->
+            <div class="no-swiper bg-gray-950 px-4 py-2">
+              <CategoryFilter
+                :items="digest.items"
+                :active-category="activeCategory"
+                :swipe-progress="swiperProgress"
+                @select="setCategory"
+              />
+            </div>
+
             <!-- Inner Swiper: category navigation -->
             <Swiper
               :initial-slide="CATEGORIES.indexOf(activeCategory)"
               :speed="250"
-              :resistance-ratio="0.4"
               :threshold="10"
               :touch-angle="35"
               :long-swipes-ratio="0.25"
               :nested="true"
-              :no-swiping="true"
-              no-swiping-selector=".no-swiper"
-              class="h-full w-full flex-1"
+              :touch-release-on-edges="true"
+              class="w-full flex-1"
               @swiper="onInnerInit"
               @slide-change="onInnerSlideChange"
               @progress="onInnerProgress"
@@ -303,15 +311,6 @@ onMounted(async () => {
                   data-scroll-container
                   class="h-full overflow-y-scroll overscroll-contain pb-[calc(2rem+env(safe-area-inset-bottom))]"
                 >
-                  <!-- Sticky filters -->
-                  <div class="no-swiper sticky top-0 z-10 bg-gray-950 px-4 py-2">
-                    <CategoryFilter
-                      :items="digest.items"
-                      :active-category="activeCategory"
-                      :swipe-progress="swiperProgress"
-                      @select="setCategory"
-                    />
-                  </div>
                   <DigestFeed :items="itemsForCategory(cat)" />
                 </div>
               </SwiperSlide>
