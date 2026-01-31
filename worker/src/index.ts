@@ -275,14 +275,15 @@ async function rebuildDigest(env: Env, date: string): Promise<Response> {
 const sourceCategoryMap = new Map(sources.map((s) => [s.id, s.category]));
 
 async function deduplicateItems(items: RawItem[], db: D1Database): Promise<RawItem[]> {
-  const recentUrls = await db.prepare(
-    "SELECT source_url FROM items WHERE digest_id IN (SELECT id FROM digests WHERE date >= ?)"
+  const recent = await db.prepare(
+    "SELECT source_url, title FROM items WHERE digest_id IN (SELECT id FROM digests WHERE date >= ?)"
   )
     .bind(new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0])
     .all();
-  const seenUrls = new Set(recentUrls.results.map((r) => r.source_url as string));
-  const deduped = items.filter((item) => !seenUrls.has(item.link));
-  console.log(`Deduped: ${items.length} → ${deduped.length} items (${seenUrls.size} seen)`);
+  const seenUrls = new Set(recent.results.map((r) => r.source_url as string));
+  const seenTitles = new Set(recent.results.map((r) => (r.title as string).toLowerCase()));
+  const deduped = items.filter((item) => !seenUrls.has(item.link) && !seenTitles.has(item.title.toLowerCase()));
+  console.log(`Deduped: ${items.length} → ${deduped.length} items (${seenUrls.size} urls, ${seenTitles.size} titles seen)`);
   return deduped;
 }
 
