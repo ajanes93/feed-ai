@@ -62,7 +62,7 @@ The web dev server connects to `http://localhost:8787` by default (configurable 
 
 ### Database
 
-The worker uses Cloudflare D1 (SQLite). Schema lives in `worker/schema.sql`. Migrations are in `worker/migrations/`.
+The worker uses Cloudflare D1 (SQLite). Migrations are in `worker/migrations/`.
 
 Apply migrations locally:
 
@@ -91,7 +91,7 @@ npx wrangler d1 migrations apply feed-ai --remote
 
 ## Data Sources
 
-Sources are split across 3 categories, configured in `worker/src/sources.ts`:
+Sources are split across 3 categories:
 
 | Category | Types | Examples |
 | -------- | ----- | -------- |
@@ -99,7 +99,7 @@ Sources are split across 3 categories, configured in `worker/src/sources.ts`:
 | Dev      | RSS, Reddit, HN, GitHub Atom, Bluesky | Vue/Vite/Nuxt releases, Laravel News, Ruby Weekly, web.dev, JS Weekly |
 | Jobs     | RSS, JSON API | VueJobs, Remotive, We Work Remotely, Jobicy |
 
-Source types are all fetched as XML feeds except `api` type (Jobicy) which returns JSON. The fetcher (`worker/src/services/fetcher.ts`) handles:
+Source types are all fetched as XML feeds except `api` type which returns JSON. The fetcher handles:
 
 - RSS 2.0 and Atom feeds via `fast-xml-parser`
 - JSON API responses (Jobicy format)
@@ -109,7 +109,7 @@ Source types are all fetched as XML feeds except `api` type (Jobicy) which retur
 
 ### Adding a source
 
-Add an entry to the `sources` array in `worker/src/sources.ts`:
+Add an entry to the `sources` array:
 
 ```ts
 {
@@ -144,16 +144,14 @@ Triggered daily at 6pm UTC via cron, or manually via `POST /api/generate`.
 
 ## AI Usage
 
-The summarizer (`worker/src/services/summarizer.ts`) supports two providers with automatic fallback:
+The summarizer supports two providers with automatic fallback:
 
 1. **Gemini 2.0 Flash** (primary) — called via REST API
 2. **Claude Haiku 4.5** (fallback) — called via Anthropic SDK
 
 **Fallback logic:** If Gemini fails (rate limit, server error, empty response), the system automatically falls back to Claude. If only one API key is configured, that provider is used directly.
 
-The AI receives items grouped by source with a prompt tailored to the digest type:
-- **News prompt**: Curate for a senior engineer interested in AI, Vue.js, frontend. Select across sources, deduplicate stories.
-- **Jobs prompt**: Filter for remote UK-accessible roles, senior level, Vue/TS/Laravel/AI stack, GBP 75k+.
+The AI receives items grouped by source with a prompt tailored to the digest type (news vs jobs). Prompts are defined in the summarizer service.
 
 The AI returns a JSON array. The parser handles:
 - Markdown fence stripping (```` ```json ``` ````)
@@ -165,7 +163,7 @@ All AI calls are tracked in the `ai_usage` table with tokens, latency, provider,
 
 ## API Endpoints
 
-All endpoints served by Hono router in `worker/src/index.ts`.
+All endpoints served by Hono router.
 
 ### Public
 
@@ -186,7 +184,7 @@ All endpoints served by Hono router in `worker/src/index.ts`.
 
 ## Database Schema
 
-D1 database with 7 tables (see `worker/schema.sql`):
+D1 database with 7 tables:
 
 - **digests** — one row per day (`digest-2026-01-31`)
 - **items** — digest items with category, summary, source info, position
@@ -226,17 +224,9 @@ cd worker && npm test
 cd web && npm test
 ```
 
-**Worker tests** (`worker/src/__tests__/`):
-- `fetcher.test.ts` — RSS/Atom/JSON parsing, error handling, edge cases
-- `summarizer.test.ts` — AI provider calls, fallback, JSON parsing, validation
-- `pipeline.test.ts` — deduplication, per-source capping, jobs/news splitting
-- `logger.test.ts` — D1 logging, AI usage recording, error resilience
-- `index.test.ts` — API route tests (auth, digest CRUD, health)
+Worker tests cover fetching, AI summarization, pipeline logic, logging, and API routes. External HTTP calls are intercepted via `fetchMock` from `cloudflare:test`. Test factories use [fishery](https://github.com/thoughtbot/fishery).
 
-External HTTP calls (AI APIs, RSS feeds) are intercepted via `fetchMock` from `cloudflare:test`. Test factories use [fishery](https://github.com/thoughtbot/fishery).
-
-**Web tests** (`web/src/__tests__/`):
-- Component and composable tests
+Web tests cover components and composables.
 
 ## CI/CD
 
