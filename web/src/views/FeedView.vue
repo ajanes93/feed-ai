@@ -43,12 +43,7 @@ function itemsForCategory(cat: string) {
 }
 
 // --- Outer Swiper (digest navigation) ---
-let outerSwiper: Swiper_T | null = null;
 const transitioning = ref(false);
-
-function onOuterInit(swiper: Swiper_T) {
-  outerSwiper = swiper;
-}
 
 async function onOuterSlideChange(swiper: Swiper_T) {
   if (transitioning.value) return;
@@ -261,7 +256,6 @@ onMounted(async () => {
         :no-swiping="true"
         no-swiping-selector=".no-swiper"
         class="h-full"
-        @swiper="onOuterInit"
         @slide-change="onOuterSlideChange"
       >
         <!-- Prev digest boundary -->
