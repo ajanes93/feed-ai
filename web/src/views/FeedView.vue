@@ -16,10 +16,8 @@ const router = useRouter();
 const CATEGORIES = ["all", "ai", "dev", "jobs"];
 const activeCategory = ref((route.query.category as string) || "all");
 
-// Swiper: slides = [prev-digest, all, ai, dev, jobs, next-digest]
-const CAT_OFFSET = 1;
-const SLIDE_COUNT = CATEGORIES.length + 2;
-const LAST_CAT_INDEX = CATEGORIES.length;
+// Outer Swiper: [prev-boundary, current-digest, next-boundary]
+const DIGEST_SLIDE = 1;
 
 // Pull-to-refresh
 const PULL_THRESHOLD = 80;
@@ -44,28 +42,19 @@ function itemsForCategory(cat: string) {
   return digest.value.items.filter((i) => i.category === cat);
 }
 
-let swiperInstance: Swiper_T | null = null;
+// --- Outer Swiper (digest navigation) ---
+let outerSwiper: Swiper_T | null = null;
 const transitioning = ref(false);
 
-function onSwiperInit(swiper: Swiper_T) {
-  swiperInstance = swiper;
+function onOuterInit(swiper: Swiper_T) {
+  outerSwiper = swiper;
 }
 
-function categorySlideIndex(cat: string) {
-  return CATEGORIES.indexOf(cat) + CAT_OFFSET;
-}
-
-async function onSlideChange(swiper: Swiper_T) {
+async function onOuterSlideChange(swiper: Swiper_T) {
   if (transitioning.value) return;
   const idx = swiper.activeIndex;
+  if (idx === DIGEST_SLIDE) return;
 
-  // Category slide — update active category
-  if (idx >= CAT_OFFSET && idx <= LAST_CAT_INDEX) {
-    activeCategory.value = CATEGORIES[idx - CAT_OFFSET];
-    return;
-  }
-
-  // Boundary slide — navigate digest
   const isPrev = idx === 0;
   const canNavigate = isPrev ? hasPrevious.value : hasNext.value;
 
@@ -73,37 +62,46 @@ async function onSlideChange(swiper: Swiper_T) {
   try {
     if (canNavigate) {
       await (isPrev ? goToPrevious() : goToNext());
-      activeCategory.value = CATEGORIES[isPrev ? CATEGORIES.length - 1 : 0];
-      swiper.slideTo(isPrev ? LAST_CAT_INDEX : CAT_OFFSET, 0);
-    } else {
-      swiper.slideTo(isPrev ? CAT_OFFSET : LAST_CAT_INDEX, 200);
+      resetToFirstCategory();
     }
+    swiper.slideTo(DIGEST_SLIDE, canNavigate ? 0 : 200);
   } finally {
     transitioning.value = false;
   }
 }
 
-// Track Swiper progress for pill indicator interpolation
-const swiperProgress = ref(-1); // -1 means not swiping
-
-function onSwiperProgress(_swiper: Swiper_T, progress: number) {
-  const slidePos = progress * (SLIDE_COUNT - 1);
-  const catFloat = slidePos - CAT_OFFSET;
-  const inCategoryRange = catFloat >= -0.5 && catFloat <= CATEGORIES.length - 0.5;
-
-  if (inCategoryRange) {
-    swiperProgress.value = Math.max(0, Math.min(CATEGORIES.length - 1, catFloat));
-  }
+function resetToFirstCategory() {
+  activeCategory.value = CATEGORIES[0];
+  innerSwiper?.slideTo(0, 0);
 }
 
-function onTouchEndSwiper() {
+// --- Inner Swiper (category navigation) ---
+let innerSwiper: Swiper_T | null = null;
+
+function onInnerInit(swiper: Swiper_T) {
+  innerSwiper = swiper;
+}
+
+function onInnerSlideChange(swiper: Swiper_T) {
+  activeCategory.value = CATEGORIES[swiper.activeIndex];
+}
+
+// Track inner Swiper progress for pill indicator interpolation
+const swiperProgress = ref(-1);
+
+function onInnerProgress(_swiper: Swiper_T, progress: number) {
+  const catFloat = progress * (CATEGORIES.length - 1);
+  swiperProgress.value = Math.max(0, Math.min(CATEGORIES.length - 1, catFloat));
+}
+
+function onInnerTouchEnd() {
   swiperProgress.value = -1;
 }
 
-// Pill tap/drag → slide Swiper to that category
+// Pill tap/drag → slide inner Swiper to that category
 function setCategory(cat: string) {
   activeCategory.value = cat;
-  swiperInstance?.slideTo(categorySlideIndex(cat), 250);
+  innerSwiper?.slideTo(CATEGORIES.indexOf(cat), 250);
 }
 
 // Header arrow navigation
@@ -111,8 +109,7 @@ async function navigateDigest(direction: "prev" | "next") {
   transitioning.value = true;
   try {
     await (direction === "prev" ? goToPrevious() : goToNext());
-    activeCategory.value = CATEGORIES[0];
-    swiperInstance?.slideTo(CAT_OFFSET, 0);
+    resetToFirstCategory();
   } finally {
     transitioning.value = false;
   }
@@ -158,13 +155,11 @@ function onTouchMove(e: TouchEvent) {
   if (refreshing.value || !touchStartY.value || pullLocked.value) return;
   const dy = (e.touches[0]?.clientY ?? 0) - touchStartY.value;
   const dx = (e.touches[0]?.clientX ?? 0) - touchStartX.value;
-  // Lock out pull-to-refresh if swipe is more horizontal than vertical
   if (pullDistance.value === 0 && Math.abs(dx) > Math.abs(dy)) {
     pullLocked.value = true;
     return;
   }
-  // Query the currently active slide's scroll container
-  const activeSlide = swiperInstance?.slides?.[swiperInstance.activeIndex];
+  const activeSlide = innerSwiper?.slides?.[innerSwiper.activeIndex];
   const scrollEl = activeSlide?.querySelector("[data-scroll-container]");
   if (!scrollEl || scrollEl.scrollTop > 2) return;
   if (dy > PULL_DEAD_ZONE) {
@@ -179,8 +174,7 @@ async function onTouchEnd() {
     await fetchToday();
     refreshing.value = false;
     await nextTick();
-    swiperInstance?.slideTo(CAT_OFFSET, 0);
-    activeCategory.value = CATEGORIES[0];
+    resetToFirstCategory();
   }
   pullDistance.value = 0;
   touchStartY.value = 0;
@@ -198,7 +192,7 @@ onMounted(async () => {
 
 <template>
   <div
-    class="flex h-[100dvh] flex-col bg-gray-950"
+    class="h-[100dvh] bg-gray-950"
     @touchstart.passive="onTouchStart"
     @touchmove.passive="onTouchMove"
     @touchend="onTouchEnd"
@@ -254,32 +248,19 @@ onMounted(async () => {
       <EmptyState :message="error" />
     </template>
 
-    <!-- Digest with Swiper -->
+    <!-- Digest with nested Swipers -->
     <template v-else-if="digest">
-      <!-- Fixed date header above Swiper -->
-      <DateHeader
-        :date="formattedDate"
-        :item-count="itemsForCategory(activeCategory).length"
-        :has-previous="hasPrevious"
-        :has-next="hasNext"
-        @previous="navigateDigest('prev')"
-        @next="navigateDigest('next')"
-      />
-
+      <!-- Outer Swiper: digest navigation -->
       <Swiper
-        :initial-slide="categorySlideIndex(activeCategory)"
+        :initial-slide="DIGEST_SLIDE"
         :speed="250"
         :resistance-ratio="0.4"
         :threshold="10"
         :touch-angle="35"
         :long-swipes-ratio="0.25"
-        :no-swiping="true"
-        no-swiping-selector=".no-swiper"
-        class="flex-1"
-        @swiper="onSwiperInit"
-        @slide-change="onSlideChange"
-        @progress="onSwiperProgress"
-        @touch-end="onTouchEndSwiper"
+        class="h-full"
+        @swiper="onOuterInit"
+        @slide-change="onOuterSlideChange"
       >
         <!-- Prev digest boundary -->
         <SwiperSlide>
@@ -288,22 +269,53 @@ onMounted(async () => {
           </div>
         </SwiperSlide>
 
-        <!-- Category slides -->
-        <SwiperSlide v-for="cat in CATEGORIES" :key="cat">
-          <div
-            data-scroll-container
-            class="h-full overflow-y-scroll overscroll-contain pb-[calc(2rem+env(safe-area-inset-bottom))]"
-          >
-            <!-- Sticky filters -->
-            <div class="no-swiper sticky top-0 z-10 bg-gray-950 px-4 py-2">
-              <CategoryFilter
-                :items="digest.items"
-                :active-category="activeCategory"
-                :swipe-progress="swiperProgress"
-                @select="setCategory"
-              />
-            </div>
-            <DigestFeed :items="itemsForCategory(cat)" />
+        <!-- Current digest -->
+        <SwiperSlide>
+          <div class="flex h-full flex-col">
+            <DateHeader
+              :date="formattedDate"
+              :item-count="itemsForCategory(activeCategory).length"
+              :has-previous="hasPrevious"
+              :has-next="hasNext"
+              @previous="navigateDigest('prev')"
+              @next="navigateDigest('next')"
+            />
+
+            <!-- Inner Swiper: category navigation -->
+            <Swiper
+              :initial-slide="CATEGORIES.indexOf(activeCategory)"
+              :speed="250"
+              :resistance-ratio="0.4"
+              :threshold="10"
+              :touch-angle="35"
+              :long-swipes-ratio="0.25"
+              :nested="true"
+              :no-swiping="true"
+              no-swiping-selector=".no-swiper"
+              class="h-full w-full flex-1"
+              @swiper="onInnerInit"
+              @slide-change="onInnerSlideChange"
+              @progress="onInnerProgress"
+              @touch-end="onInnerTouchEnd"
+            >
+              <SwiperSlide v-for="cat in CATEGORIES" :key="cat">
+                <div
+                  data-scroll-container
+                  class="h-full overflow-y-scroll overscroll-contain pb-[calc(2rem+env(safe-area-inset-bottom))]"
+                >
+                  <!-- Sticky filters -->
+                  <div class="no-swiper sticky top-0 z-10 bg-gray-950 px-4 py-2">
+                    <CategoryFilter
+                      :items="digest.items"
+                      :active-category="activeCategory"
+                      :swipe-progress="swiperProgress"
+                      @select="setCategory"
+                    />
+                  </div>
+                  <DigestFeed :items="itemsForCategory(cat)" />
+                </div>
+              </SwiperSlide>
+            </Swiper>
           </div>
         </SwiperSlide>
 
