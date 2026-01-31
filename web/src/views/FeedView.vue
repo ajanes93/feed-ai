@@ -13,6 +13,7 @@ import CategoryFilter from "../components/CategoryFilter.vue";
 const route = useRoute();
 const router = useRouter();
 
+const CATEGORIES = ["all", "ai", "dev", "jobs"];
 const activeCategory = ref(
   (route.query.category as string) || "all",
 );
@@ -44,41 +45,53 @@ function onSwiperInit(swiper: Swiper_T) {
   swiperInstance = swiper;
 }
 
-async function onSlideChangeTransitionEnd(swiper: Swiper_T) {
+async function onSlideChange(swiper: Swiper_T) {
   if (swiperTransitioning.value) return;
   const diff = swiper.activeIndex - 1; // 1 is center
   if (diff === 0) return;
 
+  const catIdx = CATEGORIES.indexOf(activeCategory.value);
+  const swipedLeft = diff > 0;
+  const swipedRight = diff < 0;
+
+  // Try category change first
+  if (swipedLeft && catIdx < CATEGORIES.length - 1) {
+    activeCategory.value = CATEGORIES[catIdx + 1];
+    swiper.slideTo(1, 0);
+    return;
+  }
+  if (swipedRight && catIdx > 0) {
+    activeCategory.value = CATEGORIES[catIdx - 1];
+    swiper.slideTo(1, 0);
+    return;
+  }
+
+  // At category boundary — navigate digests
   swiperTransitioning.value = true;
   try {
-    if (diff < 0 && hasPrevious.value) {
+    if (swipedRight && hasPrevious.value) {
       await goToPrevious();
-      activeCategory.value = "all";
-    } else if (diff > 0 && hasNext.value) {
+      activeCategory.value = CATEGORIES[CATEGORIES.length - 1]; // land on last category
+    } else if (swipedLeft && hasNext.value) {
       await goToNext();
-      activeCategory.value = "all";
+      activeCategory.value = CATEGORIES[0]; // land on first category
     }
   } finally {
-    // Reset to center slide without animation
     swiper.slideTo(1, 0);
     swiperTransitioning.value = false;
   }
 }
 
-// Navigate via header arrows
+// Navigate via header arrows (digest only, skip category cycling)
 async function navPrevious() {
-  if (swiperInstance) {
-    swiperInstance.slidePrev(300);
-  } else {
-    await goToPrevious();
-  }
+  await goToPrevious();
+  activeCategory.value = CATEGORIES[0];
+  swiperInstance?.slideTo(1, 0);
 }
 async function navNext() {
-  if (swiperInstance) {
-    swiperInstance.slideNext(300);
-  } else {
-    await goToNext();
-  }
+  await goToNext();
+  activeCategory.value = CATEGORIES[0];
+  swiperInstance?.slideTo(1, 0);
 }
 
 // --- Category ---
@@ -236,9 +249,11 @@ onMounted(async () => {
         :threshold="10"
         :touch-angle="35"
         :long-swipes-ratio="0.25"
+        :no-swiping="true"
+        no-swiping-selector=".no-swiper"
         class="h-[100dvh]"
         @swiper="onSwiperInit"
-        @slide-change-transition-end="onSlideChangeTransitionEnd"
+        @slide-change="onSlideChange"
       >
         <!-- Previous slide (placeholder) -->
         <SwiperSlide>
