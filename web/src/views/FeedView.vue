@@ -35,6 +35,11 @@ const {
   goToNext,
 } = useDigest();
 
+function resetScroll() {
+  const el = document.querySelector("[data-scroll-container]");
+  if (el) el.scrollTop = 0;
+}
+
 // Sync URL when digest changes
 watch(
   () => digest.value?.date,
@@ -48,13 +53,15 @@ watch(
         query: activeCategory.value !== "all" ? { category: activeCategory.value } : {},
       });
     }
+    resetScroll();
   },
 );
 
-// Sync URL when category changes
+// Sync URL when category changes + reset scroll
 watch(activeCategory, (cat) => {
   const query = cat !== "all" ? { category: cat } : {};
   router.replace({ ...route, query });
+  resetScroll();
 });
 
 function setCategory(cat: string) {
@@ -92,7 +99,7 @@ onMounted(async () => {
 
 <template>
   <div
-    class="min-h-[100dvh] bg-gray-950"
+    class="min-h-[100dvh] touch-pan-y bg-gray-950"
     @touchstart="onTouchStart"
     @touchmove="onTouchMove"
     @touchend="onTouchEnd"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch, onMounted, nextTick } from "vue";
 import type { DigestItem } from "../types";
 
 const props = defineProps<{
@@ -25,18 +25,48 @@ const counts = computed(() => {
   }
   return map;
 });
+
+// Sliding indicator
+const containerRef = ref<HTMLElement | null>(null);
+const indicatorStyle = ref({ left: "0px", width: "0px" });
+
+function updateIndicator() {
+  if (!containerRef.value) return;
+  const activeIdx = categories.findIndex((c) => c.key === props.activeCategory);
+  const buttons = containerRef.value.querySelectorAll("button");
+  const btn = buttons[activeIdx];
+  if (!btn) return;
+  const containerRect = containerRef.value.getBoundingClientRect();
+  const btnRect = btn.getBoundingClientRect();
+  indicatorStyle.value = {
+    left: `${btnRect.left - containerRect.left}px`,
+    width: `${btnRect.width}px`,
+  };
+}
+
+onMounted(() => nextTick(updateIndicator));
+watch(() => props.activeCategory, () => nextTick(updateIndicator));
+watch(() => props.items.length, () => nextTick(updateIndicator));
 </script>
 
 <template>
-  <div class="flex justify-center gap-2">
+  <div
+    ref="containerRef"
+    class="relative flex justify-center gap-1.5"
+  >
+    <!-- Sliding active indicator -->
+    <div
+      class="absolute top-0 h-full rounded-full bg-white shadow-sm transition-all duration-250 ease-[cubic-bezier(0.25,1,0.5,1)]"
+      :style="indicatorStyle"
+    />
     <button
       v-for="cat in categories"
       :key="cat.key"
       :class="[
-        'rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-200',
+        'relative z-10 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-200',
         activeCategory === cat.key
-          ? 'bg-white text-gray-950 shadow-sm'
-          : 'bg-gray-800/80 text-gray-400 hover:bg-gray-700 hover:text-gray-300',
+          ? 'text-gray-950'
+          : 'text-gray-400 hover:text-gray-300',
       ]"
       @click="emit('select', cat.key)"
     >
@@ -44,8 +74,8 @@ const counts = computed(() => {
       <span
         v-if="counts[cat.key]"
         :class="[
-          'ml-1',
-          activeCategory === cat.key ? 'text-gray-500' : 'text-gray-500',
+          'ml-0.5 transition-colors duration-200',
+          activeCategory === cat.key ? 'text-gray-500' : 'text-gray-600',
         ]"
       >
         {{ counts[cat.key] }}
