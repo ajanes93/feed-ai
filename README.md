@@ -1,6 +1,6 @@
 # Evening Scroll (feed-ai)
 
-Personal daily digest app that fetches news, jobs, and updates from 26 configured RSS/API sources, uses AI to curate and summarize into 8-10 important items, and displays them in a TikTok-style scrollable feed.
+Personal daily digest app that fetches news, jobs, and updates from configured RSS/API sources, uses AI to curate and summarize into 8-10 important items, and displays them in a scrollable feed.
 
 **Stack:** Cloudflare Workers + D1 + Pages | Vue 3 + TypeScript + Tailwind CSS 4
 
@@ -16,7 +16,7 @@ Personal daily digest app that fetches news, jobs, and updates from 26 configure
                      ▼                       ▼
               ┌─────────────┐       ┌──────────────┐
               │ RSS/Atom/API│       │ Gemini/Claude │
-              │  26 sources │       │   AI APIs     │
+              │   sources   │       │   AI APIs     │
               └─────────────┘       └──────────────┘
 ```
 
@@ -91,13 +91,13 @@ npx wrangler d1 migrations apply feed-ai --remote
 
 ## Data Sources
 
-26 sources across 3 categories, configured in `worker/src/sources.ts`:
+Sources are split across 3 categories, configured in `worker/src/sources.ts`:
 
-| Category | Count | Types | Examples |
-| -------- | ----- | ----- | -------- |
-| AI       | 5     | RSS, HN, Reddit | Anthropic News, OpenAI News, HN AI, r/MachineLearning, r/LocalLLaMA |
-| Dev      | 17    | RSS, Reddit, HN, GitHub Atom, Bluesky | Vue/Vite/Nuxt releases, Laravel News, Ruby Weekly, web.dev, JS Weekly |
-| Jobs     | 4     | RSS, JSON API | VueJobs, Remotive, We Work Remotely, Jobicy |
+| Category | Types | Examples |
+| -------- | ----- | -------- |
+| AI       | RSS, HN, Reddit | Anthropic News, OpenAI News, HN AI, r/MachineLearning, r/LocalLLaMA |
+| Dev      | RSS, Reddit, HN, GitHub Atom, Bluesky | Vue/Vite/Nuxt releases, Laravel News, Ruby Weekly, web.dev, JS Weekly |
+| Jobs     | RSS, JSON API | VueJobs, Remotive, We Work Remotely, Jobicy |
 
 Source types are all fetched as XML feeds except `api` type (Jobicy) which returns JSON. The fetcher (`worker/src/services/fetcher.ts`) handles:
 
@@ -126,7 +126,7 @@ Add an entry to the `sources` array in `worker/src/sources.ts`:
 Triggered daily at 6pm UTC via cron, or manually via `POST /api/generate`.
 
 ```
-1. Fetch all 26 sources in parallel
+1. Fetch all sources in parallel
 2. Filter to items from last 48 hours
 3. Record source health (success/failure tracking)
 4. Deduplicate against last 7 days of digests (by URL and title)
