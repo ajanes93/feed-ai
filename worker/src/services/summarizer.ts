@@ -17,47 +17,82 @@ export interface DigestResult {
   aiUsages: AIUsageEntry[];
 }
 
-function buildPrompt(items: RawItem[]): string {
-  const itemList = items
-    .map(
-      (item, i) =>
-        `${i + 1}. [${item.sourceId}] ${item.title}\n   ${item.content?.slice(0, 200) || "No description"}\n   URL: ${item.link}`
-    )
-    .join("\n\n");
+type DigestType = "news" | "jobs";
 
-  return `You are curating a daily digest for a senior software engineer interested in AI, Vue.js, and tech jobs.
+function groupBySource(items: RawItem[]): string {
+  const groups = new Map<string, RawItem[]>();
+  for (const item of items) {
+    const arr = groups.get(item.sourceId) || [];
+    arr.push(item);
+    groups.set(item.sourceId, arr);
+  }
+
+  return Array.from(groups.entries())
+    .map(([sourceId, sourceItems]) => {
+      const itemLines = sourceItems
+        .map((item, i) => `  ${i + 1}. ${item.title}\n     ${item.content?.slice(0, 200) || "No description"}\n     URL: ${item.link}`)
+        .join("\n\n");
+      return `### ${sourceId}\n${itemLines}`;
+    })
+    .join("\n\n");
+}
+
+function buildNewsPrompt(items: RawItem[]): string {
+  const grouped = groupBySource(items);
+  const maxItems = CATEGORY_LIMITS.ai + CATEGORY_LIMITS.dev;
+
+  return `You are curating a daily tech digest for a senior software engineer interested in AI, Vue.js, frontend, and web development.
 
 Today's date is ${new Date().toISOString().split("T")[0]}.
 
-Here are ${items.length} recent items from various sources:
+Items are grouped by source. Select the most important items, ensuring coverage across sources — pick at least 1 item from each source that has noteworthy content.
 
-${itemList}
+${grouped}
 
-Select up to ${CATEGORY_LIMITS.ai} AI items, ${CATEGORY_LIMITS.dev} Dev items, and ${CATEGORY_LIMITS.jobs} Jobs items (${Object.values(CATEGORY_LIMITS).reduce((a, b) => a + b, 0)} max total). Prefer items published today or yesterday. Prioritize:
+Select up to ${maxItems} items total (up to ${CATEGORY_LIMITS.ai} AI, up to ${CATEGORY_LIMITS.dev} Dev). Prefer items published today or yesterday. Prioritize:
 - Major AI announcements or breakthroughs
-- Relevant job opportunities (Vue, TypeScript, senior/lead, remote)
 - Significant open source releases
 - Industry news that affects developers
+- Ensure diversity across sources — don't pick all items from one source
 
 For each selected item, provide:
 - title: A clear, concise title (rewrite if needed)
 - summary: 2-3 sentence summary of why this matters
 - why_it_matters: 1 sentence on personal relevance (optional, only if genuinely relevant)
-- category: One of "ai", "jobs", "dev"
+- category: One of "ai", "dev"
 - source_name: Original source name
 - source_url: Original URL
 
 Return ONLY a JSON array, no other text:
-[
-  {
-    "title": "...",
-    "summary": "...",
-    "why_it_matters": "...",
-    "category": "...",
-    "source_name": "...",
-    "source_url": "..."
-  }
-]`;
+[{"title": "...", "summary": "...", "why_it_matters": "...", "category": "...", "source_name": "...", "source_url": "..."}]`;
+}
+
+function buildJobsPrompt(items: RawItem[]): string {
+  const grouped = groupBySource(items);
+
+  return `You are filtering job listings for a senior software engineer based in the UK, looking for remote roles.
+
+Today's date is ${new Date().toISOString().split("T")[0]}.
+
+${grouped}
+
+Select up to ${CATEGORY_LIMITS.jobs} relevant job listings. Prioritize:
+- Remote roles accessible from the UK
+- Senior/lead level positions
+- Vue.js, TypeScript, Laravel, full-stack, or AI/ML roles
+- Salary £75k+ (include roles with undisclosed salary)
+- Exclude roles that are clearly US-only, on-site only, or junior level
+
+For each selected job, provide:
+- title: Job title and company (e.g. "Senior Vue.js Engineer — Acme Corp")
+- summary: 2-3 sentences about the role, including salary/location if available
+- why_it_matters: Why this role is a good fit (optional)
+- category: "jobs"
+- source_name: Original source name
+- source_url: Original URL
+
+Return ONLY a JSON array, no other text:
+[{"title": "...", "summary": "...", "why_it_matters": "...", "category": "jobs", "source_name": "...", "source_url": "..."}]`;
 }
 
 class AIError extends Error {
@@ -236,26 +271,20 @@ function isValidDigestItem(item: DigestItemRaw): boolean {
 }
 
 function applyCategoryLimits(items: DigestItemRaw[]): DigestItemRaw[] {
-  const result: DigestItemRaw[] = [];
   const counts: Record<string, number> = {};
-
-  for (const item of items) {
-    counts[item.category] = (counts[item.category] || 0) + 1;
+  return items.filter((item) => {
+    const count = (counts[item.category] = (counts[item.category] || 0) + 1);
     const limit = CATEGORY_LIMITS[item.category as keyof typeof CATEGORY_LIMITS];
-    if (!limit || counts[item.category] <= limit) {
-      result.push(item);
-    }
-  }
-
-  return result;
+    return !limit || count <= limit;
+  });
 }
 
 export async function generateDigest(
   items: RawItem[],
   apiKeys: { gemini?: string; anthropic?: string },
-  digestId: string
+  type: DigestType = "news"
 ): Promise<DigestResult> {
-  const prompt = buildPrompt(items);
+  const prompt = type === "jobs" ? buildJobsPrompt(items) : buildNewsPrompt(items);
   const { text: responseText, usages } = await callAI(prompt, apiKeys);
 
   let parsed: DigestItemRaw[];
@@ -280,9 +309,9 @@ export async function generateDigest(
       .map((raw) => [raw.link, new Date(raw.publishedAt!).toISOString()])
   );
 
-  const digestItems = limited.map((item, index) => ({
-    id: `${digestId}-${index}`,
-    digestId,
+  const digestItems: DigestItem[] = limited.map((item, index) => ({
+    id: String(index),
+    digestId: "",
     category: item.category,
     title: item.title,
     summary: item.summary,

@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { Env } from "./types";
+import { Env, RawItem, DigestItem } from "./types";
 import { sources, FRESHNESS_THRESHOLDS } from "./sources";
 import type { SourceFetchResult } from "./services/fetcher";
 import { fetchAllSources } from "./services/fetcher";
 import { generateDigest } from "./services/summarizer";
-import { logEvent, recordAIUsage } from "./services/logger";
+import { logEvent, recordAIUsage, type AIUsageEntry } from "./services/logger";
 
 function timingSafeEqual(a: string, b: string): boolean {
   const encoder = new TextEncoder();
@@ -99,9 +99,16 @@ function mapDigestItem(row: Record<string, unknown>) {
   };
 }
 
-function logSettledFailures(label: string, results: PromiseSettledResult<unknown>[]) {
+async function logSettledFailures(db: D1Database, label: string, results: PromiseSettledResult<unknown>[]) {
   for (const r of results) {
-    if (r.status === "rejected") console.warn(`${label} failed:`, r.reason);
+    if (r.status === "rejected") {
+      console.warn(`${label} failed:`, r.reason);
+      await logEvent(db, {
+        level: "error",
+        category: "general",
+        message: `${label} failed: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`,
+      });
+    }
   }
 }
 
@@ -121,9 +128,9 @@ app.use(
 );
 
 // Catch-all error handler
-app.onError((err, c) => {
+app.onError(async (err, c) => {
   console.error("Unhandled error:", err);
-  logEvent(c.env.DB, {
+  await logEvent(c.env.DB, {
     level: "error",
     category: "general",
     message: err.message,
@@ -263,18 +270,54 @@ async function rebuildDigest(env: Env, date: string): Promise<Response> {
   return buildAndSaveDigest(env, date);
 }
 
+// --- Digest pipeline helpers ---
+
+const sourceCategoryMap = new Map(sources.map((s) => [s.id, s.category]));
+
+async function deduplicateItems(items: RawItem[], db: D1Database): Promise<RawItem[]> {
+  const recentUrls = await db.prepare(
+    "SELECT source_url FROM items WHERE digest_id IN (SELECT id FROM digests WHERE date >= ?)"
+  )
+    .bind(new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0])
+    .all();
+  const seenUrls = new Set(recentUrls.results.map((r) => r.source_url as string));
+  const deduped = items.filter((item) => !seenUrls.has(item.link));
+  console.log(`Deduped: ${items.length} → ${deduped.length} items (${seenUrls.size} seen)`);
+  return deduped;
+}
+
+function capPerSource(items: RawItem[], max: number): RawItem[] {
+  const bySource = new Map<string, RawItem[]>();
+  for (const item of items) {
+    const arr = bySource.get(item.sourceId) || [];
+    arr.push(item);
+    bySource.set(item.sourceId, arr);
+  }
+  const capped: RawItem[] = [];
+  for (const sourceItems of bySource.values()) {
+    sourceItems.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
+    capped.push(...sourceItems.slice(0, max));
+  }
+  console.log(`Capped per-source: ${items.length} → ${capped.length} items (${bySource.size} sources)`);
+  return capped;
+}
+
+function splitJobsAndNews(items: RawItem[]) {
+  const jobItems = items.filter((item) => sourceCategoryMap.get(item.sourceId) === "jobs");
+  const newsItems = items.filter((item) => sourceCategoryMap.get(item.sourceId) !== "jobs");
+  return { jobItems, newsItems };
+}
+
 async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   const digestId = `digest-${date}`;
 
-  // Fetch all sources
   console.log("Fetching sources...");
-  const { items: rawItems, health } = await fetchAllSources(sources);
-  console.log(`Fetched ${rawItems.length} items`);
+  const { items: allRawItems, health } = await fetchAllSources(sources);
+  console.log(`Fetched ${allRawItems.length} items`);
 
-  // Record source health
   await recordSourceHealth(env, health);
 
-  if (rawItems.length === 0) {
+  if (allRawItems.length === 0) {
     await logEvent(env.DB, {
       level: "error",
       category: "fetch",
@@ -284,18 +327,52 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     return new Response("No items fetched", { status: 500 });
   }
 
-  // Generate digest with AI (Gemini primary, Claude fallback)
-  console.log("Generating digest...");
-  const { items: digestItems, aiUsages } = await generateDigest(
-    rawItems,
-    { gemini: env.GEMINI_API_KEY, anthropic: env.ANTHROPIC_API_KEY },
-    digestId
-  );
-  console.log(`Generated ${digestItems.length} digest items`);
+  const dedupedItems = await deduplicateItems(allRawItems, env.DB);
+  if (dedupedItems.length === 0) {
+    await logEvent(env.DB, {
+      level: "warn",
+      category: "fetch",
+      message: "All fetched items were duplicates of recent digests",
+      details: { fetchedCount: allRawItems.length },
+    });
+    return new Response("All fetched items were duplicates of recent digests", { status: 200 });
+  }
 
-  // Record AI usage (best-effort, don't fail digest on logging errors)
+  const rawItems = capPerSource(dedupedItems, 3);
+  const { jobItems, newsItems } = splitJobsAndNews(rawItems);
+
+  const apiKeys = { gemini: env.GEMINI_API_KEY, anthropic: env.ANTHROPIC_API_KEY };
+  const allDigestItems: DigestItem[] = [];
+  const allAiUsages: AIUsageEntry[] = [];
+
+  if (newsItems.length > 0) {
+    console.log(`Generating news digest from ${newsItems.length} items...`);
+    const { items, aiUsages } = await generateDigest(newsItems, apiKeys, "news");
+    allDigestItems.push(...items);
+    allAiUsages.push(...aiUsages);
+    console.log(`News: ${items.length} items`);
+  }
+
+  if (jobItems.length > 0) {
+    console.log(`Generating jobs digest from ${jobItems.length} items...`);
+    const { items, aiUsages } = await generateDigest(jobItems, apiKeys, "jobs");
+    allDigestItems.push(...items);
+    allAiUsages.push(...aiUsages);
+    console.log(`Jobs: ${items.length} items`);
+  }
+
+  // Assign digestId and sequential positions to all items
+  for (let i = 0; i < allDigestItems.length; i++) {
+    allDigestItems[i].id = `${digestId}-${i}`;
+    allDigestItems[i].digestId = digestId;
+    allDigestItems[i].position = i;
+  }
+
+  console.log(`Total digest: ${allDigestItems.length} items`);
+
+  // Record AI usage (best-effort)
   const usageResults = await Promise.allSettled(
-    aiUsages.map(async (usage) => {
+    allAiUsages.map(async (usage) => {
       await recordAIUsage(env.DB, usage);
       if (usage.status !== "success") {
         await logEvent(env.DB, {
@@ -308,14 +385,13 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
       }
     })
   );
-  logSettledFailures("AI usage recording", usageResults);
+  await logSettledFailures(env.DB, "AI usage recording", usageResults);
 
-  // Save to D1 using batch for atomicity
-  const statements = [
+  await env.DB.batch([
     env.DB.prepare(
       "INSERT INTO digests (id, date, item_count) VALUES (?, ?, ?)"
-    ).bind(digestId, date, digestItems.length),
-    ...digestItems.map((item) =>
+    ).bind(digestId, date, allDigestItems.length),
+    ...allDigestItems.map((item) =>
       env.DB.prepare(
         "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, published_at, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(
@@ -331,11 +407,9 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
         item.position
       )
     ),
-  ];
+  ]);
 
-  await env.DB.batch(statements);
-
-  return new Response(`Generated digest with ${digestItems.length} items`, {
+  return new Response(`Generated digest with ${allDigestItems.length} items`, {
     status: 200,
   });
 }
@@ -373,12 +447,17 @@ async function recordSourceHealth(env: Env, results: SourceFetchResult[]) {
         })
       )
   );
-  logSettledFailures("Source failure logging", logResults);
+  await logSettledFailures(env.DB, "Source failure logging", logResults);
 
   try {
     await env.DB.batch(statements);
   } catch (err) {
     console.error("Failed to record source health:", err);
+    await logEvent(env.DB, {
+      level: "error",
+      category: "general",
+      message: `Failed to record source health: ${err instanceof Error ? err.message : String(err)}`,
+    });
   }
 }
 

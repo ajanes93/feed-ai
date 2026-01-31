@@ -16,13 +16,17 @@ onLongPress(cardRef, () => {
 
 async function shareItem() {
   showActions.value = false;
-  if (navigator.share) {
-    await navigator.share({
-      title: props.item.title,
-      url: props.item.sourceUrl,
-    });
-  } else {
-    await navigator.clipboard.writeText(props.item.sourceUrl);
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: props.item.title,
+        url: props.item.sourceUrl,
+      });
+    } else {
+      await navigator.clipboard.writeText(props.item.sourceUrl);
+    }
+  } catch {
+    // User cancelled share dialog or clipboard permission denied
   }
 }
 
@@ -91,11 +95,11 @@ function formatDate(iso: string): string {
       </span>
       <span
         v-if="item.publishedAt"
-        class="text-xs text-gray-600"
+        class="text-xs text-gray-500"
       >
         {{ formatDate(item.publishedAt) }}
       </span>
-      <span class="ml-auto flex items-center gap-1.5 text-xs text-gray-700">
+      <span class="ml-auto flex items-center gap-1.5 text-xs text-gray-500">
         <img
           v-if="faviconUrl"
           :src="faviconUrl"
@@ -122,7 +126,7 @@ function formatDate(iso: string): string {
     </a>
 
     <!-- Summary -->
-    <p class="mt-2 text-sm leading-relaxed text-gray-400">
+    <p class="mt-2 text-sm leading-relaxed text-gray-300">
       {{ item.summary }}
     </p>
 
@@ -131,8 +135,8 @@ function formatDate(iso: string): string {
       v-if="item.whyItMatters"
       class="mt-3 rounded-lg border border-gray-800/40 bg-gray-800/20 px-3.5 py-2.5"
     >
-      <p class="text-xs leading-relaxed text-gray-500">
-        <span class="font-medium text-gray-400">Why it matters</span>
+      <p class="text-xs leading-relaxed text-gray-400">
+        <span class="font-medium text-gray-300">Why it matters</span>
         &mdash; {{ item.whyItMatters }}
       </p>
     </div>

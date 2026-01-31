@@ -14,7 +14,7 @@ defineEmits<{
 
 <template>
   <div
-    class="fixed top-0 right-0 left-0 z-10 bg-gradient-to-b from-gray-950 via-gray-950/95 to-transparent px-5 pt-4 pb-10"
+    class="fixed top-0 right-0 left-0 z-10 bg-gray-950 px-5 pt-4 pb-3"
   >
     <div class="mx-auto flex max-w-lg items-center justify-between">
       <button
@@ -65,6 +65,9 @@ defineEmits<{
           />
         </svg>
       </button>
+    </div>
+    <div class="mx-auto mt-2 max-w-lg">
+      <slot name="filters" />
     </div>
   </div>
 </template>
