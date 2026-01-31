@@ -67,6 +67,7 @@ export function useDigest() {
   }
 
   async function fetchDate(date: string, keepCurrent = false) {
+    if (availableDates.value.length === 0) await fetchDigestList();
     viewingToday.value = false;
     await fetchDigest(`${API_BASE}/api/digest/${date}`, undefined, keepCurrent);
   }
