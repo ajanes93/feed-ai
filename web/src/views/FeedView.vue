@@ -92,6 +92,7 @@ watch([activeCategory, hasPrevious, hasNext], () => {
 
 // --- Category swipe on feed content ---
 let feedTouchStartX = 0;
+const slideDirection = ref<"left" | "right">("left");
 
 function onFeedTouchStart(e: TouchEvent) {
   feedTouchStartX = e.touches[0]?.clientX ?? 0;
@@ -103,12 +104,20 @@ function onFeedTouchEnd(e: TouchEvent) {
 
   const catIdx = CATEGORIES.indexOf(activeCategory.value);
   if (dx < 0 && catIdx < CATEGORIES.length - 1) {
-    // Swipe left → next category
+    slideDirection.value = "left";
     activeCategory.value = CATEGORIES[catIdx + 1];
   } else if (dx > 0 && catIdx > 0) {
-    // Swipe right → prev category
+    slideDirection.value = "right";
     activeCategory.value = CATEGORIES[catIdx - 1];
   }
+}
+
+// Also set direction for pill taps/drags
+function setCategory(cat: string) {
+  const oldIdx = CATEGORIES.indexOf(activeCategory.value);
+  const newIdx = CATEGORIES.indexOf(cat);
+  slideDirection.value = newIdx > oldIdx ? "left" : "right";
+  activeCategory.value = cat;
 }
 
 // Navigate via header arrows (digest only)
@@ -296,12 +305,14 @@ onMounted(async () => {
               <CategoryFilter
                 :items="digest.items"
                 :active-category="activeCategory"
-                @select="(cat: string) => (activeCategory = cat)"
+                @select="setCategory"
               />
             </div>
 
-            <!-- Cards -->
-            <DigestFeed :items="filteredItems" />
+            <!-- Cards with slide transition -->
+            <Transition :name="slideDirection === 'left' ? 'slide-left' : 'slide-right'" mode="out-in">
+              <DigestFeed :key="activeCategory" :items="filteredItems" />
+            </Transition>
           </div>
         </SwiperSlide>
 
@@ -315,3 +326,34 @@ onMounted(async () => {
     </template>
   </div>
 </template>
+
+<style scoped>
+/* Slide left: enter from right, exit to left */
+.slide-left-enter-active,
+.slide-left-leave-active,
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition:
+    transform 200ms cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 200ms ease;
+}
+
+.slide-left-enter-from {
+  transform: translateX(30%);
+  opacity: 0;
+}
+.slide-left-leave-to {
+  transform: translateX(-30%);
+  opacity: 0;
+}
+
+/* Slide right: enter from left, exit to right */
+.slide-right-enter-from {
+  transform: translateX(-30%);
+  opacity: 0;
+}
+.slide-right-leave-to {
+  transform: translateX(30%);
+  opacity: 0;
+}
+</style>
