@@ -37,6 +37,20 @@ test.describe("Date navigation", () => {
 
     await expect(mockPage.getByText("Yesterday Story")).toBeVisible();
   });
+
+  test("previous digest URL persists after reload", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    await expect(mockPage.getByText("AI Breakthrough")).toBeVisible();
+
+    await mockPage.getByLabel("Previous digest").click();
+    await expect(mockPage).toHaveURL(/2025-01-27/);
+    await expect(mockPage.getByText("Yesterday Story")).toBeVisible();
+
+    await mockPage.reload();
+
+    await expect(mockPage).toHaveURL(/2025-01-27/);
+    await expect(mockPage.getByText("Yesterday Story")).toBeVisible();
+  });
 });
 
 test.describe("Category filter", () => {
