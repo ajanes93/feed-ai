@@ -9,7 +9,6 @@ interface DigestItemRaw {
   why_it_matters?: string;
   category: string;
   source_name: string;
-  source_url?: string;
   item_index: number;
 }
 
@@ -263,9 +262,12 @@ function parseAIResponse(responseText: string): DigestItemRaw[] {
   throw new Error("Expected non-empty JSON array from AI");
 }
 
-function isValidDigestItem(item: DigestItemRaw): boolean {
+function isValidDigestItem(item: DigestItemRaw, itemCount: number): boolean {
   return (
     typeof item.item_index === "number" &&
+    Number.isInteger(item.item_index) &&
+    item.item_index >= 0 &&
+    item.item_index < itemCount &&
     typeof item.title === "string" &&
     typeof item.summary === "string" &&
     typeof item.category === "string" &&
@@ -299,7 +301,7 @@ export async function generateDigest(
   }
 
   const validated = parsed.filter((item) => {
-    const valid = isValidDigestItem(item);
+    const valid = isValidDigestItem(item, items.length);
     if (!valid) console.warn("Dropping malformed digest item:", item);
     return valid;
   });
@@ -316,8 +318,8 @@ export async function generateDigest(
       summary: item.summary,
       whyItMatters: item.why_it_matters,
       sourceName: item.source_name,
-      sourceUrl: rawItem?.link ?? item.source_url ?? "",
-      publishedAt: rawItem?.publishedAt ? new Date(rawItem.publishedAt).toISOString() : undefined,
+      sourceUrl: rawItem.link,
+      publishedAt: rawItem.publishedAt ? new Date(rawItem.publishedAt).toISOString() : undefined,
       position: index,
     };
   });
