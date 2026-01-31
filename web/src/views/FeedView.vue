@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref, computed, watch, useTemplateRef } from "vue";
+import { onMounted, ref, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { Swiper, SwiperSlide } from "swiper/vue";
+import type Swiper_T from "swiper";
+import "swiper/css";
 import { useDigest } from "../composables/useDigest";
-import { useSwipeNavigation } from "../composables/useSwipeNavigation";
 import DigestFeed from "../components/DigestFeed.vue";
 import DateHeader from "../components/DateHeader.vue";
 import EmptyState from "../components/EmptyState.vue";
@@ -10,9 +12,7 @@ import CategoryFilter from "../components/CategoryFilter.vue";
 
 const route = useRoute();
 const router = useRouter();
-const rootEl = useTemplateRef("root");
 
-const CATEGORIES = ["all", "ai", "dev", "jobs"];
 const activeCategory = ref(
   (route.query.category as string) || "all",
 );
@@ -36,12 +36,54 @@ const {
   goToNext,
 } = useDigest();
 
-let scrollContainer: Element | null = null;
-function resetScroll() {
-  if (!scrollContainer) {
-    scrollContainer = document.querySelector("[data-scroll-container]");
+// --- Swiper digest navigation ---
+let swiperInstance: Swiper_T | null = null;
+const swiperTransitioning = ref(false);
+
+function onSwiperInit(swiper: Swiper_T) {
+  swiperInstance = swiper;
+}
+
+async function onSlideChangeTransitionEnd(swiper: Swiper_T) {
+  if (swiperTransitioning.value) return;
+  const diff = swiper.activeIndex - 1; // 1 is center
+  if (diff === 0) return;
+
+  swiperTransitioning.value = true;
+  try {
+    if (diff < 0 && hasPrevious.value) {
+      await goToPrevious();
+      activeCategory.value = "all";
+    } else if (diff > 0 && hasNext.value) {
+      await goToNext();
+      activeCategory.value = "all";
+    }
+  } finally {
+    // Reset to center slide without animation
+    swiper.slideToLoop(1, 0);
+    swiperTransitioning.value = false;
   }
-  if (scrollContainer) scrollContainer.scrollTop = 0;
+}
+
+// Navigate via header arrows
+async function navPrevious() {
+  if (swiperInstance) {
+    swiperInstance.slidePrev(300);
+  } else {
+    await goToPrevious();
+  }
+}
+async function navNext() {
+  if (swiperInstance) {
+    swiperInstance.slideNext(300);
+  } else {
+    await goToNext();
+  }
+}
+
+// --- Category ---
+function setCategory(cat: string) {
+  activeCategory.value = cat;
 }
 
 // Sync URL when digest changes
@@ -57,37 +99,50 @@ watch(
         query: activeCategory.value !== "all" ? { category: activeCategory.value } : {},
       });
     }
-    resetScroll();
   },
 );
 
-// Sync URL when category changes + reset scroll
+// Sync URL when category changes
 watch(activeCategory, (cat) => {
   const query = cat !== "all" ? { category: cat } : {};
   router.replace({ ...route, query });
-  resetScroll();
 });
 
-function setCategory(cat: string) {
-  activeCategory.value = cat;
+// --- Pull to refresh ---
+const pullDistance = ref(0);
+const refreshing = ref(false);
+const PULL_THRESHOLD = 80;
+
+function onTouchMove(e: TouchEvent) {
+  if (refreshing.value) return;
+  const scrollEl = document.querySelector("[data-scroll-container]");
+  if (!scrollEl || scrollEl.scrollTop > 2) return;
+  const touch = e.touches[0];
+  if (!touch) return;
+  const startY = (e.target as HTMLElement)?.dataset?.touchStartY;
+  if (!startY) return;
+  const dy = touch.clientY - Number(startY);
+  if (dy > 0) {
+    pullDistance.value = Math.min(120, dy * 0.4);
+  }
 }
 
-const {
-  swipeStyle,
-  pullDistance,
-  refreshing,
-  pullThreshold,
-} = useSwipeNavigation({
-  el: rootEl,
-  hasPrevious,
-  hasNext,
-  categories: CATEGORIES,
-  activeCategory,
-  onSwipeRight: goToPrevious,
-  onSwipeLeft: goToNext,
-  onPullRefresh: fetchToday,
-  onCategoryChange: setCategory,
-});
+function onTouchStart(e: TouchEvent) {
+  const touch = e.touches[0];
+  if (touch) {
+    (e.target as HTMLElement).dataset.touchStartY = String(touch.clientY);
+  }
+}
+
+async function onTouchEnd() {
+  if (pullDistance.value >= PULL_THRESHOLD && !refreshing.value) {
+    refreshing.value = true;
+    pullDistance.value = 40;
+    await fetchToday();
+    refreshing.value = false;
+  }
+  pullDistance.value = 0;
+}
 
 onMounted(async () => {
   const dateParam = route.params.date as string | undefined;
@@ -101,8 +156,10 @@ onMounted(async () => {
 
 <template>
   <div
-    ref="root"
-    class="min-h-[100dvh] touch-pan-y bg-gray-950"
+    class="min-h-[100dvh] bg-gray-950"
+    @touchstart.passive="onTouchStart"
+    @touchmove.passive="onTouchMove"
+    @touchend="onTouchEnd"
   >
     <!-- Pull-to-refresh indicator -->
     <div
@@ -119,7 +176,7 @@ onMounted(async () => {
           refreshing ? 'animate-spin' : '',
         ]"
         :style="{
-          opacity: Math.min(1, pullDistance / pullThreshold),
+          opacity: Math.min(1, pullDistance / PULL_THRESHOLD),
           transform: `rotate(${pullDistance * 3}deg)`,
         }"
       />
@@ -155,21 +212,21 @@ onMounted(async () => {
         :item-count="0"
         :has-previous="hasPrevious"
         :has-next="hasNext"
-        @previous="goToPrevious"
-        @next="goToNext"
+        @previous="navPrevious"
+        @next="navNext"
       />
       <EmptyState :message="error" />
     </template>
 
-    <!-- Digest content -->
+    <!-- Digest content with Swiper -->
     <template v-else-if="digest">
       <DateHeader
         :date="formattedDate"
         :item-count="filteredItems.length"
         :has-previous="hasPrevious"
         :has-next="hasNext"
-        @previous="goToPrevious"
-        @next="goToNext"
+        @previous="navPrevious"
+        @next="navNext"
       >
         <template #filters>
           <CategoryFilter
@@ -179,9 +236,43 @@ onMounted(async () => {
           />
         </template>
       </DateHeader>
-      <div :style="swipeStyle">
-        <DigestFeed :items="filteredItems" />
-      </div>
+
+      <Swiper
+        :initial-slide="1"
+        :slides-per-view="1"
+        :speed="300"
+        :resistance="true"
+        :resistance-ratio="0.6"
+        :threshold="10"
+        :touch-angle="35"
+        :short-swipes="true"
+        :long-swipes="true"
+        :long-swipes-ratio="0.25"
+        :follow-finger="true"
+        :css-mode="false"
+        class="h-[100dvh]"
+        @swiper="onSwiperInit"
+        @slide-change-transition-end="onSlideChangeTransitionEnd"
+      >
+        <!-- Previous slide (placeholder) -->
+        <SwiperSlide>
+          <div class="flex h-full items-center justify-center text-gray-600">
+            <span v-if="hasPrevious">Previous digest</span>
+          </div>
+        </SwiperSlide>
+
+        <!-- Current digest -->
+        <SwiperSlide>
+          <DigestFeed :items="filteredItems" />
+        </SwiperSlide>
+
+        <!-- Next slide (placeholder) -->
+        <SwiperSlide>
+          <div class="flex h-full items-center justify-center text-gray-600">
+            <span v-if="hasNext">Next digest</span>
+          </div>
+        </SwiperSlide>
+      </Swiper>
     </template>
   </div>
 </template>
