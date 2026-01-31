@@ -288,7 +288,7 @@ async function rebuildDigest(env: Env, date: string): Promise<Response> {
 
 const sourceCategoryMap = new Map(sources.map((s) => [s.id, s.category]));
 
-async function deduplicateItems(
+export async function deduplicateItems(
   items: RawItem[],
   db: D1Database
 ): Promise<RawItem[]> {
@@ -312,7 +312,7 @@ async function deduplicateItems(
   return deduped;
 }
 
-function capPerSource(items: RawItem[], max: number): RawItem[] {
+export function capPerSource(items: RawItem[], max: number): RawItem[] {
   const bySource = new Map<string, RawItem[]>();
   for (const item of items) {
     const sourceItems = bySource.get(item.sourceId);
@@ -333,7 +333,7 @@ function capPerSource(items: RawItem[], max: number): RawItem[] {
   return capped;
 }
 
-function splitJobsAndNews(items: RawItem[]) {
+export function splitJobsAndNews(items: RawItem[]) {
   const jobItems = items.filter(
     (item) => sourceCategoryMap.get(item.sourceId) === "jobs"
   );

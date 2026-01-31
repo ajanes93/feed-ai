@@ -197,4 +197,77 @@ describe("generateDigest", () => {
     expect(result.items).toHaveLength(1);
     expect(result.items[0].category).toBe("jobs");
   });
+
+  it("throws when both Gemini and Claude fail", async () => {
+    const items = rawItemFactory.buildList(3);
+
+    mockGeminiError(500, "server error");
+    const mock = fetchMock.get("https://api.anthropic.com");
+    mock.intercept({ method: "POST", path: /.*/ }).reply(500, "server error");
+
+    await expect(
+      generateDigest(items, { gemini: "gem-key", anthropic: "ant-key" }, "news")
+    ).rejects.toThrow();
+  });
+
+  it("throws when Gemini fails and no Claude key", async () => {
+    const items = rawItemFactory.buildList(3);
+
+    mockGeminiError(500, "server error");
+
+    await expect(
+      generateDigest(items, { gemini: "gem-key" }, "news")
+    ).rejects.toThrow();
+  });
+
+  it("uses Claude directly when only Claude key is provided", async () => {
+    const items = rawItemFactory.buildList(3);
+    const response = aiResponse(items, [0, 1]);
+
+    mockAnthropicSuccess(response);
+
+    const result = await generateDigest(
+      items,
+      { anthropic: "ant-key" },
+      "news"
+    );
+
+    expect(result.items).toHaveLength(2);
+    expect(result.aiUsages).toHaveLength(1);
+    expect(result.aiUsages[0].provider).toBe("anthropic");
+    expect(result.aiUsages[0].wasFallback).toBe(false);
+  });
+
+  it("recovers from truncated JSON response", async () => {
+    const items = rawItemFactory.buildList(3);
+    // Valid first item, truncated second item
+    const truncated = `[{"item_index": 0, "title": "Recovered", "summary": "ok", "category": "dev", "source_name": "Src"}, {"item_index": 1, "title": "Trunc`;
+
+    mockGeminiSuccess(truncated, { prompt: 50, candidates: 25 });
+
+    const result = await generateDigest(items, { gemini: "test-key" }, "news");
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].title).toBe("Recovered");
+  });
+
+  it("throws on completely invalid JSON response", async () => {
+    const items = rawItemFactory.buildList(3);
+
+    mockGeminiSuccess("not json at all", { prompt: 50, candidates: 25 });
+
+    await expect(
+      generateDigest(items, { gemini: "test-key" }, "news")
+    ).rejects.toThrow("Failed to parse digest response as JSON");
+  });
+
+  it("throws on empty array response", async () => {
+    const items = rawItemFactory.buildList(3);
+
+    mockGeminiSuccess("[]", { prompt: 50, candidates: 25 });
+
+    await expect(
+      generateDigest(items, { gemini: "test-key" }, "news")
+    ).rejects.toThrow("Failed to parse digest response as JSON");
+  });
 });

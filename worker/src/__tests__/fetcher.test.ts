@@ -102,6 +102,82 @@ describe("fetchSource", () => {
     expect(items).toEqual([]);
   });
 
+  it("handles empty RSS feed", async () => {
+    const emptyFeed = `<?xml version="1.0"?><rss><channel><title>Empty</title></channel></rss>`;
+    mockFetchResponse("https://example.com", "/feed.xml", emptyFeed);
+
+    const items = await fetchSource(rssSource);
+
+    expect(items).toEqual([]);
+  });
+
+  it("handles single item feed (not wrapped in array)", async () => {
+    const singleItem = `<?xml version="1.0"?><rss><channel>
+      <item><title>Only One</title><link>https://example.com/only</link></item>
+    </channel></rss>`;
+    mockFetchResponse("https://example.com", "/feed.xml", singleItem);
+
+    const items = await fetchSource(rssSource);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toBe("Only One");
+  });
+
+  it("handles items with missing title", async () => {
+    const feed = `<?xml version="1.0"?><rss><channel>
+      <item><link>https://example.com/notitle</link><description>No title here</description></item>
+    </channel></rss>`;
+    mockFetchResponse("https://example.com", "/feed.xml", feed);
+
+    const items = await fetchSource(rssSource);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toBe("Untitled");
+  });
+
+  it("decodes HTML entities in content", async () => {
+    const feed = `<?xml version="1.0"?><rss><channel>
+      <item>
+        <title>Entities</title>
+        <link>https://example.com/ent</link>
+        <description>Tom &amp; Jerry &lt;3 &quot;quotes&quot; &#39;apos&#39;</description>
+      </item>
+    </channel></rss>`;
+    mockFetchResponse("https://example.com", "/feed.xml", feed);
+
+    const items = await fetchSource(rssSource);
+
+    expect(items[0].content).toBe(`Tom & Jerry <3 "quotes" 'apos'`);
+  });
+
+  it("handles empty JSON API response", async () => {
+    mockFetchResponse(
+      "https://example.com",
+      "/api/jobs",
+      JSON.stringify({ jobs: [] }),
+      200,
+      { "content-type": "application/json" }
+    );
+
+    const items = await fetchSource(apiSource);
+
+    expect(items).toEqual([]);
+  });
+
+  it("handles JSON API with missing jobs field", async () => {
+    mockFetchResponse(
+      "https://example.com",
+      "/api/jobs",
+      JSON.stringify({}),
+      200,
+      { "content-type": "application/json" }
+    );
+
+    const items = await fetchSource(apiSource);
+
+    expect(items).toEqual([]);
+  });
+
   it("limits items to 20", async () => {
     const manyItems = Array.from(
       { length: 30 },

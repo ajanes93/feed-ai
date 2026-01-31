@@ -2,13 +2,17 @@ pre-commit:
   commands:
     lint-web:
       glob: "web/src/**/*.{ts,vue}"
-      run: cd web && npx eslint --fix {staged_files} && git add {staged_files}
+      root: "web/"
+      run: npx eslint --fix {staged_files} && git add {staged_files}
     lint-worker:
       glob: "worker/src/**/*.ts"
-      run: cd worker && npx eslint --fix {staged_files} && git add {staged_files}
+      root: "worker/"
+      run: npx eslint --fix {staged_files} && git add {staged_files}
     format-web:
       glob: "web/src/**/*.{ts,vue,css}"
-      run: cd web && npx prettier --write {staged_files} && git add {staged_files}
+      root: "web/"
+      run: npx prettier --write {staged_files} && git add {staged_files}
     format-worker:
       glob: "worker/src/**/*.ts"
-      run: cd worker && npx prettier --write {staged_files} && git add {staged_files}
+      root: "worker/"
+      run: npx prettier --write {staged_files} && git add {staged_files}
