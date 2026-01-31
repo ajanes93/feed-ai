@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from "vue";
+import { onMounted, ref, computed, watch, useTemplateRef } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDigest } from "../composables/useDigest";
 import { useSwipeNavigation } from "../composables/useSwipeNavigation";
@@ -10,6 +10,7 @@ import CategoryFilter from "../components/CategoryFilter.vue";
 
 const route = useRoute();
 const router = useRouter();
+const rootEl = useTemplateRef("root");
 
 const CATEGORIES = ["all", "ai", "dev", "jobs"];
 const activeCategory = ref(
@@ -73,10 +74,8 @@ const {
   pullDistance,
   refreshing,
   pullThreshold,
-  onTouchStart,
-  onTouchMove,
-  onTouchEnd,
 } = useSwipeNavigation({
+  el: rootEl,
   hasPrevious,
   hasNext,
   categories: CATEGORIES,
@@ -99,10 +98,8 @@ onMounted(async () => {
 
 <template>
   <div
+    ref="root"
     class="min-h-[100dvh] touch-pan-y bg-gray-950"
-    @touchstart="onTouchStart"
-    @touchmove="onTouchMove"
-    @touchend="onTouchEnd"
   >
     <!-- Pull-to-refresh indicator -->
     <div

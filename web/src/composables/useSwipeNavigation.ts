@@ -1,6 +1,8 @@
-import { ref, computed, type Ref } from "vue";
+import { ref, computed, type Ref, type MaybeRefOrGetter } from "vue";
+import { useSwipe } from "@vueuse/core";
 
 interface SwipeNavigationOptions {
+  el: MaybeRefOrGetter<HTMLElement | null | undefined>;
   hasPrevious: Ref<boolean>;
   hasNext: Ref<boolean>;
   categories: string[];
@@ -12,283 +14,150 @@ interface SwipeNavigationOptions {
 }
 
 const SWIPE_THRESHOLD = 50;
-const VELOCITY_THRESHOLD = 0.3; // px/ms
 const PULL_THRESHOLD = 80;
-
-// Clamp helper
-function clamp(val: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, val));
-}
-
-// Rubber-band dampening: feels like pulling against resistance
-function rubberBand(offset: number, limit: number): number {
-  const sign = offset < 0 ? -1 : 1;
-  const abs = Math.abs(offset);
-  // Asymptotic dampening — never exceeds limit
-  return sign * limit * (1 - Math.exp(-abs / limit));
-}
+const ANIM_MS = 350;
+const EASE = "cubic-bezier(0.25, 1, 0.5, 1)";
 
 export function useSwipeNavigation(options: SwipeNavigationOptions) {
   const swipeOffset = ref(0);
-  const isAnimating = ref(false);
+  const animating = ref(false);
   const transitioning = ref(false);
   const pullDistance = ref(0);
   const refreshing = ref(false);
 
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchStartScrollTop = 0;
-  let isHorizontalSwipe: boolean | null = null;
-  let rafId = 0;
-  let pendingOffset = 0;
-
-  // Track velocity with last N samples for smoothness
-  let velocitySamples: Array<{ x: number; t: number }> = [];
-
+  // --- Swipe style applied to content container ---
   const swipeStyle = computed(() => {
-    if (swipeOffset.value === 0 && !isAnimating.value) return {};
-    const offset = swipeOffset.value;
-    const absOffset = Math.abs(offset);
-    const opacity = clamp(1 - absOffset / 500, 0.2, 1);
-    const scale = clamp(1 - absOffset / 4000, 0.93, 1);
-
+    const off = swipeOffset.value;
+    if (off === 0 && !animating.value) return {};
     return {
-      transform: `translate3d(${offset}px, 0, 0) scale(${scale})`,
-      opacity: String(opacity),
-      transition: isAnimating.value
-        ? "transform 380ms cubic-bezier(0.25, 1, 0.5, 1), opacity 380ms cubic-bezier(0.25, 1, 0.5, 1)"
+      transform: `translate3d(${off}px, 0, 0)`,
+      opacity: String(Math.max(0.3, 1 - Math.abs(off) / 500)),
+      transition: animating.value
+        ? `transform ${ANIM_MS}ms ${EASE}, opacity ${ANIM_MS}ms ${EASE}`
         : "none",
       willChange: "transform, opacity",
     };
   });
 
-  function scheduleUpdate(offset: number) {
-    pendingOffset = offset;
-    if (rafId) return;
-    rafId = requestAnimationFrame(() => {
-      rafId = 0;
-      swipeOffset.value = pendingOffset;
+  // --- Helpers ---
+  function getCategoryIndex() {
+    return options.categories.indexOf(options.activeCategory.value);
+  }
+
+  function canDigestNav(right: boolean) {
+    const idx = getCategoryIndex();
+    const atBoundary = right ? idx === 0 : idx === options.categories.length - 1;
+    const hasDigest = right ? options.hasPrevious.value : options.hasNext.value;
+    return atBoundary && hasDigest;
+  }
+
+  function animate(target: number): Promise<void> {
+    return new Promise((resolve) => {
+      animating.value = true;
+      swipeOffset.value = target;
+      setTimeout(() => {
+        animating.value = false;
+        resolve();
+      }, ANIM_MS + 10);
     });
   }
 
-  function recordVelocity(x: number) {
-    const now = performance.now();
-    velocitySamples.push({ x, t: now });
-    // Keep only last 100ms of samples
-    const cutoff = now - 100;
-    velocitySamples = velocitySamples.filter((s) => s.t >= cutoff);
-  }
+  // --- Main swipe via @vueuse/core ---
+  const { lengthX, lengthY, direction, isSwiping } = useSwipe(options.el, {
+    threshold: 10,
+    onSwipe() {
+      if (transitioning.value) return;
 
-  function getVelocity(): number {
-    if (velocitySamples.length < 2) return 0;
-    const first = velocitySamples[0];
-    const last = velocitySamples[velocitySamples.length - 1];
-    const dt = last.t - first.t;
-    if (dt === 0) return 0;
-    return (last.x - first.x) / dt; // px/ms
-  }
+      const dx = -lengthX.value; // lengthX is inverted (positive = left)
+      const dy = -lengthY.value;
 
-  function onTouchStart(e: TouchEvent) {
-    const touch = e.touches[0];
-    if (!touch || transitioning.value) return;
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
-    isHorizontalSwipe = null;
-    velocitySamples = [];
-
-    // Allow interrupting a spring-back animation
-    isAnimating.value = false;
-    swipeOffset.value = 0;
-
-    if (rafId) {
-      cancelAnimationFrame(rafId);
-      rafId = 0;
-    }
-
-    const scrollEl = document.querySelector("[data-scroll-container]");
-    touchStartScrollTop = scrollEl?.scrollTop ?? 0;
-  }
-
-  function getSwipeContext(dx: number) {
-    const catIdx = options.categories.indexOf(options.activeCategory.value);
-    const goingRight = dx > 0;
-
-    // Can we navigate digests in this direction?
-    const canNavDigest =
-      (goingRight && options.hasPrevious.value) ||
-      (!goingRight && options.hasNext.value);
-
-    // At category boundary heading toward digest nav?
-    const atCategoryBoundary =
-      (goingRight && catIdx === 0) ||
-      (!goingRight && catIdx === options.categories.length - 1);
-
-    const isDigestNav = atCategoryBoundary && canNavDigest;
-    const isRubberBand = atCategoryBoundary && !canNavDigest;
-
-    return { catIdx, goingRight, isDigestNav, isRubberBand };
-  }
-
-  function onTouchMove(e: TouchEvent) {
-    const touch = e.touches[0];
-    if (!touch || transitioning.value) return;
-
-    const dx = touch.clientX - touchStartX;
-    const dy = touch.clientY - touchStartY;
-
-    // Direction lock on first significant movement
-    if (isHorizontalSwipe === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
-      isHorizontalSwipe = Math.abs(dx) > Math.abs(dy) * 1.2;
-    }
-
-    // Pull-to-refresh (vertical)
-    if (!isHorizontalSwipe) {
-      if (dy > 0 && !refreshing.value && touchStartScrollTop <= 2) {
+      // Pull-to-refresh check (vertical, at top of scroll)
+      if (!isSwiping.value) return;
+      if (direction.value === "down" && !refreshing.value) {
         const scrollEl = document.querySelector("[data-scroll-container]");
         if (scrollEl && scrollEl.scrollTop <= 2) {
-          pullDistance.value = Math.min(120, dy * 0.4);
+          pullDistance.value = Math.min(120, Math.abs(dy) * 0.4);
+          return;
         }
       }
-      return;
-    }
 
-    e.preventDefault();
-    recordVelocity(touch.clientX);
+      // Only handle horizontal swipes
+      if (direction.value !== "left" && direction.value !== "right") return;
 
-    const { isDigestNav, isRubberBand } = getSwipeContext(dx);
-
-    let offset: number;
-    if (isDigestNav) {
-      // 1:1 finger tracking for digest navigation
-      offset = dx;
-    } else if (isRubberBand) {
-      // Rubber-band at boundaries — feels like resistance
-      offset = rubberBand(dx, 80);
-    } else {
-      // Category hint — dampened tracking
-      offset = dx * 0.25;
-    }
-
-    scheduleUpdate(offset);
-  }
-
-  async function handlePullRefresh() {
-    if (pullDistance.value >= PULL_THRESHOLD && !refreshing.value) {
-      refreshing.value = true;
-      pullDistance.value = 40;
-      await options.onPullRefresh();
-      refreshing.value = false;
-    }
-    pullDistance.value = 0;
-  }
-
-  function waitForTransition(durationMs: number): Promise<void> {
-    return new Promise((resolve) => {
-      setTimeout(resolve, durationMs + 20); // small buffer for paint
-    });
-  }
-
-  async function springBack() {
-    isAnimating.value = true;
-    swipeOffset.value = 0;
-    await waitForTransition(380);
-    isAnimating.value = false;
-  }
-
-  async function animateSwipeTransition(
-    goingRight: boolean,
-    velocity: number,
-  ) {
-    transitioning.value = true;
-    try {
-      // Calculate exit distance based on velocity — faster swipe = further exit
-      const exitDistance =
-        Math.max(0.6, Math.min(1, Math.abs(velocity) * 2)) *
-        window.innerWidth;
-
-      // Slide current content off-screen
-      isAnimating.value = true;
-      swipeOffset.value = goingRight ? exitDistance : -exitDistance;
-      await waitForTransition(380);
-
-      // Fetch new data
-      if (goingRight) {
-        await options.onSwipeRight();
+      const right = dx > 0;
+      if (canDigestNav(right)) {
+        swipeOffset.value = dx; // 1:1 tracking
       } else {
-        await options.onSwipeLeft();
+        // Dampened hint for category change, rubber-band at edges
+        const idx = getCategoryIndex();
+        const atEdge =
+          (right && idx === 0) ||
+          (!right && idx === options.categories.length - 1);
+        swipeOffset.value = atEdge
+          ? dx * 0.15 // rubber-band feel
+          : dx * 0.25; // category hint
+      }
+    },
+    async onSwipeEnd() {
+      if (transitioning.value) return;
+
+      // Handle pull-to-refresh
+      if (pullDistance.value >= PULL_THRESHOLD && !refreshing.value) {
+        refreshing.value = true;
+        pullDistance.value = 40;
+        await options.onPullRefresh();
+        refreshing.value = false;
+      }
+      pullDistance.value = 0;
+
+      const dx = -lengthX.value;
+      if (Math.abs(dx) < SWIPE_THRESHOLD) {
+        await animate(0);
+        return;
       }
 
-      // Reset category
-      options.onCategoryChange(options.categories[0]);
+      const right = dx > 0;
 
-      // Position new content on opposite side (instant)
-      isAnimating.value = false;
-      swipeOffset.value = goingRight
-        ? -window.innerWidth * 0.25
-        : window.innerWidth * 0.25;
+      // Digest navigation
+      if (canDigestNav(right)) {
+        transitioning.value = true;
+        try {
+          // Slide off
+          await animate(right ? window.innerWidth * 0.7 : -window.innerWidth * 0.7);
 
-      // Wait one frame for layout
-      await new Promise((r) => requestAnimationFrame(r));
+          // Fetch new digest
+          if (right) await options.onSwipeRight();
+          else await options.onSwipeLeft();
+          options.onCategoryChange(options.categories[0]);
 
-      // Animate new content to center
-      isAnimating.value = true;
-      swipeOffset.value = 0;
-      await waitForTransition(380);
-
-      isAnimating.value = false;
-    } finally {
-      transitioning.value = false;
-    }
-  }
-
-  async function onTouchEnd(e: TouchEvent) {
-    if (rafId) {
-      cancelAnimationFrame(rafId);
-      rafId = 0;
-    }
-
-    const touch = e.changedTouches[0];
-    if (!touch || transitioning.value || !isHorizontalSwipe) {
-      if (!transitioning.value) swipeOffset.value = 0;
-      await handlePullRefresh();
-      return;
-    }
-
-    const dx = touch.clientX - touchStartX;
-    const velocity = getVelocity();
-    velocitySamples = [];
-
-    const shouldAct =
-      Math.abs(dx) > SWIPE_THRESHOLD ||
-      Math.abs(velocity) > VELOCITY_THRESHOLD;
-
-    if (shouldAct) {
-      const { catIdx, goingRight, isDigestNav } = getSwipeContext(dx);
-
-      if (isDigestNav) {
-        await animateSwipeTransition(goingRight, velocity);
+          // Slide in from opposite side
+          animating.value = false;
+          swipeOffset.value = right ? -window.innerWidth * 0.25 : window.innerWidth * 0.25;
+          await new Promise((r) => requestAnimationFrame(r));
+          await animate(0);
+        } finally {
+          transitioning.value = false;
+        }
         return;
       }
 
       // Category change
-      if (goingRight && catIdx > 0) {
-        options.onCategoryChange(options.categories[catIdx - 1]);
-      } else if (!goingRight && catIdx < options.categories.length - 1) {
-        options.onCategoryChange(options.categories[catIdx + 1]);
+      const idx = getCategoryIndex();
+      if (right && idx > 0) {
+        options.onCategoryChange(options.categories[idx - 1]);
+      } else if (!right && idx < options.categories.length - 1) {
+        options.onCategoryChange(options.categories[idx + 1]);
       }
-    }
 
-    // Spring back to center
-    await springBack();
-  }
+      await animate(0);
+    },
+  });
 
   return {
     swipeStyle,
     pullDistance,
     refreshing,
     pullThreshold: PULL_THRESHOLD,
-    onTouchStart,
-    onTouchMove,
-    onTouchEnd,
+    isSwiping,
   };
 }
