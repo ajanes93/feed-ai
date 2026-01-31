@@ -4,7 +4,6 @@ import DigestCard from "./DigestCard.vue";
 
 defineProps<{
   items: DigestItem[];
-  category?: string;
 }>();
 </script>
 

@@ -36,9 +36,12 @@ const {
   goToNext,
 } = useDigest();
 
+let scrollContainer: Element | null = null;
 function resetScroll() {
-  const el = document.querySelector("[data-scroll-container]");
-  if (el) el.scrollTop = 0;
+  if (!scrollContainer) {
+    scrollContainer = document.querySelector("[data-scroll-container]");
+  }
+  if (scrollContainer) scrollContainer.scrollTop = 0;
 }
 
 // Sync URL when digest changes
@@ -177,10 +180,7 @@ onMounted(async () => {
         </template>
       </DateHeader>
       <div :style="swipeStyle">
-        <DigestFeed
-          :items="filteredItems"
-          :category="activeCategory"
-        />
+        <DigestFeed :items="filteredItems" />
       </div>
     </template>
   </div>

@@ -11,12 +11,6 @@ body,
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Smooth scroll with momentum */
-.snap-y {
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-}
-
 /* Hide scrollbar */
 .overflow-y-scroll::-webkit-scrollbar {
   display: none;
