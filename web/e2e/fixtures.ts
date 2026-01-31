@@ -110,5 +110,14 @@ export const test = base.extend<{ mockPage: Page }>({
   },
 });
 
-export { buildDigestItem, buildTestData };
+/**
+ * Scope locator to the first (active) scroll container.
+ * Swiper renders all category slides simultaneously, so card text
+ * appears multiple times in the DOM. This avoids strict mode violations.
+ */
+function activeSlide(page: Page) {
+  return page.locator("[data-scroll-container]").first();
+}
+
+export { buildDigestItem, buildTestData, activeSlide };
 export { expect } from "@playwright/test";
