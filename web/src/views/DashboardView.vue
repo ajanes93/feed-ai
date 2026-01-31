@@ -56,7 +56,9 @@ onMounted(fetchDashboard);
         v-if="loading"
         class="flex justify-center py-20"
       >
-        <div class="h-8 w-8 animate-spin rounded-full border-2 border-gray-600 border-t-white" />
+        <div
+          class="h-8 w-8 animate-spin rounded-full border-2 border-gray-600 border-t-white"
+        />
       </div>
 
       <!-- Error -->
@@ -102,7 +104,9 @@ onMounted(fetchDashboard);
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.35, delay: 0.15 }"
         >
-          <h2 class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase">
+          <h2
+            class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase"
+          >
             AI Usage
           </h2>
           <DataTable
@@ -129,7 +133,11 @@ onMounted(fetchDashboard);
                 {{ formatTokens(call.outputTokens) }}
               </td>
               <td class="px-3 py-2">
-                {{ call.latencyMs ? `${(call.latencyMs / 1000).toFixed(1)}s` : "-" }}
+                {{
+                  call.latencyMs
+                    ? `${(call.latencyMs / 1000).toFixed(1)}s`
+                    : "-"
+                }}
               </td>
               <td class="px-3 py-2">
                 <span
@@ -159,7 +167,9 @@ onMounted(fetchDashboard);
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.35, delay: 0.25 }"
         >
-          <h2 class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase">
+          <h2
+            class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase"
+          >
             Source Health
           </h2>
           <DataTable
@@ -202,9 +212,7 @@ onMounted(fetchDashboard);
                 </span>
               </td>
               <td class="px-3 py-2">
-                <span
-                  :class="source.stale ? 'text-red-400' : 'text-green-400'"
-                >
+                <span :class="source.stale ? 'text-red-400' : 'text-green-400'">
                   {{ source.stale ? "Stale" : "OK" }}
                 </span>
               </td>
@@ -219,7 +227,9 @@ onMounted(fetchDashboard);
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.35, delay: 0.35 }"
         >
-          <h2 class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase">
+          <h2
+            class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase"
+          >
             Recent Errors
           </h2>
           <DataTable

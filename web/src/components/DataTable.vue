@@ -9,7 +9,9 @@ defineProps<{
 <template>
   <div class="overflow-x-auto rounded-xl border border-gray-800">
     <table class="w-full text-left text-sm">
-      <thead class="border-b border-gray-800 bg-gray-900/50 text-xs text-gray-400">
+      <thead
+        class="border-b border-gray-800 bg-gray-900/50 text-xs text-gray-400"
+      >
         <tr>
           <th
             v-for="col in columns"

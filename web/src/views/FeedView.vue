@@ -43,12 +43,7 @@ function itemsForCategory(cat: string) {
 }
 
 // --- Outer Swiper (digest navigation) ---
-let outerSwiper: Swiper_T | null = null;
 const transitioning = ref(false);
-
-function onOuterInit(swiper: Swiper_T) {
-  outerSwiper = swiper;
-}
 
 async function onOuterSlideChange(swiper: Swiper_T) {
   if (transitioning.value) return;
@@ -62,7 +57,7 @@ async function onOuterSlideChange(swiper: Swiper_T) {
   try {
     if (canNavigate) {
       await (isPrev ? goToPrevious() : goToNext());
-      resetToFirstCategory();
+      resetCategory(isPrev ? "last" : "first");
     }
     swiper.slideTo(DIGEST_SLIDE, canNavigate ? 0 : 200);
   } finally {
@@ -70,9 +65,10 @@ async function onOuterSlideChange(swiper: Swiper_T) {
   }
 }
 
-function resetToFirstCategory() {
-  activeCategory.value = CATEGORIES[0];
-  innerSwiper?.slideTo(0, 0);
+function resetCategory(position: "first" | "last") {
+  const idx = position === "first" ? 0 : CATEGORIES.length - 1;
+  activeCategory.value = CATEGORIES[idx];
+  innerSwiper?.slideTo(idx, 0);
 }
 
 // --- Inner Swiper (category navigation) ---
@@ -109,7 +105,7 @@ async function navigateDigest(direction: "prev" | "next") {
   transitioning.value = true;
   try {
     await (direction === "prev" ? goToPrevious() : goToNext());
-    resetToFirstCategory();
+    resetCategory(direction === "prev" ? "last" : "first");
   } finally {
     transitioning.value = false;
   }
@@ -124,10 +120,13 @@ watch(
       router.replace({
         name: "digest",
         params: { date },
-        query: activeCategory.value !== "all" ? { category: activeCategory.value } : {},
+        query:
+          activeCategory.value !== "all"
+            ? { category: activeCategory.value }
+            : {},
       });
     }
-  },
+  }
 );
 
 watch(activeCategory, (cat) => {
@@ -142,7 +141,9 @@ const touchStartX = ref(0);
 const pullLocked = ref(false);
 const pullText = computed(() => {
   if (refreshing.value) return "Refreshing…";
-  return pullDistance.value >= PULL_THRESHOLD ? "Release to refresh" : "Pull to refresh";
+  return pullDistance.value >= PULL_THRESHOLD
+    ? "Release to refresh"
+    : "Pull to refresh";
 });
 
 function onTouchStart(e: TouchEvent) {
@@ -174,7 +175,7 @@ async function onTouchEnd() {
     await fetchToday();
     refreshing.value = false;
     await nextTick();
-    resetToFirstCategory();
+    resetCategory("first");
   }
   pullDistance.value = 0;
   touchStartY.value = 0;
@@ -209,14 +210,21 @@ onMounted(async () => {
             'h-4 w-4 rounded-full border-2 border-gray-600 border-t-white',
             refreshing ? 'animate-spin' : '',
           ]"
-          :style="{ transform: !refreshing ? `rotate(${pullDistance * 3}deg)` : undefined }"
+          :style="{
+            transform: !refreshing
+              ? `rotate(${pullDistance * 3}deg)`
+              : undefined,
+          }"
         />
         <span class="text-xs font-medium text-gray-400">{{ pullText }}</span>
       </div>
     </div>
 
     <!-- Loading skeleton (initial load only) -->
-    <div v-if="loading && !digest" class="h-[100dvh] overflow-hidden pt-16">
+    <div
+      v-if="loading && !digest"
+      class="h-[100dvh] overflow-hidden pt-16"
+    >
       <div class="mx-auto flex max-w-lg flex-col gap-3 px-4">
         <div
           v-for="n in 5"
@@ -248,13 +256,15 @@ onMounted(async () => {
         :no-swiping="true"
         no-swiping-selector=".no-swiper"
         class="h-full"
-        @swiper="onOuterInit"
         @slide-change="onOuterSlideChange"
       >
         <!-- Prev digest boundary -->
         <SwiperSlide>
           <div class="flex h-full items-center justify-center">
-            <div v-if="hasPrevious" class="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-gray-400" />
+            <div
+              v-if="hasPrevious"
+              class="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-gray-400"
+            />
           </div>
         </SwiperSlide>
 
@@ -271,7 +281,10 @@ onMounted(async () => {
             />
 
             <!-- Empty/error state -->
-            <EmptyState v-if="error" :message="error" />
+            <EmptyState
+              v-if="error"
+              :message="error"
+            />
 
             <!-- Digest content -->
             <template v-else-if="digest">
@@ -300,7 +313,10 @@ onMounted(async () => {
                 @progress="onInnerProgress"
                 @touch-end="onInnerTouchEnd"
               >
-                <SwiperSlide v-for="cat in CATEGORIES" :key="cat">
+                <SwiperSlide
+                  v-for="cat in CATEGORIES"
+                  :key="cat"
+                >
                   <div
                     data-scroll-container
                     class="h-full overflow-y-scroll overscroll-contain pb-[calc(2rem+env(safe-area-inset-bottom))]"
@@ -316,7 +332,10 @@ onMounted(async () => {
         <!-- Next digest boundary -->
         <SwiperSlide>
           <div class="flex h-full items-center justify-center">
-            <div v-if="hasNext" class="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-gray-400" />
+            <div
+              v-if="hasNext"
+              class="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-gray-400"
+            />
           </div>
         </SwiperSlide>
       </Swiper>

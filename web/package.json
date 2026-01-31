@@ -8,7 +8,8 @@
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --fix",
-    "format": "prettier --write src"
+    "format": "prettier --write src",
+    "test": "vitest run"
   },
   "dependencies": {
     "@formkit/auto-animate": "^0.9.0",
@@ -25,6 +26,7 @@
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.1.0",
     "eslint-plugin-vue": "^9.32.0",
+    "fishery": "^2.4.0",
     "prettier": "^3.8.0",
     "prettier-plugin-tailwindcss": "^0.7.0",
     "tailwindcss": "^4.0.0",
@@ -32,6 +34,7 @@
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.21.0",
     "vite": "^6.0.0",
+    "vitest": "^4.0.18",
     "vue-tsc": "^2.2.0"
   }
 }

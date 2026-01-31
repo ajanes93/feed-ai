@@ -31,7 +31,10 @@ function groupBySource(items: RawItem[]): string {
   return Array.from(groups.entries())
     .map(([sourceId, sourceItems]) => {
       const itemLines = sourceItems
-        .map(({ index, item }) => `  [${index}] ${item.title}\n     ${item.content?.slice(0, 200) || "No description"}\n     URL: ${item.link}`)
+        .map(
+          ({ index, item }) =>
+            `  [${index}] ${item.title}\n     ${item.content?.slice(0, 200) || "No description"}\n     URL: ${item.link}`
+        )
         .join("\n\n");
       return `### ${sourceId}\n${itemLines}`;
     })
@@ -116,7 +119,10 @@ function aiError(
   throw new AIError({ model, provider, latencyMs, wasFallback, error, status });
 }
 
-async function callGemini(prompt: string, apiKey: string): Promise<{ text: string; usage: AIUsageEntry }> {
+async function callGemini(
+  prompt: string,
+  apiKey: string
+): Promise<{ text: string; usage: AIUsageEntry }> {
   const start = Date.now();
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
@@ -137,7 +143,14 @@ async function callGemini(prompt: string, apiKey: string): Promise<{ text: strin
 
   if (!res.ok) {
     const body = await res.text();
-    aiError("gemini-2.0-flash", "gemini", latencyMs, false, body.slice(0, 500), res.status === 429 ? "rate_limited" : "error");
+    aiError(
+      "gemini-2.0-flash",
+      "gemini",
+      latencyMs,
+      false,
+      body.slice(0, 500),
+      res.status === 429 ? "rate_limited" : "error"
+    );
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -163,7 +176,11 @@ async function callGemini(prompt: string, apiKey: string): Promise<{ text: strin
   };
 }
 
-async function callClaude(prompt: string, apiKey: string, wasFallback: boolean): Promise<{ text: string; usage: AIUsageEntry }> {
+async function callClaude(
+  prompt: string,
+  apiKey: string,
+  wasFallback: boolean
+): Promise<{ text: string; usage: AIUsageEntry }> {
   const start = Date.now();
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
@@ -174,11 +191,23 @@ async function callClaude(prompt: string, apiKey: string, wasFallback: boolean):
   const latencyMs = Date.now() - start;
 
   if (!response.content || response.content.length === 0) {
-    aiError("claude-haiku-4-5-20251001", "anthropic", latencyMs, wasFallback, "Empty response");
+    aiError(
+      "claude-haiku-4-5-20251001",
+      "anthropic",
+      latencyMs,
+      wasFallback,
+      "Empty response"
+    );
   }
   const content = response.content[0];
   if (content.type !== "text") {
-    aiError("claude-haiku-4-5-20251001", "anthropic", latencyMs, wasFallback, "Unexpected response type");
+    aiError(
+      "claude-haiku-4-5-20251001",
+      "anthropic",
+      latencyMs,
+      wasFallback,
+      "Unexpected response type"
+    );
   }
 
   return {
@@ -217,7 +246,11 @@ async function callAI(
 
   if (apiKeys.anthropic) {
     console.log("Calling Claude...");
-    const result = await callClaude(prompt, apiKeys.anthropic, usages.length > 0);
+    const result = await callClaude(
+      prompt,
+      apiKeys.anthropic,
+      usages.length > 0
+    );
     usages.push(result.usage);
     return { text: result.text, usages };
   }
@@ -254,7 +287,10 @@ function parseAIResponse(responseText: string): DigestItemRaw[] {
     const parsed = JSON.parse(cleaned);
     if (Array.isArray(parsed) && parsed.length > 0) return parsed;
   } catch (err) {
-    console.warn("Initial JSON parse failed, attempting truncation recovery:", (err as Error).message);
+    console.warn(
+      "Initial JSON parse failed, attempting truncation recovery:",
+      (err as Error).message
+    );
     const recovered = tryRecoverTruncatedJSON(cleaned);
     if (recovered) return recovered;
   }
@@ -279,7 +315,8 @@ function applyCategoryLimits(items: DigestItemRaw[]): DigestItemRaw[] {
   const counts: Record<string, number> = {};
   return items.filter((item) => {
     const count = (counts[item.category] = (counts[item.category] || 0) + 1);
-    const limit = CATEGORY_LIMITS[item.category as keyof typeof CATEGORY_LIMITS];
+    const limit =
+      CATEGORY_LIMITS[item.category as keyof typeof CATEGORY_LIMITS];
     return !limit || count <= limit;
   });
 }
@@ -289,7 +326,8 @@ export async function generateDigest(
   apiKeys: { gemini?: string; anthropic?: string },
   type: DigestType = "news"
 ): Promise<DigestResult> {
-  const prompt = type === "jobs" ? buildJobsPrompt(items) : buildNewsPrompt(items);
+  const prompt =
+    type === "jobs" ? buildJobsPrompt(items) : buildNewsPrompt(items);
   const { text: responseText, usages } = await callAI(prompt, apiKeys);
 
   let parsed: DigestItemRaw[];
@@ -319,7 +357,9 @@ export async function generateDigest(
       whyItMatters: item.why_it_matters,
       sourceName: item.source_name,
       sourceUrl: rawItem.link,
-      publishedAt: rawItem.publishedAt ? new Date(rawItem.publishedAt).toISOString() : undefined,
+      publishedAt: rawItem.publishedAt
+        ? new Date(rawItem.publishedAt).toISOString()
+        : undefined,
       position: index,
     };
   });

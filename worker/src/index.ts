@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context, type Next } from "hono";
 import { cors } from "hono/cors";
 import { Env, RawItem, DigestItem } from "./types";
 import { sources, FRESHNESS_THRESHOLDS } from "./sources";
@@ -99,7 +99,11 @@ function mapDigestItem(row: Record<string, unknown>) {
   };
 }
 
-async function logSettledFailures(db: D1Database, label: string, results: PromiseSettledResult<unknown>[]) {
+async function logSettledFailures(
+  db: D1Database,
+  label: string,
+  results: PromiseSettledResult<unknown>[]
+) {
   for (const r of results) {
     if (r.status === "rejected") {
       console.warn(`${label} failed:`, r.reason);
@@ -114,7 +118,7 @@ async function logSettledFailures(db: D1Database, label: string, results: Promis
 
 // --- App ---
 
-const app = new Hono<{ Bindings: Env }>();
+export const app = new Hono<{ Bindings: Env }>();
 
 app.use(
   "/*",
@@ -166,7 +170,9 @@ app.get("/api/digest/:date", async (c) => {
     id: digest.id,
     date: digest.date,
     itemCount: digest.item_count,
-    items: items.results.map((row) => mapDigestItem(row as Record<string, unknown>)),
+    items: items.results.map((row) =>
+      mapDigestItem(row as Record<string, unknown>)
+    ),
   });
 });
 
@@ -184,7 +190,9 @@ app.get("/api/health", async (c) => {
     "SELECT * FROM source_health ORDER BY last_success_at ASC"
   ).all();
 
-  return c.json(result.results.map((row) => mapSourceHealth(row as Record<string, unknown>)));
+  return c.json(
+    result.results.map((row) => mapSourceHealth(row as Record<string, unknown>))
+  );
 });
 
 // --- Dashboard summary (single endpoint for all dashboard data) ---
@@ -202,7 +210,9 @@ app.get("/api/admin/dashboard", async (c) => {
     c.env.DB.prepare("SELECT COUNT(*) as count FROM digests").first(),
   ]);
 
-  const mappedUsage = aiUsage.results.map((row) => mapAIUsage(row as Record<string, unknown>));
+  const mappedUsage = aiUsage.results.map((row) =>
+    mapAIUsage(row as Record<string, unknown>)
+  );
 
   return c.json({
     ai: {
@@ -211,25 +221,29 @@ app.get("/api/admin/dashboard", async (c) => {
         (sum, r) => sum + ((r.total_tokens as number) || 0),
         0
       ),
-      rateLimitCount: aiUsage.results.filter(
-        (r) => r.status === "rate_limited"
-      ).length,
-      fallbackCount: aiUsage.results.filter((r) => r.was_fallback === 1)
+      rateLimitCount: aiUsage.results.filter((r) => r.status === "rate_limited")
         .length,
+      fallbackCount: aiUsage.results.filter((r) => r.was_fallback === 1).length,
     },
-    sources: sourceHealth.results.map((row) => mapSourceHealth(row as Record<string, unknown>)),
-    errors: recentErrors.results.map((row) => mapErrorLog(row as Record<string, unknown>)),
+    sources: sourceHealth.results.map((row) =>
+      mapSourceHealth(row as Record<string, unknown>)
+    ),
+    errors: recentErrors.results.map((row) =>
+      mapErrorLog(row as Record<string, unknown>)
+    ),
     totalDigests: (digestCount as Record<string, unknown>)?.count ?? 0,
   });
 });
 
 // Auth middleware for write endpoints
-app.use("/api/generate", "/api/rebuild", async (c, next) => {
+const authMiddleware = async (c: Context<{ Bindings: Env }>, next: Next) => {
   if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   await next();
-});
+};
+app.use("/api/generate", authMiddleware);
+app.use("/api/rebuild", authMiddleware);
 
 app.post("/api/generate", async (c) => {
   return generateDailyDigest(c.env);
@@ -274,38 +288,58 @@ async function rebuildDigest(env: Env, date: string): Promise<Response> {
 
 const sourceCategoryMap = new Map(sources.map((s) => [s.id, s.category]));
 
-async function deduplicateItems(items: RawItem[], db: D1Database): Promise<RawItem[]> {
-  const recent = await db.prepare(
-    "SELECT source_url, title FROM items WHERE digest_id IN (SELECT id FROM digests WHERE date >= ?)"
-  )
+export async function deduplicateItems(
+  items: RawItem[],
+  db: D1Database
+): Promise<RawItem[]> {
+  const recent = await db
+    .prepare(
+      "SELECT source_url, title FROM items WHERE digest_id IN (SELECT id FROM digests WHERE date >= ?)"
+    )
     .bind(new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0])
     .all();
   const seenUrls = new Set(recent.results.map((r) => r.source_url as string));
-  const seenTitles = new Set(recent.results.map((r) => (r.title as string).toLowerCase()));
-  const deduped = items.filter((item) => !seenUrls.has(item.link) && !seenTitles.has(item.title.toLowerCase()));
-  console.log(`Deduped: ${items.length} → ${deduped.length} items (${seenUrls.size} urls, ${seenTitles.size} titles seen)`);
+  const seenTitles = new Set(
+    recent.results.map((r) => (r.title as string).toLowerCase())
+  );
+  const deduped = items.filter(
+    (item) =>
+      !seenUrls.has(item.link) && !seenTitles.has(item.title.toLowerCase())
+  );
+  console.log(
+    `Deduped: ${items.length} → ${deduped.length} items (${seenUrls.size} urls, ${seenTitles.size} titles seen)`
+  );
   return deduped;
 }
 
-function capPerSource(items: RawItem[], max: number): RawItem[] {
+export function capPerSource(items: RawItem[], max: number): RawItem[] {
   const bySource = new Map<string, RawItem[]>();
   for (const item of items) {
-    const arr = bySource.get(item.sourceId) || [];
-    arr.push(item);
-    bySource.set(item.sourceId, arr);
+    const sourceItems = bySource.get(item.sourceId);
+    if (sourceItems) {
+      sourceItems.push(item);
+    } else {
+      bySource.set(item.sourceId, [item]);
+    }
   }
   const capped: RawItem[] = [];
   for (const sourceItems of bySource.values()) {
     sourceItems.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
     capped.push(...sourceItems.slice(0, max));
   }
-  console.log(`Capped per-source: ${items.length} → ${capped.length} items (${bySource.size} sources)`);
+  console.log(
+    `Capped per-source: ${items.length} → ${capped.length} items (${bySource.size} sources)`
+  );
   return capped;
 }
 
-function splitJobsAndNews(items: RawItem[]) {
-  const jobItems = items.filter((item) => sourceCategoryMap.get(item.sourceId) === "jobs");
-  const newsItems = items.filter((item) => sourceCategoryMap.get(item.sourceId) !== "jobs");
+export function splitJobsAndNews(items: RawItem[]) {
+  const jobItems = items.filter(
+    (item) => sourceCategoryMap.get(item.sourceId) === "jobs"
+  );
+  const newsItems = items.filter(
+    (item) => sourceCategoryMap.get(item.sourceId) !== "jobs"
+  );
   return { jobItems, newsItems };
 }
 
@@ -336,19 +370,28 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
       message: "All fetched items were duplicates of recent digests",
       details: { fetchedCount: allRawItems.length },
     });
-    return new Response("All fetched items were duplicates of recent digests", { status: 200 });
+    return new Response("All fetched items were duplicates of recent digests", {
+      status: 200,
+    });
   }
 
   const rawItems = capPerSource(dedupedItems, 3);
   const { jobItems, newsItems } = splitJobsAndNews(rawItems);
 
-  const apiKeys = { gemini: env.GEMINI_API_KEY, anthropic: env.ANTHROPIC_API_KEY };
+  const apiKeys = {
+    gemini: env.GEMINI_API_KEY,
+    anthropic: env.ANTHROPIC_API_KEY,
+  };
   const allDigestItems: DigestItem[] = [];
   const allAiUsages: AIUsageEntry[] = [];
 
   if (newsItems.length > 0) {
     console.log(`Generating news digest from ${newsItems.length} items...`);
-    const { items, aiUsages } = await generateDigest(newsItems, apiKeys, "news");
+    const { items, aiUsages } = await generateDigest(
+      newsItems,
+      apiKeys,
+      "news"
+    );
     allDigestItems.push(...items);
     allAiUsages.push(...aiUsages);
     console.log(`News: ${items.length} items`);
