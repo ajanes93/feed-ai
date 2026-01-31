@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { RawItem, DigestItem } from "../types";
+import { todayDate } from "@feed-ai/shared/utils";
 import { CATEGORY_LIMITS } from "../sources";
 import type { AIUsageEntry } from "./logger";
 
@@ -47,7 +48,7 @@ function buildNewsPrompt(items: RawItem[]): string {
 
   return `You are curating a daily tech digest for a senior software engineer interested in AI, Vue.js, frontend, and web development.
 
-Today's date is ${new Date().toISOString().split("T")[0]}.
+Today's date is ${todayDate()}.
 
 Items are grouped by source. Select the most important items, ensuring coverage across sources — pick at least 1 item from each source that has noteworthy content.
 
@@ -77,7 +78,7 @@ function buildJobsPrompt(items: RawItem[]): string {
 
   return `You are filtering job listings for a senior software engineer based in the UK, looking for remote roles.
 
-Today's date is ${new Date().toISOString().split("T")[0]}.
+Today's date is ${todayDate()}.
 
 ${grouped}
 
