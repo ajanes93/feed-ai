@@ -23,7 +23,9 @@ describe("sources", () => {
       expect(source.id).toBeTruthy();
       expect(source.name).toBeTruthy();
       expect(source.url).toMatch(/^https?:\/\//);
-      expect(["rss", "reddit", "hn", "github", "bluesky", "api"]).toContain(source.type);
+      expect(["rss", "reddit", "hn", "github", "bluesky", "api"]).toContain(
+        source.type
+      );
       expect(["ai", "dev", "jobs"]).toContain(source.category);
     }
   });

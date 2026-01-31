@@ -13,7 +13,11 @@ const DIGEST_JAN_27 = digestFactory.build({
   items: [],
 });
 
-const DIGEST_LIST = [{ date: "2025-01-28" }, { date: "2025-01-27" }, { date: "2025-01-26" }];
+const DIGEST_LIST = [
+  { date: "2025-01-28" },
+  { date: "2025-01-27" },
+  { date: "2025-01-26" },
+];
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -100,7 +104,10 @@ describe("useDigest", () => {
 
   it("goToNext shows empty state at newest when today has no digest", async () => {
     stubFetchResponses({
-      "/api/digests": { status: 200, body: [{ date: "2025-01-27" }, { date: "2025-01-26" }] },
+      "/api/digests": {
+        status: 200,
+        body: [{ date: "2025-01-27" }, { date: "2025-01-26" }],
+      },
       "/api/digest/2025-01-27": { status: 200, body: DIGEST_JAN_27 },
     });
 
@@ -165,7 +172,10 @@ describe("useDigest", () => {
   });
 
   it("handles network errors gracefully", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network error")));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("Network error"))
+    );
 
     const { fetchToday, error } = useDigest();
     await fetchToday();

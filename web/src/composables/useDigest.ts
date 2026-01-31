@@ -27,7 +27,11 @@ export function useDigest() {
     }
   }
 
-  async function fetchDigest(url: string, notFoundMessage?: string, keepCurrent = false) {
+  async function fetchDigest(
+    url: string,
+    notFoundMessage?: string,
+    keepCurrent = false
+  ) {
     if (!keepCurrent) {
       digest.value = null;
     }
@@ -37,7 +41,10 @@ export function useDigest() {
     try {
       const res = await fetch(url);
       if (!res.ok) {
-        error.value = res.status === 404 ? notFoundMessage || "Failed to load digest" : "Failed to load digest";
+        error.value =
+          res.status === 404
+            ? notFoundMessage || "Failed to load digest"
+            : "Failed to load digest";
         digest.value = null;
         return;
       }

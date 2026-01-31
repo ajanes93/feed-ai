@@ -5,7 +5,19 @@ import { stubFetchJson } from "./helpers";
 const DASHBOARD_DATA = {
   ai: {
     recentCalls: [
-      { id: "1", model: "gemini-2.0-flash", provider: "gemini", inputTokens: 100, outputTokens: 50, totalTokens: 150, latencyMs: 200, wasFallback: false, error: null, status: "success", createdAt: 1706443200 },
+      {
+        id: "1",
+        model: "gemini-2.0-flash",
+        provider: "gemini",
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+        latencyMs: 200,
+        wasFallback: false,
+        error: null,
+        status: "success",
+        createdAt: 1706443200,
+      },
     ],
     totalTokens: 150,
     rateLimitCount: 0,
@@ -58,9 +70,14 @@ describe("useDashboard", () => {
 
   it("sets loading during fetch", async () => {
     let resolvePromise: (v: unknown) => void;
-    vi.stubGlobal("fetch", vi.fn().mockReturnValue(
-      new Promise((r) => { resolvePromise = r; }),
-    ));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockReturnValue(
+        new Promise((r) => {
+          resolvePromise = r;
+        })
+      )
+    );
 
     const { loading, fetchDashboard } = useDashboard();
 

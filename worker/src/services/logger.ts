@@ -24,8 +24,12 @@ export interface AIUsageEntry {
 
 export async function logEvent(db: D1Database, entry: LogEntry) {
   const id = crypto.randomUUID();
-  const consoleMethod = entry.level === "error" ? "error" : entry.level === "warn" ? "warn" : "log";
-  console[consoleMethod](`[${entry.category}] ${entry.message}`, entry.details ?? "");
+  const consoleMethod =
+    entry.level === "error" ? "error" : entry.level === "warn" ? "warn" : "log";
+  console[consoleMethod](
+    `[${entry.category}] ${entry.message}`,
+    entry.details ?? ""
+  );
 
   try {
     await db

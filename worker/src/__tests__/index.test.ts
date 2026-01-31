@@ -25,9 +25,26 @@ describe("API routes", () => {
       env.DB,
       { id: "digest-2025-01-28", date: "2025-01-28", itemCount: 2 },
       [
-        { id: "i1", category: "ai", title: "AI News", summary: "Big AI", sourceName: "HN", sourceUrl: "https://hn.com/1", position: 0 },
-        { id: "i2", category: "dev", title: "Vue 4", summary: "New Vue", sourceName: "Vue", sourceUrl: "https://vue.com/1", position: 1, whyItMatters: "Vue dev" },
-      ],
+        {
+          id: "i1",
+          category: "ai",
+          title: "AI News",
+          summary: "Big AI",
+          sourceName: "HN",
+          sourceUrl: "https://hn.com/1",
+          position: 0,
+        },
+        {
+          id: "i2",
+          category: "dev",
+          title: "Vue 4",
+          summary: "New Vue",
+          sourceName: "Vue",
+          sourceUrl: "https://vue.com/1",
+          position: 1,
+          whyItMatters: "Vue dev",
+        },
+      ]
     );
 
     const res = await app.request("/api/digest/2025-01-28", {}, env);
@@ -43,10 +60,26 @@ describe("API routes", () => {
 
   it("GET /api/digests returns list of dates", async () => {
     await seedDigest(env.DB, { id: "d1", date: "2025-01-28", itemCount: 1 }, [
-      { id: "i1", category: "ai", title: "T", summary: "S", sourceName: "N", sourceUrl: "https://x.com", position: 0 },
+      {
+        id: "i1",
+        category: "ai",
+        title: "T",
+        summary: "S",
+        sourceName: "N",
+        sourceUrl: "https://x.com",
+        position: 0,
+      },
     ]);
     await seedDigest(env.DB, { id: "d2", date: "2025-01-27", itemCount: 1 }, [
-      { id: "i2", category: "ai", title: "T", summary: "S", sourceName: "N", sourceUrl: "https://x.com", position: 0 },
+      {
+        id: "i2",
+        category: "ai",
+        title: "T",
+        summary: "S",
+        sourceName: "N",
+        sourceUrl: "https://x.com",
+        position: 0,
+      },
     ]);
 
     const res = await app.request("/api/digests", {}, env);
@@ -68,7 +101,7 @@ describe("API routes", () => {
     const res = await app.request(
       "/api/generate",
       { method: "POST", headers: { Authorization: "Bearer wrong-key" } },
-      env,
+      env
     );
 
     expect(res.status).toBe(401);

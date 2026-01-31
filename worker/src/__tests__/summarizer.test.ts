@@ -21,7 +21,7 @@ function mockAnthropicSuccess(text: string) {
       content: [{ type: "text", text }],
       usage: { input_tokens: 80, output_tokens: 40 },
     }),
-    { headers: { "content-type": "application/json" } },
+    { headers: { "content-type": "application/json" } }
   );
 }
 
@@ -54,7 +54,11 @@ describe("generateDigest", () => {
     mockGeminiError(429, "rate limited");
     mockAnthropicSuccess(response);
 
-    const result = await generateDigest(items, { gemini: "gem-key", anthropic: "ant-key" }, "news");
+    const result = await generateDigest(
+      items,
+      { gemini: "gem-key", anthropic: "ant-key" },
+      "news"
+    );
 
     expect(result.items).toHaveLength(2);
     expect(result.aiUsages.length).toBeGreaterThanOrEqual(2);
@@ -80,9 +84,27 @@ describe("generateDigest", () => {
   it("drops items with out-of-bounds item_index", async () => {
     const items = rawItemFactory.buildList(3);
     const response = JSON.stringify([
-      { item_index: 0, title: "Valid", summary: "ok", category: "dev", source_name: "Src" },
-      { item_index: 99, title: "Invalid", summary: "bad", category: "dev", source_name: "Src" },
-      { item_index: -1, title: "Negative", summary: "bad", category: "dev", source_name: "Src" },
+      {
+        item_index: 0,
+        title: "Valid",
+        summary: "ok",
+        category: "dev",
+        source_name: "Src",
+      },
+      {
+        item_index: 99,
+        title: "Invalid",
+        summary: "bad",
+        category: "dev",
+        source_name: "Src",
+      },
+      {
+        item_index: -1,
+        title: "Negative",
+        summary: "bad",
+        category: "dev",
+        source_name: "Src",
+      },
     ]);
 
     mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
@@ -96,9 +118,25 @@ describe("generateDigest", () => {
   it("drops items missing required fields", async () => {
     const items = rawItemFactory.buildList(3);
     const response = JSON.stringify([
-      { item_index: 0, title: "Good", summary: "ok", category: "dev", source_name: "Src" },
-      { item_index: 1, summary: "missing title", category: "dev", source_name: "Src" },
-      { item_index: 2, title: "No summary", category: "dev", source_name: "Src" },
+      {
+        item_index: 0,
+        title: "Good",
+        summary: "ok",
+        category: "dev",
+        source_name: "Src",
+      },
+      {
+        item_index: 1,
+        summary: "missing title",
+        category: "dev",
+        source_name: "Src",
+      },
+      {
+        item_index: 2,
+        title: "No summary",
+        category: "dev",
+        source_name: "Src",
+      },
     ]);
 
     mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
@@ -118,7 +156,7 @@ describe("generateDigest", () => {
         summary: `Summary ${i}`,
         category: "ai",
         source_name: "Src",
-      })),
+      }))
     );
 
     mockGeminiSuccess(response, { prompt: 50, candidates: 25 });
@@ -143,7 +181,9 @@ describe("generateDigest", () => {
   it("throws when no API key is configured", async () => {
     const items = rawItemFactory.buildList(3);
 
-    await expect(generateDigest(items, {}, "news")).rejects.toThrow("No AI API key configured");
+    await expect(generateDigest(items, {}, "news")).rejects.toThrow(
+      "No AI API key configured"
+    );
   });
 
   it("generates jobs-specific digest", async () => {

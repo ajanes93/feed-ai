@@ -1,6 +1,8 @@
 import { vi } from "vitest";
 
-export function stubFetchResponses(responses: Record<string, { status: number; body: unknown }>) {
+export function stubFetchResponses(
+  responses: Record<string, { status: number; body: unknown }>
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
@@ -13,8 +15,12 @@ export function stubFetchResponses(responses: Record<string, { status: number; b
           });
         }
       }
-      return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
-    }),
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        json: () => Promise.resolve({}),
+      });
+    })
   );
 }
 
@@ -25,6 +31,6 @@ export function stubFetchJson(body: unknown, ok = true) {
       ok,
       status: ok ? 200 : 500,
       json: () => Promise.resolve(body),
-    }),
+    })
   );
 }

@@ -2,10 +2,26 @@ import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { fetchMock } from "cloudflare:test";
 import { fetchSource, fetchAllSources } from "../services/fetcher";
 import { sourceFactory } from "./factories";
-import { mockFetchResponse, RSS_FEED, ATOM_FEED, JOBICY_RESPONSE } from "./helpers";
+import {
+  mockFetchResponse,
+  RSS_FEED,
+  ATOM_FEED,
+  JOBICY_RESPONSE,
+} from "./helpers";
 
-const rssSource = sourceFactory.build({ id: "test-rss", name: "Test RSS", type: "rss", url: "https://example.com/feed.xml" });
-const apiSource = sourceFactory.build({ id: "test-api", name: "Test API", type: "api", url: "https://example.com/api/jobs", category: "jobs" });
+const rssSource = sourceFactory.build({
+  id: "test-rss",
+  name: "Test RSS",
+  type: "rss",
+  url: "https://example.com/feed.xml",
+});
+const apiSource = sourceFactory.build({
+  id: "test-api",
+  name: "Test API",
+  type: "api",
+  url: "https://example.com/api/jobs",
+  category: "jobs",
+});
 
 beforeAll(() => {
   fetchMock.activate();
@@ -48,9 +64,15 @@ describe("fetchSource", () => {
   });
 
   it("parses JSON API (Jobicy) responses", async () => {
-    mockFetchResponse("https://example.com", "/api/jobs", JOBICY_RESPONSE, 200, {
-      "content-type": "application/json",
-    });
+    mockFetchResponse(
+      "https://example.com",
+      "/api/jobs",
+      JOBICY_RESPONSE,
+      200,
+      {
+        "content-type": "application/json",
+      }
+    );
 
     const items = await fetchSource(apiSource);
 
@@ -71,7 +93,9 @@ describe("fetchSource", () => {
 
   it("returns empty array on network error", async () => {
     const mock = fetchMock.get("https://example.com");
-    mock.intercept({ method: "GET", path: "/feed.xml" }).replyWithError(new Error("Network failure"));
+    mock
+      .intercept({ method: "GET", path: "/feed.xml" })
+      .replyWithError(new Error("Network failure"));
 
     const items = await fetchSource(rssSource);
 
@@ -81,7 +105,8 @@ describe("fetchSource", () => {
   it("limits items to 20", async () => {
     const manyItems = Array.from(
       { length: 30 },
-      (_, i) => `<item><title>Item ${i}</title><link>https://example.com/${i}</link></item>`,
+      (_, i) =>
+        `<item><title>Item ${i}</title><link>https://example.com/${i}</link></item>`
     ).join("");
     const feed = `<?xml version="1.0"?><rss><channel>${manyItems}</channel></rss>`;
 
@@ -131,14 +156,17 @@ describe("fetchAllSources", () => {
     mockFetchResponse("https://example.com", "/feed.xml", RSS_FEED);
     mockFetchResponse("https://example2.com", "/feed2.xml", "error", 500);
 
-    const source2 = sourceFactory.build({ id: "test-rss-2", url: "https://example2.com/feed2.xml" });
+    const source2 = sourceFactory.build({
+      id: "test-rss-2",
+      url: "https://example2.com/feed2.xml",
+    });
     const { health } = await fetchAllSources([rssSource, source2]);
 
     expect(health).toHaveLength(2);
-    const success = health.find((h) => h.sourceId === "test-rss");
-    const failure = health.find((h) => h.sourceId === "test-rss-2");
-    expect(success?.success).toBe(true);
-    expect(failure?.success).toBe(true);
-    expect(failure?.itemCount).toBe(0);
+    const successfulSource = health.find((h) => h.sourceId === "test-rss");
+    const emptySource = health.find((h) => h.sourceId === "test-rss-2");
+    expect(successfulSource?.success).toBe(true);
+    expect(emptySource?.success).toBe(true);
+    expect(emptySource?.itemCount).toBe(0);
   });
 });

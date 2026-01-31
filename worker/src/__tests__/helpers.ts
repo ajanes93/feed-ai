@@ -8,13 +8,16 @@ export function mockFetchResponse(
   path: string,
   body: string,
   status = 200,
-  headers: Record<string, string> = {},
+  headers: Record<string, string> = {}
 ) {
   const mock = fetchMock.get(origin);
   mock.intercept({ method: "GET", path }).reply(status, body, { headers });
 }
 
-export function mockGeminiSuccess(text: string, tokens = { prompt: 100, candidates: 50 }) {
+export function mockGeminiSuccess(
+  text: string,
+  tokens = { prompt: 100, candidates: 50 }
+) {
   const mock = fetchMock.get("https://generativelanguage.googleapis.com");
   mock.intercept({ method: "POST", path: /.*/ }).reply(
     200,
@@ -26,13 +29,17 @@ export function mockGeminiSuccess(text: string, tokens = { prompt: 100, candidat
         totalTokenCount: tokens.prompt + tokens.candidates,
       },
     }),
-    { headers: { "content-type": "application/json" } },
+    { headers: { "content-type": "application/json" } }
   );
 }
 
 // -- AI response builder --
 
-export function aiResponse(items: RawItem[], indices: number[], category = "dev") {
+export function aiResponse(
+  items: RawItem[],
+  indices: number[],
+  category = "dev"
+) {
   return JSON.stringify(
     indices.map((i) => ({
       item_index: i,
@@ -41,7 +48,7 @@ export function aiResponse(items: RawItem[], indices: number[], category = "dev"
       why_it_matters: "Relevant",
       category,
       source_name: "Test Source",
-    })),
+    }))
   );
 }
 
@@ -59,7 +66,7 @@ export async function seedDigest(
     sourceUrl: string;
     position: number;
     whyItMatters?: string;
-  }>,
+  }>
 ) {
   await db.batch([
     db
@@ -68,7 +75,7 @@ export async function seedDigest(
     ...items.map((item) =>
       db
         .prepare(
-          "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           item.id,
@@ -79,8 +86,8 @@ export async function seedDigest(
           item.whyItMatters ?? null,
           item.sourceName,
           item.sourceUrl,
-          item.position,
-        ),
+          item.position
+        )
     ),
   ]);
 }

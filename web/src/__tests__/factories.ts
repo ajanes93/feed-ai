@@ -12,7 +12,8 @@ export const digestItemFactory = Factory.define<DigestItem>(({ sequence }) => ({
 }));
 
 export const digestFactory = Factory.define<Digest>(({ sequence, params }) => {
-  const date = params.date ?? `2025-01-${String(28 - sequence).padStart(2, "0")}`;
+  const date =
+    params.date ?? `2025-01-${String(28 - sequence).padStart(2, "0")}`;
   const items = params.items ?? digestItemFactory.buildList(2);
   return {
     id: `digest-${date}`,
