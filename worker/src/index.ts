@@ -263,15 +263,58 @@ async function rebuildDigest(env: Env, date: string): Promise<Response> {
   return buildAndSaveDigest(env, date);
 }
 
+// --- Digest pipeline helpers ---
+
+const sourceCategoryMap = new Map(sources.map((s) => [s.id, s.category]));
+
+async function deduplicateItems(items: RawItem[], db: D1Database): Promise<RawItem[]> {
+  const recentUrls = await db.prepare(
+    "SELECT source_url FROM items WHERE digest_id IN (SELECT id FROM digests WHERE date >= ?)"
+  )
+    .bind(new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0])
+    .all();
+  const seenUrls = new Set(recentUrls.results.map((r) => r.source_url as string));
+  const deduped = items.filter((item) => !seenUrls.has(item.link));
+  console.log(`Deduped: ${items.length} → ${deduped.length} items (${seenUrls.size} seen)`);
+  return deduped;
+}
+
+function capPerSource(items: RawItem[], max: number): RawItem[] {
+  const bySource = new Map<string, RawItem[]>();
+  for (const item of items) {
+    const arr = bySource.get(item.sourceId) || [];
+    arr.push(item);
+    bySource.set(item.sourceId, arr);
+  }
+  const capped: RawItem[] = [];
+  for (const sourceItems of bySource.values()) {
+    sourceItems.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
+    capped.push(...sourceItems.slice(0, max));
+  }
+  console.log(`Capped per-source: ${items.length} → ${capped.length} items (${bySource.size} sources)`);
+  return capped;
+}
+
+function splitJobsAndNews(items: RawItem[]): { jobItems: RawItem[]; newsItems: RawItem[] } {
+  const jobItems: RawItem[] = [];
+  const newsItems: RawItem[] = [];
+  for (const item of items) {
+    if (sourceCategoryMap.get(item.sourceId) === "jobs") {
+      jobItems.push(item);
+    } else {
+      newsItems.push(item);
+    }
+  }
+  return { jobItems, newsItems };
+}
+
 async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   const digestId = `digest-${date}`;
 
-  // Fetch all sources
   console.log("Fetching sources...");
   const { items: allRawItems, health } = await fetchAllSources(sources);
   console.log(`Fetched ${allRawItems.length} items`);
 
-  // Record source health
   await recordSourceHealth(env, health);
 
   if (allRawItems.length === 0) {
@@ -284,75 +327,44 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     return new Response("No items fetched", { status: 500 });
   }
 
-  // Dedup: exclude items already in recent digests (last 7 days)
-  const recentUrls = await env.DB.prepare(
-    "SELECT source_url FROM items WHERE digest_id IN (SELECT id FROM digests WHERE date > ?)"
-  )
-    .bind(new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0])
-    .all();
-  const seenUrls = new Set(recentUrls.results.map((r) => r.source_url as string));
-  const dedupedItems = allRawItems.filter((item) => !seenUrls.has(item.link));
-  console.log(`Deduped: ${allRawItems.length} → ${dedupedItems.length} items (${seenUrls.size} seen)`);
-
+  const dedupedItems = await deduplicateItems(allRawItems, env.DB);
   if (dedupedItems.length === 0) {
     return new Response("All fetched items were duplicates of recent digests", { status: 200 });
   }
 
-  // Cap at 3 most recent items per source for balanced coverage
-  const bySource = new Map<string, RawItem[]>();
-  for (const item of dedupedItems) {
-    const arr = bySource.get(item.sourceId) || [];
-    arr.push(item);
-    bySource.set(item.sourceId, arr);
-  }
-  const rawItems: RawItem[] = [];
-  for (const items of bySource.values()) {
-    items.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
-    rawItems.push(...items.slice(0, 3));
-  }
-  console.log(`Capped per-source: ${dedupedItems.length} → ${rawItems.length} items (${bySource.size} sources)`);
+  const rawItems = capPerSource(dedupedItems, 3);
+  const { jobItems, newsItems } = splitJobsAndNews(rawItems);
 
-  // Split jobs from news/dev for separate processing
-  const jobItems = rawItems.filter((item) => {
-    const src = sources.find((s) => s.id === item.sourceId);
-    return src?.category === "jobs";
-  });
-  const newsItems = rawItems.filter((item) => {
-    const src = sources.find((s) => s.id === item.sourceId);
-    return src?.category !== "jobs";
-  });
-
-  // Generate news/dev digest
   const apiKeys = { gemini: env.GEMINI_API_KEY, anthropic: env.ANTHROPIC_API_KEY };
   const allDigestItems: DigestItem[] = [];
   const allAiUsages: AIUsageEntry[] = [];
 
   if (newsItems.length > 0) {
     console.log(`Generating news digest from ${newsItems.length} items...`);
-    const { items, aiUsages } = await generateDigest(newsItems, apiKeys, digestId, "news");
+    const { items, aiUsages } = await generateDigest(newsItems, apiKeys, "news");
     allDigestItems.push(...items);
     allAiUsages.push(...aiUsages);
     console.log(`News: ${items.length} items`);
   }
 
-  // Generate jobs digest separately with dedicated prompt
   if (jobItems.length > 0) {
     console.log(`Generating jobs digest from ${jobItems.length} items...`);
-    const { items, aiUsages } = await generateDigest(jobItems, apiKeys, digestId, "jobs");
-    // Re-index positions after news items
-    const offset = allDigestItems.length;
-    for (const item of items) {
-      item.position += offset;
-      item.id = `${digestId}-${item.position}`;
-    }
+    const { items, aiUsages } = await generateDigest(jobItems, apiKeys, "jobs");
     allDigestItems.push(...items);
     allAiUsages.push(...aiUsages);
     console.log(`Jobs: ${items.length} items`);
   }
 
+  // Assign digestId and sequential positions to all items
+  for (let i = 0; i < allDigestItems.length; i++) {
+    allDigestItems[i].id = `${digestId}-${i}`;
+    allDigestItems[i].digestId = digestId;
+    allDigestItems[i].position = i;
+  }
+
   console.log(`Total digest: ${allDigestItems.length} items`);
 
-  // Record AI usage (best-effort, don't fail digest on logging errors)
+  // Record AI usage (best-effort)
   const usageResults = await Promise.allSettled(
     allAiUsages.map(async (usage) => {
       await recordAIUsage(env.DB, usage);
@@ -369,8 +381,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   );
   logSettledFailures("AI usage recording", usageResults);
 
-  // Save to D1 using batch for atomicity
-  const statements = [
+  await env.DB.batch([
     env.DB.prepare(
       "INSERT INTO digests (id, date, item_count) VALUES (?, ?, ?)"
     ).bind(digestId, date, allDigestItems.length),
@@ -390,9 +401,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
         item.position
       )
     ),
-  ];
-
-  await env.DB.batch(statements);
+  ]);
 
   return new Response(`Generated digest with ${allDigestItems.length} items`, {
     status: 200,

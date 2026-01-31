@@ -57,6 +57,15 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
     touchStartScrollTop = scrollEl?.scrollTop ?? 0;
   }
 
+  function getSwipeContext(dx: number) {
+    const catIdx = options.categories.indexOf(options.activeCategory.value);
+    const goingRight = dx > 0;
+    const isDigestNav =
+      (goingRight && catIdx === 0 && options.hasPrevious.value) ||
+      (!goingRight && catIdx === options.categories.length - 1 && options.hasNext.value);
+    return { catIdx, goingRight, isDigestNav };
+  }
+
   function onTouchMove(e: TouchEvent) {
     const touch = e.touches[0];
     if (!touch || transitioning.value) return;
@@ -69,31 +78,17 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
     }
 
     if (!isHorizontalSwipe) {
-      if (dy > 0 && !refreshing.value && touchStartScrollTop === 0) {
+      if (dy > 0 && !refreshing.value && touchStartScrollTop <= 2) {
         const scrollEl = document.querySelector("[data-scroll-container]");
-        if (scrollEl && scrollEl.scrollTop === 0) {
+        if (scrollEl && scrollEl.scrollTop <= 2) {
           pullDistance.value = Math.min(120, dy * 0.4);
         }
       }
       return;
     }
 
-    // For horizontal swipes, check if we should change category or navigate digests
-    const catIdx = options.categories.indexOf(options.activeCategory.value);
-    const atLeftEdge = catIdx === 0;
-    const atRightEdge = catIdx === options.categories.length - 1;
-
-    const isDigestNav =
-      (dx > 0 && atLeftEdge && options.hasPrevious.value) ||
-      (dx < 0 && atRightEdge && options.hasNext.value);
-
-    if (isDigestNav) {
-      const canGo = dx > 0 ? options.hasPrevious.value : options.hasNext.value;
-      swipeOffset.value = dx * (canGo ? 1 : 0.2);
-    } else {
-      // Show subtle resistance for category swipe
-      swipeOffset.value = dx * 0.15;
-    }
+    const { isDigestNav } = getSwipeContext(dx);
+    swipeOffset.value = dx * (isDigestNav ? 1 : 0.15);
 
     lastTouchX = touch.clientX;
     lastTouchTime = Date.now();
@@ -155,15 +150,7 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
       Math.abs(dx) > SWIPE_THRESHOLD || Math.abs(velocity) > VELOCITY_THRESHOLD;
 
     if (shouldAct) {
-      const goingRight = dx > 0;
-      const catIdx = options.categories.indexOf(options.activeCategory.value);
-      const atLeftEdge = catIdx === 0;
-      const atRightEdge = catIdx === options.categories.length - 1;
-
-      // Check if this should be a digest navigation (at edge of categories)
-      const isDigestNav =
-        (goingRight && atLeftEdge && options.hasPrevious.value) ||
-        (!goingRight && atRightEdge && options.hasNext.value);
+      const { catIdx, goingRight, isDigestNav } = getSwipeContext(dx);
 
       if (isDigestNav) {
         await animateSwipeTransition(goingRight);

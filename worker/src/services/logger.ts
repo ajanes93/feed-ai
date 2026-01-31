@@ -27,20 +27,24 @@ export async function logEvent(db: D1Database, entry: LogEntry) {
   const consoleMethod = entry.level === "error" ? "error" : entry.level === "warn" ? "warn" : "log";
   console[consoleMethod](`[${entry.category}] ${entry.message}`, entry.details ?? "");
 
-  await db
-    .prepare(
-      "INSERT INTO error_logs (id, level, category, message, details, source_id, digest_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    )
-    .bind(
-      id,
-      entry.level,
-      entry.category,
-      entry.message,
-      entry.details ? JSON.stringify(entry.details).slice(0, 5000) : null,
-      entry.sourceId ?? null,
-      entry.digestId ?? null
-    )
-    .run();
+  try {
+    await db
+      .prepare(
+        "INSERT INTO error_logs (id, level, category, message, details, source_id, digest_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        id,
+        entry.level,
+        entry.category,
+        entry.message,
+        entry.details ? JSON.stringify(entry.details).slice(0, 5000) : null,
+        entry.sourceId ?? null,
+        entry.digestId ?? null
+      )
+      .run();
+  } catch (err) {
+    console.error("Failed to write log entry:", err);
+  }
 }
 
 export async function recordAIUsage(db: D1Database, usage: AIUsageEntry) {

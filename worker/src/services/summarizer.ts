@@ -288,7 +288,6 @@ function applyCategoryLimits(items: DigestItemRaw[]): DigestItemRaw[] {
 export async function generateDigest(
   items: RawItem[],
   apiKeys: { gemini?: string; anthropic?: string },
-  digestId: string,
   type: DigestType = "news"
 ): Promise<DigestResult> {
   const prompt = type === "jobs" ? buildJobsPrompt(items) : buildNewsPrompt(items);
@@ -316,9 +315,9 @@ export async function generateDigest(
       .map((raw) => [raw.link, new Date(raw.publishedAt!).toISOString()])
   );
 
-  const digestItems = limited.map((item, index) => ({
-    id: `${digestId}-${index}`,
-    digestId,
+  const digestItems: DigestItem[] = limited.map((item, index) => ({
+    id: String(index),
+    digestId: "",
     category: item.category,
     title: item.title,
     summary: item.summary,
