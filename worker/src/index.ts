@@ -59,7 +59,6 @@ function mapSourceHealth(row: Record<string, unknown>) {
 function mapAIUsage(row: Record<string, unknown>) {
   return {
     id: row.id,
-    digestId: row.digest_id,
     model: row.model,
     provider: row.provider,
     inputTokens: row.input_tokens,
