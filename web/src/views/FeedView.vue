@@ -319,6 +319,7 @@ onMounted(async () => {
                 >
                   <div
                     data-scroll-container
+                    :data-testid="`feed-${cat}`"
                     class="h-full overflow-y-scroll overscroll-contain pb-[calc(2rem+env(safe-area-inset-bottom))]"
                   >
                     <DigestFeed :items="itemsForCategory(cat)" />

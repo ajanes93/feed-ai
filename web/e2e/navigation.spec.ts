@@ -1,4 +1,4 @@
-import { test, expect, buildTestData, activeSlide } from "./fixtures";
+import { test, expect, buildTestData, feedSlide } from "./fixtures";
 
 test.describe("Date navigation", () => {
   test("displays formatted date in header", async ({ mockPage }) => {
@@ -20,20 +20,20 @@ test.describe("Date navigation", () => {
 
   test("previous button navigates to older digest", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(activeSlide(mockPage).getByText("AI Breakthrough")).toBeVisible();
+    await expect(feedSlide(mockPage).getByText("AI Breakthrough")).toBeVisible();
 
     await mockPage.getByLabel("Previous digest").click();
-    await expect(activeSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
   });
 
   test("navigating to older digest updates the URL", async ({ mockPage }) => {
     const { yesterday } = buildTestData();
 
     await mockPage.goto("/");
-    await expect(activeSlide(mockPage).getByText("AI Breakthrough")).toBeVisible();
+    await expect(feedSlide(mockPage).getByText("AI Breakthrough")).toBeVisible();
 
     await mockPage.getByLabel("Previous digest").click();
-    await expect(activeSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
 
     await expect(mockPage).toHaveURL(new RegExp(yesterday));
   });
@@ -43,23 +43,23 @@ test.describe("Date navigation", () => {
 
     await mockPage.goto(`/digest/${yesterday}`);
 
-    await expect(activeSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
   });
 
   test("previous digest URL persists after reload", async ({ mockPage }) => {
     const { yesterday } = buildTestData();
 
     await mockPage.goto("/");
-    await expect(activeSlide(mockPage).getByText("AI Breakthrough")).toBeVisible();
+    await expect(feedSlide(mockPage).getByText("AI Breakthrough")).toBeVisible();
 
     await mockPage.getByLabel("Previous digest").click();
     await expect(mockPage).toHaveURL(new RegExp(yesterday));
-    await expect(activeSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
 
     await mockPage.reload();
 
     await expect(mockPage).toHaveURL(new RegExp(yesterday));
-    await expect(activeSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
   });
 });
 

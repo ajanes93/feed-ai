@@ -1,10 +1,10 @@
-import { test, expect, activeSlide } from "./fixtures";
+import { test, expect, feedSlide } from "./fixtures";
 
 test.describe("Feed layout", () => {
   test("digest cards are visible in the viewport", async ({ mockPage }) => {
     await mockPage.goto("/");
 
-    const cards = activeSlide(mockPage).locator("article");
+    const cards = feedSlide(mockPage).locator("article");
     await expect(cards.first()).toBeVisible();
     await expect(cards.first()).toBeInViewport();
   });
@@ -12,7 +12,7 @@ test.describe("Feed layout", () => {
   test("all cards render with non-zero height", async ({ mockPage }) => {
     await mockPage.goto("/");
 
-    const cards = activeSlide(mockPage).locator("article");
+    const cards = feedSlide(mockPage).locator("article");
     await expect(cards.first()).toBeVisible();
 
     const count = await cards.count();
@@ -31,7 +31,7 @@ test.describe("Feed layout", () => {
   }) => {
     await mockPage.goto("/");
 
-    const container = activeSlide(mockPage);
+    const container = feedSlide(mockPage);
     const firstCard = container.locator("article").first();
     await expect(firstCard).toBeVisible();
 
@@ -48,7 +48,7 @@ test.describe("Feed layout", () => {
   test("feed container fills viewport height", async ({ mockPage }) => {
     await mockPage.goto("/");
 
-    await expect(activeSlide(mockPage).locator("article").first()).toBeVisible();
+    await expect(feedSlide(mockPage).locator("article").first()).toBeVisible();
 
     const viewport = mockPage.viewportSize();
     const rootEl = mockPage.locator("body > #app > div").first();
@@ -63,7 +63,7 @@ test.describe("Feed content", () => {
   test("renders card titles from digest data", async ({ mockPage }) => {
     await mockPage.goto("/");
 
-    const slide = activeSlide(mockPage);
+    const slide = feedSlide(mockPage);
     await expect(slide.getByText("AI Breakthrough")).toBeVisible();
     await expect(slide.getByText("Rust 2.0 Released")).toBeVisible();
   });
@@ -72,7 +72,7 @@ test.describe("Feed content", () => {
     await mockPage.goto("/");
 
     await expect(
-      activeSlide(mockPage).getByText("Summary for story 1"),
+      feedSlide(mockPage).getByText("Summary for story 1"),
     ).toBeVisible();
   });
 
@@ -80,7 +80,7 @@ test.describe("Feed content", () => {
     await mockPage.goto("/");
 
     await expect(
-      activeSlide(mockPage).locator("article").first().getByText("AI"),
+      feedSlide(mockPage).locator("article").first().getByText("AI"),
     ).toBeVisible();
   });
 
@@ -88,7 +88,7 @@ test.describe("Feed content", () => {
     await mockPage.goto("/");
 
     await expect(
-      activeSlide(mockPage).locator("article").first().getByText("Test Source"),
+      feedSlide(mockPage).locator("article").first().getByText("Test Source"),
     ).toBeVisible();
   });
 
@@ -96,7 +96,7 @@ test.describe("Feed content", () => {
     await mockPage.goto("/");
 
     await expect(
-      activeSlide(mockPage).getByText("This matters for testing").first(),
+      feedSlide(mockPage).getByText("This matters for testing").first(),
     ).toBeVisible();
   });
 });
