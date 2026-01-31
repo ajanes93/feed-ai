@@ -15,9 +15,7 @@ defineEmits<{
 </script>
 
 <template>
-  <div
-    class="fixed top-0 right-0 left-0 z-10 bg-gray-950 px-5 pt-4 pb-3"
-  >
+  <div class="px-5 pt-4 pb-2">
     <div class="mx-auto flex max-w-lg items-center justify-between">
       <motion.button
         :disabled="!hasPrevious"
@@ -73,9 +71,6 @@ defineEmits<{
           />
         </svg>
       </motion.button>
-    </div>
-    <div class="mx-auto mt-3 max-w-lg">
-      <slot name="filters" />
     </div>
   </div>
 </template>

@@ -27,15 +27,18 @@ export function useDigest() {
     }
   }
 
-  async function fetchDigest(url: string, notFoundMessage?: string) {
+  async function fetchDigest(url: string, notFoundMessage?: string, keepCurrent = false) {
+    if (!keepCurrent) {
+      digest.value = null;
+    }
     loading.value = true;
     error.value = null;
-    digest.value = null;
 
     try {
       const res = await fetch(url);
       if (!res.ok) {
         error.value = res.status === 404 ? notFoundMessage || "Failed to load digest" : "Failed to load digest";
+        digest.value = null;
         return;
       }
       digest.value = await res.json();
@@ -45,6 +48,7 @@ export function useDigest() {
       }
     } catch (e) {
       error.value = "Failed to load digest";
+      digest.value = null;
       console.error(e);
     } finally {
       loading.value = false;
@@ -62,9 +66,9 @@ export function useDigest() {
     }
   }
 
-  async function fetchDate(date: string) {
+  async function fetchDate(date: string, keepCurrent = false) {
     viewingToday.value = false;
-    await fetchDigest(`${API_BASE}/api/digest/${date}`);
+    await fetchDigest(`${API_BASE}/api/digest/${date}`, undefined, keepCurrent);
   }
 
   function showTodayEmpty() {
@@ -79,13 +83,13 @@ export function useDigest() {
     if (viewingToday.value) {
       if (availableDates.value.length === 0) return false;
       currentDateIndex.value = 0;
-      await fetchDate(availableDates.value[0]);
+      await fetchDate(availableDates.value[0], true);
       return true;
     }
     const nextIdx = currentDateIndex.value + 1;
     if (nextIdx >= availableDates.value.length) return false;
     currentDateIndex.value = nextIdx;
-    await fetchDate(availableDates.value[nextIdx]);
+    await fetchDate(availableDates.value[nextIdx], true);
     return true;
   }
 
@@ -103,7 +107,7 @@ export function useDigest() {
     const nextIdx = currentDateIndex.value - 1;
     if (nextIdx < 0) return false;
     currentDateIndex.value = nextIdx;
-    await fetchDate(availableDates.value[nextIdx]);
+    await fetchDate(availableDates.value[nextIdx], true);
     return true;
   }
 
