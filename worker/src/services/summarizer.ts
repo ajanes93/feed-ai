@@ -56,6 +56,7 @@ Select up to ${maxItems} items total (up to ${CATEGORY_LIMITS.ai} AI, up to ${CA
 - Significant open source releases
 - Industry news that affects developers
 - Ensure diversity across sources — don't pick all items from one source
+- If the same story appears from multiple sources, pick only ONE (prefer the most detailed)
 
 For each selected item, provide:
 - item_index: The [number] shown before the item above
