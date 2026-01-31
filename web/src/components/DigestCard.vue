@@ -142,15 +142,16 @@ function formatDate(iso: string): string {
     </div>
     <!-- Long-press actions popover -->
     <Teleport to="body">
-      <div
-        v-if="showActions"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-        @click="showActions = false"
-      >
+      <Transition name="modal">
         <div
-          class="mx-6 w-full max-w-xs rounded-2xl border border-gray-700 bg-gray-900 p-1 shadow-xl"
-          @click.stop
+          v-if="showActions"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          @click="showActions = false"
         >
+          <div
+            class="mx-6 w-full max-w-xs rounded-2xl border border-gray-700 bg-gray-900/95 p-1 shadow-2xl backdrop-blur-xl"
+            @click.stop
+          >
           <p class="truncate px-4 py-2 text-sm text-gray-400">
             {{ item.title }}
           </p>
@@ -195,7 +196,35 @@ function formatDate(iso: string): string {
             Open original
           </button>
         </div>
-      </div>
+        </div>
+      </Transition>
     </Teleport>
   </article>
 </template>
+
+<style scoped>
+.modal-enter-active {
+  transition: opacity 0.2s ease-out;
+}
+.modal-enter-active > div {
+  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.modal-leave-active {
+  transition: opacity 0.15s ease-in;
+}
+.modal-leave-active > div {
+  transition: transform 0.15s ease-in;
+}
+.modal-enter-from {
+  opacity: 0;
+}
+.modal-enter-from > div {
+  transform: scale(0.9) translateY(10px);
+}
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-leave-to > div {
+  transform: scale(0.95);
+}
+</style>

@@ -19,12 +19,9 @@ defineProps<{
       class="mx-auto flex max-w-lg flex-col gap-3 px-4"
     >
       <DigestCard
-        v-for="(item, idx) in items"
+        v-for="item in items"
         :key="item.id"
-        v-motion
         :item="item"
-        :initial="{ opacity: 0, y: 8 }"
-        :enter="{ opacity: 1, y: 0, transition: { delay: idx * 50, duration: 300 } }"
       />
     </TransitionGroup>
   </div>
@@ -32,16 +29,22 @@ defineProps<{
 
 <style scoped>
 .card-enter-active {
-  transition: all 0.3s ease-out;
+  transition:
+    opacity 0.25s ease-out,
+    transform 0.25s ease-out;
 }
 
 .card-leave-active {
-  transition: all 0.2s ease-in;
+  transition:
+    opacity 0.15s ease-in,
+    transform 0.15s ease-in;
+  position: absolute;
+  width: 100%;
 }
 
 .card-enter-from {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(12px);
 }
 
 .card-leave-to {
@@ -50,6 +53,6 @@ defineProps<{
 }
 
 .card-move {
-  transition: transform 0.3s ease-out;
+  transition: transform 0.25s ease-out;
 }
 </style>

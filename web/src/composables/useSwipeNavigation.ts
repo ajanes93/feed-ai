@@ -12,8 +12,21 @@ interface SwipeNavigationOptions {
 }
 
 const SWIPE_THRESHOLD = 50;
-const VELOCITY_THRESHOLD = 0.25; // px/ms
+const VELOCITY_THRESHOLD = 0.3; // px/ms
 const PULL_THRESHOLD = 80;
+
+// Clamp helper
+function clamp(val: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, val));
+}
+
+// Rubber-band dampening: feels like pulling against resistance
+function rubberBand(offset: number, limit: number): number {
+  const sign = offset < 0 ? -1 : 1;
+  const abs = Math.abs(offset);
+  // Asymptotic dampening — never exceeds limit
+  return sign * limit * (1 - Math.exp(-abs / limit));
+}
 
 export function useSwipeNavigation(options: SwipeNavigationOptions) {
   const swipeOffset = ref(0);
@@ -25,23 +38,25 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
   let touchStartX = 0;
   let touchStartY = 0;
   let touchStartScrollTop = 0;
-  let touchStartTime = 0;
   let isHorizontalSwipe: boolean | null = null;
   let rafId = 0;
   let pendingOffset = 0;
+
+  // Track velocity with last N samples for smoothness
+  let velocitySamples: Array<{ x: number; t: number }> = [];
 
   const swipeStyle = computed(() => {
     if (swipeOffset.value === 0 && !isAnimating.value) return {};
     const offset = swipeOffset.value;
     const absOffset = Math.abs(offset);
-    const opacity = Math.max(0.3, 1 - absOffset / 400);
-    const scale = Math.max(0.95, 1 - absOffset / 3000);
+    const opacity = clamp(1 - absOffset / 500, 0.2, 1);
+    const scale = clamp(1 - absOffset / 4000, 0.93, 1);
 
     return {
       transform: `translate3d(${offset}px, 0, 0) scale(${scale})`,
       opacity: String(opacity),
       transition: isAnimating.value
-        ? "transform 350ms cubic-bezier(0.2, 0.9, 0.3, 1), opacity 350ms cubic-bezier(0.2, 0.9, 0.3, 1)"
+        ? "transform 380ms cubic-bezier(0.25, 1, 0.5, 1), opacity 380ms cubic-bezier(0.25, 1, 0.5, 1)"
         : "none",
       willChange: "transform, opacity",
     };
@@ -56,13 +71,32 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
     });
   }
 
+  function recordVelocity(x: number) {
+    const now = performance.now();
+    velocitySamples.push({ x, t: now });
+    // Keep only last 100ms of samples
+    const cutoff = now - 100;
+    velocitySamples = velocitySamples.filter((s) => s.t >= cutoff);
+  }
+
+  function getVelocity(): number {
+    if (velocitySamples.length < 2) return 0;
+    const first = velocitySamples[0];
+    const last = velocitySamples[velocitySamples.length - 1];
+    const dt = last.t - first.t;
+    if (dt === 0) return 0;
+    return (last.x - first.x) / dt; // px/ms
+  }
+
   function onTouchStart(e: TouchEvent) {
     const touch = e.touches[0];
     if (!touch || transitioning.value) return;
     touchStartX = touch.clientX;
     touchStartY = touch.clientY;
-    touchStartTime = Date.now();
     isHorizontalSwipe = null;
+    velocitySamples = [];
+
+    // Allow interrupting a spring-back animation
     isAnimating.value = false;
     swipeOffset.value = 0;
 
@@ -78,12 +112,21 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
   function getSwipeContext(dx: number) {
     const catIdx = options.categories.indexOf(options.activeCategory.value);
     const goingRight = dx > 0;
-    const isDigestNav =
-      (goingRight && catIdx === 0 && options.hasPrevious.value) ||
-      (!goingRight &&
-        catIdx === options.categories.length - 1 &&
-        options.hasNext.value);
-    return { catIdx, goingRight, isDigestNav };
+
+    // Can we navigate digests in this direction?
+    const canNavDigest =
+      (goingRight && options.hasPrevious.value) ||
+      (!goingRight && options.hasNext.value);
+
+    // At category boundary heading toward digest nav?
+    const atCategoryBoundary =
+      (goingRight && catIdx === 0) ||
+      (!goingRight && catIdx === options.categories.length - 1);
+
+    const isDigestNav = atCategoryBoundary && canNavDigest;
+    const isRubberBand = atCategoryBoundary && !canNavDigest;
+
+    return { catIdx, goingRight, isDigestNav, isRubberBand };
   }
 
   function onTouchMove(e: TouchEvent) {
@@ -93,7 +136,7 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
     const dx = touch.clientX - touchStartX;
     const dy = touch.clientY - touchStartY;
 
-    // Determine direction lock on first significant movement
+    // Direction lock on first significant movement
     if (isHorizontalSwipe === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
       isHorizontalSwipe = Math.abs(dx) > Math.abs(dy) * 1.2;
     }
@@ -109,13 +152,23 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
       return;
     }
 
-    // Prevent vertical scroll while swiping horizontally
     e.preventDefault();
+    recordVelocity(touch.clientX);
 
-    const { isDigestNav } = getSwipeContext(dx);
+    const { isDigestNav, isRubberBand } = getSwipeContext(dx);
 
-    // Full 1:1 tracking for digest nav, damped for category hints
-    const offset = isDigestNav ? dx : dx * 0.2;
+    let offset: number;
+    if (isDigestNav) {
+      // 1:1 finger tracking for digest navigation
+      offset = dx;
+    } else if (isRubberBand) {
+      // Rubber-band at boundaries — feels like resistance
+      offset = rubberBand(dx, 80);
+    } else {
+      // Category hint — dampened tracking
+      offset = dx * 0.25;
+    }
+
     scheduleUpdate(offset);
   }
 
@@ -129,46 +182,58 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
     pullDistance.value = 0;
   }
 
-  function animateOffset(target: number, duration: number): Promise<void> {
+  function waitForTransition(durationMs: number): Promise<void> {
     return new Promise((resolve) => {
-      isAnimating.value = true;
-      swipeOffset.value = target;
-      setTimeout(() => {
-        resolve();
-      }, duration);
+      setTimeout(resolve, durationMs + 20); // small buffer for paint
     });
   }
 
-  async function animateSwipeTransition(goingRight: boolean) {
+  async function springBack() {
+    isAnimating.value = true;
+    swipeOffset.value = 0;
+    await waitForTransition(380);
+    isAnimating.value = false;
+  }
+
+  async function animateSwipeTransition(
+    goingRight: boolean,
+    velocity: number,
+  ) {
     transitioning.value = true;
     try {
-      // Slide current content off-screen
-      await animateOffset(
-        goingRight ? window.innerWidth * 0.7 : -window.innerWidth * 0.7,
-        300,
-      );
+      // Calculate exit distance based on velocity — faster swipe = further exit
+      const exitDistance =
+        Math.max(0.6, Math.min(1, Math.abs(velocity) * 2)) *
+        window.innerWidth;
 
-      // Perform the data fetch
+      // Slide current content off-screen
+      isAnimating.value = true;
+      swipeOffset.value = goingRight ? exitDistance : -exitDistance;
+      await waitForTransition(380);
+
+      // Fetch new data
       if (goingRight) {
         await options.onSwipeRight();
       } else {
         await options.onSwipeLeft();
       }
 
-      // Reset category for new digest
+      // Reset category
       options.onCategoryChange(options.categories[0]);
 
-      // Position new content on opposite side (no animation)
+      // Position new content on opposite side (instant)
       isAnimating.value = false;
       swipeOffset.value = goingRight
-        ? -window.innerWidth * 0.3
-        : window.innerWidth * 0.3;
+        ? -window.innerWidth * 0.25
+        : window.innerWidth * 0.25;
 
-      // Force layout before animating in
+      // Wait one frame for layout
       await new Promise((r) => requestAnimationFrame(r));
 
       // Animate new content to center
-      await animateOffset(0, 350);
+      isAnimating.value = true;
+      swipeOffset.value = 0;
+      await waitForTransition(380);
 
       isAnimating.value = false;
     } finally {
@@ -184,14 +249,14 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
 
     const touch = e.changedTouches[0];
     if (!touch || transitioning.value || !isHorizontalSwipe) {
-      swipeOffset.value = 0;
+      if (!transitioning.value) swipeOffset.value = 0;
       await handlePullRefresh();
       return;
     }
 
     const dx = touch.clientX - touchStartX;
-    const dt = Math.max(1, Date.now() - touchStartTime);
-    const velocity = dx / dt;
+    const velocity = getVelocity();
+    velocitySamples = [];
 
     const shouldAct =
       Math.abs(dx) > SWIPE_THRESHOLD ||
@@ -201,7 +266,7 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
       const { catIdx, goingRight, isDigestNav } = getSwipeContext(dx);
 
       if (isDigestNav) {
-        await animateSwipeTransition(goingRight);
+        await animateSwipeTransition(goingRight, velocity);
         return;
       }
 
@@ -214,8 +279,7 @@ export function useSwipeNavigation(options: SwipeNavigationOptions) {
     }
 
     // Spring back to center
-    await animateOffset(0, 300);
-    isAnimating.value = false;
+    await springBack();
   }
 
   return {
