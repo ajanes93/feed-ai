@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import DashboardView from "../../views/DashboardView.vue";
+import type { DashboardData } from "../../composables/useDashboard";
 import { stubFetchJson } from "../helpers";
 import { dashboardDataFactory, sourceHealthFactory } from "../factories";
 
@@ -96,7 +97,7 @@ describe("DashboardView", () => {
     it("shows Stale status for stale source", async () => {
       const data = dashboardDataFactory.build({
         sources: [sourceHealthFactory.build({ stale: true })],
-      });
+      } as Partial<DashboardData>);
       const { wrapper } = await render(data);
       expect(wrapper.text()).toContain("Stale");
     });
@@ -137,7 +138,11 @@ describe("DashboardView", () => {
       const { wrapper } = await render();
 
       // Replace fetch with updated data
-      stubFetchJson(dashboardDataFactory.build({ totalDigests: 99 }));
+      stubFetchJson(
+        dashboardDataFactory.build({
+          totalDigests: 99,
+        } as Partial<DashboardData>)
+      );
       await wrapper.find("button").trigger("click");
       await flushPromises();
 

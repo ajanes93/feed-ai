@@ -17,11 +17,6 @@ const DIGEST = digestFactory.build({
 
 const DIGEST_LIST = [{ date: "2025-01-28" }, { date: "2025-01-27" }];
 
-const DIGEST_JAN_27 = digestFactory.build({
-  date: "2025-01-27",
-  items: [digestItemFactory.build({ category: "ai", title: "Old Story" })],
-});
-
 // Stub vue-router
 const mockRoute = { params: {} as Record<string, string>, query: {} };
 const mockRouter = { replace: vi.fn() };

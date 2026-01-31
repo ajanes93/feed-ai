@@ -50,11 +50,11 @@ export const errorLogFactory = Factory.define<ErrorLogEntry>(
 
 export const dashboardDataFactory = Factory.define<DashboardData>(
   ({ params }) => ({
-    ai: params.ai ?? {
-      recentCalls: [aiUsageFactory.build()],
-      totalTokens: 150,
-      rateLimitCount: 0,
-      fallbackCount: 0,
+    ai: {
+      recentCalls: params.ai?.recentCalls ?? [aiUsageFactory.build()],
+      totalTokens: params.ai?.totalTokens ?? 150,
+      rateLimitCount: params.ai?.rateLimitCount ?? 0,
+      fallbackCount: params.ai?.fallbackCount ?? 0,
     },
     sources: params.sources ?? [sourceHealthFactory.build()],
     errors: params.errors ?? [

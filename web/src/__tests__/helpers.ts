@@ -25,12 +25,7 @@ export function stubFetchResponses(
 }
 
 export function stubFetchJson(body: unknown, ok = true) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue({
-      ok,
-      status: ok ? 200 : 500,
-      json: () => Promise.resolve(body),
-    })
-  );
+  stubFetchResponses({
+    "": { status: ok ? 200 : 500, body },
+  });
 }

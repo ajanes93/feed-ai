@@ -1,28 +1,18 @@
 import { config, VueWrapper } from "@vue/test-utils";
 
 // Stub motion-v components as pass-through wrappers
-const motionStub = {
-  template: '<div v-bind="$attrs"><slot /></div>',
+const createMotionStub = (tag: string) => ({
+  template: `<${tag} v-bind="$attrs"><slot /></${tag}>`,
   inheritAttrs: false,
-};
-
-const motionButtonStub = {
-  template: '<button v-bind="$attrs"><slot /></button>',
-  inheritAttrs: false,
-};
-
-const motionArticleStub = {
-  template: '<article v-bind="$attrs"><slot /></article>',
-  inheritAttrs: false,
-};
+});
 
 config.global.stubs = {
-  "motion.div": motionStub,
-  "motion.span": motionStub,
-  "motion.p": motionStub,
-  "motion.button": motionButtonStub,
-  "motion.article": motionArticleStub,
-  "motion.section": motionStub,
+  "motion.div": createMotionStub("div"),
+  "motion.span": createMotionStub("span"),
+  "motion.p": createMotionStub("p"),
+  "motion.button": createMotionStub("button"),
+  "motion.article": createMotionStub("article"),
+  "motion.section": createMotionStub("section"),
   AnimatePresence: { template: "<span><slot /></span>" },
   Teleport: { template: "<span><slot /></span>" },
   "router-link": {
