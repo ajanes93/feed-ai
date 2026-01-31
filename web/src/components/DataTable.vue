@@ -20,7 +20,7 @@ defineProps<{
           </th>
         </tr>
       </thead>
-      <tbody>
+      <tbody v-auto-animate="{ duration: 150 }">
         <slot v-if="rowCount > 0" />
         <tr v-else>
           <td

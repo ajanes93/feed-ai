@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { motion } from "motion-v";
+
 defineProps<{
   message: string;
 }>();
@@ -8,21 +10,20 @@ defineProps<{
   <div
     class="flex h-[100dvh] flex-col items-center justify-center px-6 text-center"
   >
-    <span
-      v-motion
+    <motion.span
       class="mb-4 text-6xl"
-      :initial="{ y: 0 }"
-      :enter="{ y: [-8, 0, -8], transition: { duration: 2500, repeat: Infinity, ease: 'easeInOut' } }"
+      :animate="{ y: [0, -8, 0] }"
+      :transition="{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }"
     >
       📭
-    </span>
-    <p
-      v-motion
+    </motion.span>
+    <motion.p
       class="text-lg text-gray-400"
       :initial="{ opacity: 0, y: 6 }"
-      :enter="{ opacity: 1, y: 0, transition: { delay: 200, duration: 500 } }"
+      :animate="{ opacity: 1, y: 0 }"
+      :transition="{ delay: 0.2, duration: 0.5 }"
     >
       {{ message }}
-    </p>
+    </motion.p>
   </div>
 </template>

@@ -5,8 +5,22 @@ import DashboardView from "./views/DashboardView.vue";
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: "/", component: FeedView },
-    { path: "/dashboard", component: DashboardView },
+    {
+      path: "/",
+      name: "today",
+      component: FeedView,
+    },
+    {
+      path: "/digest/:date",
+      name: "digest",
+      component: FeedView,
+      props: true,
+    },
+    {
+      path: "/dashboard",
+      name: "dashboard",
+      component: DashboardView,
+    },
   ],
 });
 

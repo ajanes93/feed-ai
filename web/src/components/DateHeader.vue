@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { motion } from "motion-v";
+
 defineProps<{
   date: string;
   itemCount: number;
@@ -17,9 +19,11 @@ defineEmits<{
     class="fixed top-0 right-0 left-0 z-10 bg-gray-950 px-5 pt-4 pb-3"
   >
     <div class="mx-auto flex max-w-lg items-center justify-between">
-      <button
+      <motion.button
         :disabled="!hasPrevious"
+        aria-label="Previous digest"
         class="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-800 hover:text-white disabled:invisible"
+        :press="{ scale: 0.85 }"
         @click="$emit('previous')"
       >
         <svg
@@ -29,6 +33,7 @@ defineEmits<{
           viewBox="0 0 24 24"
           stroke="currentColor"
           stroke-width="2"
+          aria-hidden="true"
         >
           <path
             stroke-linecap="round"
@@ -36,7 +41,7 @@ defineEmits<{
             d="M15 19l-7-7 7-7"
           />
         </svg>
-      </button>
+      </motion.button>
 
       <div class="flex flex-col items-center">
         <h2 class="text-sm font-semibold tracking-wide text-white">
@@ -45,9 +50,11 @@ defineEmits<{
         <span class="text-xs text-gray-500">{{ itemCount }} stories</span>
       </div>
 
-      <button
+      <motion.button
         :disabled="!hasNext"
+        aria-label="Next digest"
         class="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-800 hover:text-white disabled:invisible"
+        :press="{ scale: 0.85 }"
         @click="$emit('next')"
       >
         <svg
@@ -57,6 +64,7 @@ defineEmits<{
           viewBox="0 0 24 24"
           stroke="currentColor"
           stroke-width="2"
+          aria-hidden="true"
         >
           <path
             stroke-linecap="round"
@@ -64,9 +72,9 @@ defineEmits<{
             d="M9 5l7 7-7 7"
           />
         </svg>
-      </button>
+      </motion.button>
     </div>
-    <div class="mx-auto mt-2 max-w-lg">
+    <div class="mx-auto mt-3 max-w-lg">
       <slot name="filters" />
     </div>
   </div>

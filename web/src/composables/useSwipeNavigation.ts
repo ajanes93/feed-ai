@@ -1,6 +1,8 @@
-import { ref, computed, type Ref } from "vue";
+import { ref, computed, type Ref, type MaybeRefOrGetter } from "vue";
+import { useSwipe } from "@vueuse/core";
 
 interface SwipeNavigationOptions {
+  el: MaybeRefOrGetter<HTMLElement | null | undefined>;
   hasPrevious: Ref<boolean>;
   hasNext: Ref<boolean>;
   categories: string[];
@@ -11,176 +13,151 @@ interface SwipeNavigationOptions {
   onCategoryChange: (category: string) => void;
 }
 
-const SWIPE_THRESHOLD = 40;
-const VELOCITY_THRESHOLD = 0.3; // px/ms
-const SPRING_DURATION = 400;
+const SWIPE_THRESHOLD = 50;
 const PULL_THRESHOLD = 80;
+const ANIM_MS = 350;
+const EASE = "cubic-bezier(0.25, 1, 0.5, 1)";
 
 export function useSwipeNavigation(options: SwipeNavigationOptions) {
   const swipeOffset = ref(0);
-  const swipeAnimating = ref(false);
+  const animating = ref(false);
   const transitioning = ref(false);
   const pullDistance = ref(0);
   const refreshing = ref(false);
 
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchStartScrollTop = 0;
-  let lastTouchX = 0;
-  let lastTouchTime = 0;
-  let isHorizontalSwipe: boolean | null = null;
-
+  // --- Swipe style applied to content container ---
   const swipeStyle = computed(() => {
-    if (swipeOffset.value === 0 && !swipeAnimating.value) return {};
-    const opacity = Math.max(0.4, 1 - Math.abs(swipeOffset.value) / 500);
+    const off = swipeOffset.value;
+    if (off === 0 && !animating.value) return {};
     return {
-      transform: `translateX(${swipeOffset.value}px)`,
-      opacity: String(opacity),
-      transition: swipeAnimating.value
-        ? `transform ${SPRING_DURATION}ms cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${SPRING_DURATION}ms ease-out`
+      transform: `translate3d(${off}px, 0, 0)`,
+      opacity: String(Math.max(0.3, 1 - Math.abs(off) / 500)),
+      transition: animating.value
+        ? `transform ${ANIM_MS}ms ${EASE}, opacity ${ANIM_MS}ms ${EASE}`
         : "none",
+      willChange: "transform, opacity",
     };
   });
 
-  function onTouchStart(e: TouchEvent) {
-    const touch = e.touches[0];
-    if (!touch || transitioning.value) return;
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
-    lastTouchX = touch.clientX;
-    lastTouchTime = Date.now();
-    isHorizontalSwipe = null;
-    swipeAnimating.value = false;
-    swipeOffset.value = 0;
-
-    const scrollEl = document.querySelector("[data-scroll-container]");
-    touchStartScrollTop = scrollEl?.scrollTop ?? 0;
+  // --- Helpers ---
+  function getCategoryIndex() {
+    return options.categories.indexOf(options.activeCategory.value);
   }
 
-  function getSwipeContext(dx: number) {
-    const catIdx = options.categories.indexOf(options.activeCategory.value);
-    const goingRight = dx > 0;
-    const isDigestNav =
-      (goingRight && catIdx === 0 && options.hasPrevious.value) ||
-      (!goingRight && catIdx === options.categories.length - 1 && options.hasNext.value);
-    return { catIdx, goingRight, isDigestNav };
+  function canDigestNav(right: boolean) {
+    const idx = getCategoryIndex();
+    const atBoundary = right ? idx === 0 : idx === options.categories.length - 1;
+    const hasDigest = right ? options.hasPrevious.value : options.hasNext.value;
+    return atBoundary && hasDigest;
   }
 
-  function onTouchMove(e: TouchEvent) {
-    const touch = e.touches[0];
-    if (!touch || transitioning.value) return;
+  function animate(target: number): Promise<void> {
+    return new Promise((resolve) => {
+      animating.value = true;
+      swipeOffset.value = target;
+      setTimeout(() => {
+        animating.value = false;
+        resolve();
+      }, ANIM_MS + 10);
+    });
+  }
 
-    const dx = touch.clientX - touchStartX;
-    const dy = touch.clientY - touchStartY;
+  // --- Main swipe via @vueuse/core ---
+  const { lengthX, lengthY, direction, isSwiping } = useSwipe(options.el, {
+    threshold: 10,
+    onSwipe() {
+      if (transitioning.value) return;
 
-    if (isHorizontalSwipe === null && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
-      isHorizontalSwipe = Math.abs(dx) > Math.abs(dy);
-    }
+      const dx = -lengthX.value; // lengthX is inverted (positive = left)
+      const dy = -lengthY.value;
 
-    if (!isHorizontalSwipe) {
-      if (dy > 0 && !refreshing.value && touchStartScrollTop <= 2) {
+      // Pull-to-refresh check (vertical, at top of scroll)
+      if (!isSwiping.value) return;
+      if (direction.value === "down" && !refreshing.value) {
         const scrollEl = document.querySelector("[data-scroll-container]");
         if (scrollEl && scrollEl.scrollTop <= 2) {
-          pullDistance.value = Math.min(120, dy * 0.4);
+          pullDistance.value = Math.min(120, Math.abs(dy) * 0.4);
+          return;
         }
       }
-      return;
-    }
 
-    const { isDigestNav } = getSwipeContext(dx);
-    swipeOffset.value = dx * (isDigestNav ? 1 : 0.15);
+      // Only handle horizontal swipes
+      if (direction.value !== "left" && direction.value !== "right") return;
 
-    lastTouchX = touch.clientX;
-    lastTouchTime = Date.now();
-  }
-
-  async function handlePullRefresh() {
-    if (pullDistance.value >= PULL_THRESHOLD && !refreshing.value) {
-      refreshing.value = true;
-      pullDistance.value = 40;
-      await options.onPullRefresh();
-      refreshing.value = false;
-    }
-    pullDistance.value = 0;
-  }
-
-  async function animateSwipeTransition(goingRight: boolean) {
-    transitioning.value = true;
-    try {
-      swipeAnimating.value = true;
-      swipeOffset.value = goingRight ? window.innerWidth : -window.innerWidth;
-
-      await new Promise((r) => setTimeout(r, SPRING_DURATION / 2));
-
-      if (goingRight) {
-        await options.onSwipeRight();
+      const right = dx > 0;
+      if (canDigestNav(right)) {
+        swipeOffset.value = dx; // 1:1 tracking
       } else {
-        await options.onSwipeLeft();
+        // Dampened hint for category change, rubber-band at edges
+        const idx = getCategoryIndex();
+        const atEdge =
+          (right && idx === 0) ||
+          (!right && idx === options.categories.length - 1);
+        swipeOffset.value = atEdge
+          ? dx * 0.15 // rubber-band feel
+          : dx * 0.25; // category hint
       }
+    },
+    async onSwipeEnd() {
+      if (transitioning.value) return;
 
-      swipeAnimating.value = false;
-      swipeOffset.value = goingRight
-        ? -window.innerWidth / 3
-        : window.innerWidth / 3;
+      // Handle pull-to-refresh
+      if (pullDistance.value >= PULL_THRESHOLD && !refreshing.value) {
+        refreshing.value = true;
+        pullDistance.value = 40;
+        await options.onPullRefresh();
+        refreshing.value = false;
+      }
+      pullDistance.value = 0;
 
-      await new Promise((r) => requestAnimationFrame(r));
-      swipeAnimating.value = true;
-      swipeOffset.value = 0;
-
-      await new Promise((r) => setTimeout(r, SPRING_DURATION));
-    } finally {
-      swipeAnimating.value = false;
-      transitioning.value = false;
-    }
-  }
-
-  async function onTouchEnd(e: TouchEvent) {
-    const touch = e.changedTouches[0];
-    if (!touch || transitioning.value || !isHorizontalSwipe) {
-      swipeOffset.value = 0;
-      await handlePullRefresh();
-      return;
-    }
-
-    const dx = touch.clientX - touchStartX;
-    const dt = Math.max(1, Date.now() - lastTouchTime);
-    const velocity = (touch.clientX - lastTouchX) / dt;
-
-    const shouldAct =
-      Math.abs(dx) > SWIPE_THRESHOLD || Math.abs(velocity) > VELOCITY_THRESHOLD;
-
-    if (shouldAct) {
-      const { catIdx, goingRight, isDigestNav } = getSwipeContext(dx);
-
-      if (isDigestNav) {
-        await animateSwipeTransition(goingRight);
-        // Reset to "all" when navigating to a new digest
-        options.onCategoryChange(options.categories[0]);
+      const dx = -lengthX.value;
+      if (Math.abs(dx) < SWIPE_THRESHOLD) {
+        await animate(0);
         return;
       }
 
-      // Otherwise, change category
-      if (goingRight && catIdx > 0) {
-        options.onCategoryChange(options.categories[catIdx - 1]);
-      } else if (!goingRight && catIdx < options.categories.length - 1) {
-        options.onCategoryChange(options.categories[catIdx + 1]);
-      }
-    }
+      const right = dx > 0;
 
-    swipeAnimating.value = true;
-    swipeOffset.value = 0;
-    setTimeout(() => {
-      swipeAnimating.value = false;
-    }, SPRING_DURATION);
-  }
+      // Digest navigation
+      if (canDigestNav(right)) {
+        transitioning.value = true;
+        try {
+          // Slide off
+          await animate(right ? window.innerWidth * 0.7 : -window.innerWidth * 0.7);
+
+          // Fetch new digest
+          if (right) await options.onSwipeRight();
+          else await options.onSwipeLeft();
+          options.onCategoryChange(options.categories[0]);
+
+          // Slide in from opposite side
+          animating.value = false;
+          swipeOffset.value = right ? -window.innerWidth * 0.25 : window.innerWidth * 0.25;
+          await new Promise((r) => requestAnimationFrame(r));
+          await animate(0);
+        } finally {
+          transitioning.value = false;
+        }
+        return;
+      }
+
+      // Category change
+      const idx = getCategoryIndex();
+      if (right && idx > 0) {
+        options.onCategoryChange(options.categories[idx - 1]);
+      } else if (!right && idx < options.categories.length - 1) {
+        options.onCategoryChange(options.categories[idx + 1]);
+      }
+
+      await animate(0);
+    },
+  });
 
   return {
     swipeStyle,
     pullDistance,
     refreshing,
     pullThreshold: PULL_THRESHOLD,
-    onTouchStart,
-    onTouchMove,
-    onTouchEnd,
+    isSwiping,
   };
 }

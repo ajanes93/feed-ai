@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from "vue";
+import { onMounted, ref, computed, watch, useTemplateRef } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useDigest } from "../composables/useDigest";
 import { useSwipeNavigation } from "../composables/useSwipeNavigation";
 import DigestFeed from "../components/DigestFeed.vue";
@@ -7,8 +8,14 @@ import DateHeader from "../components/DateHeader.vue";
 import EmptyState from "../components/EmptyState.vue";
 import CategoryFilter from "../components/CategoryFilter.vue";
 
+const route = useRoute();
+const router = useRouter();
+const rootEl = useTemplateRef("root");
+
 const CATEGORIES = ["all", "ai", "dev", "jobs"];
-const activeCategory = ref("all");
+const activeCategory = ref(
+  (route.query.category as string) || "all",
+);
 
 const filteredItems = computed(() => {
   if (!digest.value) return [];
@@ -24,19 +31,54 @@ const {
   hasPrevious,
   hasNext,
   fetchToday,
+  fetchDate,
   goToPrevious,
   goToNext,
 } = useDigest();
+
+let scrollContainer: Element | null = null;
+function resetScroll() {
+  if (!scrollContainer) {
+    scrollContainer = document.querySelector("[data-scroll-container]");
+  }
+  if (scrollContainer) scrollContainer.scrollTop = 0;
+}
+
+// Sync URL when digest changes
+watch(
+  () => digest.value?.date,
+  (date) => {
+    if (!date) return;
+    const currentDate = route.params.date as string | undefined;
+    if (currentDate !== date) {
+      router.replace({
+        name: "digest",
+        params: { date },
+        query: activeCategory.value !== "all" ? { category: activeCategory.value } : {},
+      });
+    }
+    resetScroll();
+  },
+);
+
+// Sync URL when category changes + reset scroll
+watch(activeCategory, (cat) => {
+  const query = cat !== "all" ? { category: cat } : {};
+  router.replace({ ...route, query });
+  resetScroll();
+});
+
+function setCategory(cat: string) {
+  activeCategory.value = cat;
+}
 
 const {
   swipeStyle,
   pullDistance,
   refreshing,
   pullThreshold,
-  onTouchStart,
-  onTouchMove,
-  onTouchEnd,
 } = useSwipeNavigation({
+  el: rootEl,
   hasPrevious,
   hasNext,
   categories: CATEGORIES,
@@ -44,26 +86,32 @@ const {
   onSwipeRight: goToPrevious,
   onSwipeLeft: goToNext,
   onPullRefresh: fetchToday,
-  onCategoryChange: (cat: string) => { activeCategory.value = cat; },
+  onCategoryChange: setCategory,
 });
 
-onMounted(() => {
-  fetchToday();
+onMounted(async () => {
+  const dateParam = route.params.date as string | undefined;
+  if (dateParam) {
+    await fetchDate(dateParam);
+  } else {
+    await fetchToday();
+  }
 });
 </script>
 
 <template>
   <div
-    class="min-h-[100dvh] bg-gray-950"
-    @touchstart="onTouchStart"
-    @touchmove="onTouchMove"
-    @touchend="onTouchEnd"
+    ref="root"
+    class="min-h-[100dvh] touch-pan-y bg-gray-950"
   >
     <!-- Pull-to-refresh indicator -->
     <div
       v-if="pullDistance > 0"
-      class="fixed top-0 right-0 left-0 z-20 flex items-center justify-center transition-transform duration-200"
-      :style="{ transform: `translateY(${pullDistance - 40}px)` }"
+      class="fixed top-0 right-0 left-0 z-20 flex items-center justify-center"
+      :style="{
+        transform: `translateY(${pullDistance - 40}px)`,
+        transition: 'transform 100ms ease-out',
+      }"
     >
       <div
         :class="[
@@ -80,7 +128,7 @@ onMounted(() => {
     <!-- Loading skeleton -->
     <div
       v-if="loading"
-      class="h-[100dvh] overflow-hidden pt-22"
+      class="h-[100dvh] overflow-hidden pt-24"
     >
       <div class="mx-auto flex max-w-lg flex-col gap-3 px-4">
         <div
@@ -127,7 +175,7 @@ onMounted(() => {
           <CategoryFilter
             :items="digest.items"
             :active-category="activeCategory"
-            @select="activeCategory = $event"
+            @select="setCategory"
           />
         </template>
       </DateHeader>
