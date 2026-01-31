@@ -9,7 +9,7 @@ interface DigestItemRaw {
   why_it_matters?: string;
   category: string;
   source_name: string;
-  source_url: string;
+  item_index: number;
 }
 
 export interface DigestResult {
@@ -20,17 +20,18 @@ export interface DigestResult {
 type DigestType = "news" | "jobs";
 
 function groupBySource(items: RawItem[]): string {
-  const groups = new Map<string, RawItem[]>();
-  for (const item of items) {
+  const groups = new Map<string, { index: number; item: RawItem }[]>();
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     const arr = groups.get(item.sourceId) || [];
-    arr.push(item);
+    arr.push({ index: i, item });
     groups.set(item.sourceId, arr);
   }
 
   return Array.from(groups.entries())
     .map(([sourceId, sourceItems]) => {
       const itemLines = sourceItems
-        .map((item, i) => `  ${i + 1}. ${item.title}\n     ${item.content?.slice(0, 200) || "No description"}\n     URL: ${item.link}`)
+        .map(({ index, item }) => `  [${index}] ${item.title}\n     ${item.content?.slice(0, 200) || "No description"}\n     URL: ${item.link}`)
         .join("\n\n");
       return `### ${sourceId}\n${itemLines}`;
     })
@@ -54,17 +55,18 @@ Select up to ${maxItems} items total (up to ${CATEGORY_LIMITS.ai} AI, up to ${CA
 - Significant open source releases
 - Industry news that affects developers
 - Ensure diversity across sources — don't pick all items from one source
+- If the same story appears from multiple sources, pick only ONE (prefer the most detailed)
 
 For each selected item, provide:
+- item_index: The [number] shown before the item above
 - title: A clear, concise title (rewrite if needed)
 - summary: 2-3 sentence summary of why this matters
 - why_it_matters: 1 sentence on personal relevance (optional, only if genuinely relevant)
 - category: One of "ai", "dev"
 - source_name: Original source name
-- source_url: Original URL
 
 Return ONLY a JSON array, no other text:
-[{"title": "...", "summary": "...", "why_it_matters": "...", "category": "...", "source_name": "...", "source_url": "..."}]`;
+[{"item_index": 0, "title": "...", "summary": "...", "why_it_matters": "...", "category": "...", "source_name": "..."}]`;
 }
 
 function buildJobsPrompt(items: RawItem[]): string {
@@ -84,15 +86,15 @@ Select up to ${CATEGORY_LIMITS.jobs} relevant job listings. Prioritize:
 - Exclude roles that are clearly US-only, on-site only, or junior level
 
 For each selected job, provide:
+- item_index: The [number] shown before the item above
 - title: Job title and company (e.g. "Senior Vue.js Engineer — Acme Corp")
 - summary: 2-3 sentences about the role, including salary/location if available
 - why_it_matters: Why this role is a good fit (optional)
 - category: "jobs"
 - source_name: Original source name
-- source_url: Original URL
 
 Return ONLY a JSON array, no other text:
-[{"title": "...", "summary": "...", "why_it_matters": "...", "category": "jobs", "source_name": "...", "source_url": "..."}]`;
+[{"item_index": 0, "title": "...", "summary": "...", "why_it_matters": "...", "category": "jobs", "source_name": "..."}]`;
 }
 
 class AIError extends Error {
@@ -260,13 +262,16 @@ function parseAIResponse(responseText: string): DigestItemRaw[] {
   throw new Error("Expected non-empty JSON array from AI");
 }
 
-function isValidDigestItem(item: DigestItemRaw): boolean {
+function isValidDigestItem(item: DigestItemRaw, itemCount: number): boolean {
   return (
+    typeof item.item_index === "number" &&
+    Number.isInteger(item.item_index) &&
+    item.item_index >= 0 &&
+    item.item_index < itemCount &&
     typeof item.title === "string" &&
     typeof item.summary === "string" &&
     typeof item.category === "string" &&
-    typeof item.source_name === "string" &&
-    typeof item.source_url === "string"
+    typeof item.source_name === "string"
   );
 }
 
@@ -296,31 +301,28 @@ export async function generateDigest(
   }
 
   const validated = parsed.filter((item) => {
-    const valid = isValidDigestItem(item);
+    const valid = isValidDigestItem(item, items.length);
     if (!valid) console.warn("Dropping malformed digest item:", item);
     return valid;
   });
 
   const limited = applyCategoryLimits(validated);
 
-  const pubDateByUrl = new Map(
-    items
-      .filter((raw) => raw.publishedAt && !isNaN(raw.publishedAt) && raw.link)
-      .map((raw) => [raw.link, new Date(raw.publishedAt!).toISOString()])
-  );
-
-  const digestItems: DigestItem[] = limited.map((item, index) => ({
-    id: String(index),
-    digestId: "",
-    category: item.category,
-    title: item.title,
-    summary: item.summary,
-    whyItMatters: item.why_it_matters,
-    sourceName: item.source_name,
-    sourceUrl: item.source_url,
-    publishedAt: pubDateByUrl.get(item.source_url),
-    position: index,
-  }));
+  const digestItems: DigestItem[] = limited.map((item, index) => {
+    const rawItem = items[item.item_index];
+    return {
+      id: String(index),
+      digestId: "",
+      category: item.category,
+      title: item.title,
+      summary: item.summary,
+      whyItMatters: item.why_it_matters,
+      sourceName: item.source_name,
+      sourceUrl: rawItem.link,
+      publishedAt: rawItem.publishedAt ? new Date(rawItem.publishedAt).toISOString() : undefined,
+      position: index,
+    };
+  });
 
   return { items: digestItems, aiUsages: usages };
 }
