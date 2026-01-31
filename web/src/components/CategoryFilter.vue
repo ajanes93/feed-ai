@@ -48,36 +48,45 @@ onMounted(() => nextTick(updateIndicator));
 watch(() => props.activeCategory, () => nextTick(updateIndicator));
 watch(() => props.items.length, () => nextTick(updateIndicator));
 
-// Swipe/drag on pill bar to switch categories
-let dragStartX = 0;
-let dragStartCategory = 0;
+// Swipe on pill bar to switch categories
+let touchStartX = 0;
+let didSwipe = false;
 
-function onPointerDown(e: PointerEvent) {
-  dragStartX = e.clientX;
-  dragStartCategory = categories.findIndex((c) => c.key === props.activeCategory);
-  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+function onTouchStart(e: TouchEvent) {
+  touchStartX = e.touches[0]?.clientX ?? 0;
+  didSwipe = false;
 }
 
-function onPointerUp(e: PointerEvent) {
-  const dx = e.clientX - dragStartX;
-  const threshold = 30;
-  if (Math.abs(dx) < threshold) return; // too short, was a tap
+function onTouchEnd(e: TouchEvent) {
+  const endX = e.changedTouches[0]?.clientX ?? 0;
+  const dx = endX - touchStartX;
+  if (Math.abs(dx) < 30) return; // tap, not swipe
 
-  const dir = dx < 0 ? -1 : 1; // drag right = next category
-  const newIdx = Math.max(0, Math.min(categories.length - 1, dragStartCategory + dir));
-  if (newIdx !== dragStartCategory) {
+  didSwipe = true;
+  const currentIdx = categories.findIndex((c) => c.key === props.activeCategory);
+  const dir = dx > 0 ? -1 : 1; // swipe left = next, swipe right = prev
+  const newIdx = Math.max(0, Math.min(categories.length - 1, currentIdx + dir));
+  if (newIdx !== currentIdx) {
     emit("select", categories[newIdx].key);
   }
+}
+
+function onClick(e: Event, key: string) {
+  if (didSwipe) {
+    e.preventDefault();
+    didSwipe = false;
+    return;
+  }
+  emit("select", key);
 }
 </script>
 
 <template>
   <div
     ref="containerRef"
-    class="relative flex touch-pan-y justify-center gap-1.5"
-    @pointerdown="onPointerDown"
-    @pointerup="onPointerUp"
-    @pointercancel="onPointerUp"
+    class="relative flex justify-center gap-1.5"
+    @touchstart.passive="onTouchStart"
+    @touchend="onTouchEnd"
   >
     <!-- Sliding active indicator -->
     <div
@@ -93,7 +102,7 @@ function onPointerUp(e: PointerEvent) {
           ? 'text-gray-950'
           : 'text-gray-400 hover:text-gray-300',
       ]"
-      @click="emit('select', cat.key)"
+      @click="onClick($event, cat.key)"
     >
       {{ cat.label }}
       <span

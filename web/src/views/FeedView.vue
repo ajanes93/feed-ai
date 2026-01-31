@@ -13,6 +13,7 @@ import CategoryFilter from "../components/CategoryFilter.vue";
 const route = useRoute();
 const router = useRouter();
 
+const CATEGORIES = ["all", "ai", "dev", "jobs"];
 const activeCategory = ref(
   (route.query.category as string) || "all",
 );
@@ -44,41 +45,53 @@ function onSwiperInit(swiper: Swiper_T) {
   swiperInstance = swiper;
 }
 
-async function onSlideChangeTransitionEnd(swiper: Swiper_T) {
+async function onSlideChange(swiper: Swiper_T) {
   if (swiperTransitioning.value) return;
-  const diff = swiper.activeIndex - 1; // 1 is center
+  const diff = swiper.activeIndex - 1;
   if (diff === 0) return;
 
+  const catIdx = CATEGORIES.indexOf(activeCategory.value);
+  const swipedLeft = diff > 0;
+  const swipedRight = diff < 0;
+
+  // Try category change first
+  if (swipedLeft && catIdx < CATEGORIES.length - 1) {
+    activeCategory.value = CATEGORIES[catIdx + 1];
+    swiper.slideTo(1, 0);
+    return;
+  }
+  if (swipedRight && catIdx > 0) {
+    activeCategory.value = CATEGORIES[catIdx - 1];
+    swiper.slideTo(1, 0);
+    return;
+  }
+
+  // At category boundary — navigate digests
   swiperTransitioning.value = true;
   try {
-    if (diff < 0 && hasPrevious.value) {
+    if (swipedRight && hasPrevious.value) {
       await goToPrevious();
-      activeCategory.value = "all";
-    } else if (diff > 0 && hasNext.value) {
+      activeCategory.value = CATEGORIES[CATEGORIES.length - 1];
+    } else if (swipedLeft && hasNext.value) {
       await goToNext();
-      activeCategory.value = "all";
+      activeCategory.value = CATEGORIES[0];
     }
   } finally {
-    // Reset to center slide without animation
     swiper.slideTo(1, 0);
     swiperTransitioning.value = false;
   }
 }
 
-// Navigate via header arrows
+// Navigate via header arrows (digest only)
 async function navPrevious() {
-  if (swiperInstance) {
-    swiperInstance.slidePrev(300);
-  } else {
-    await goToPrevious();
-  }
+  await goToPrevious();
+  activeCategory.value = CATEGORIES[0];
+  swiperInstance?.slideTo(1, 0);
 }
 async function navNext() {
-  if (swiperInstance) {
-    swiperInstance.slideNext(300);
-  } else {
-    await goToNext();
-  }
+  await goToNext();
+  activeCategory.value = CATEGORIES[0];
+  swiperInstance?.slideTo(1, 0);
 }
 
 // --- Category ---
@@ -108,6 +121,10 @@ watch(activeCategory, (cat) => {
 // --- Pull to refresh ---
 const pullDistance = ref(0);
 const refreshing = ref(false);
+const pullText = computed(() => {
+  if (refreshing.value) return "Refreshing…";
+  return pullDistance.value >= PULL_THRESHOLD ? "Release to refresh" : "Pull to refresh";
+});
 const touchStartY = ref(0);
 const PULL_THRESHOLD = 80;
 
@@ -128,7 +145,7 @@ function onTouchMove(e: TouchEvent) {
 async function onTouchEnd() {
   if (pullDistance.value >= PULL_THRESHOLD && !refreshing.value) {
     refreshing.value = true;
-    pullDistance.value = 40;
+    pullDistance.value = 50;
     await fetchToday();
     refreshing.value = false;
   }
@@ -153,31 +170,27 @@ onMounted(async () => {
     @touchmove.passive="onTouchMove"
     @touchend="onTouchEnd"
   >
-    <!-- Pull-to-refresh indicator -->
+    <!-- Pull-to-refresh drawer -->
     <div
-      v-if="pullDistance > 0"
-      class="fixed top-0 right-0 left-0 z-20 flex items-center justify-center"
-      :style="{
-        transform: `translateY(${pullDistance - 40}px)`,
-        transition: 'transform 100ms ease-out',
-      }"
+      class="fixed top-0 right-0 left-0 z-20 flex items-center justify-center bg-gray-900/95 backdrop-blur-sm transition-transform duration-200 ease-out"
+      :style="{ transform: `translateY(${pullDistance > 0 ? 0 : -100}%)`, height: `${Math.max(40, pullDistance)}px` }"
     >
-      <div
-        :class="[
-          'h-8 w-8 rounded-full border-2 border-gray-600 border-t-white',
-          refreshing ? 'animate-spin' : '',
-        ]"
-        :style="{
-          opacity: Math.min(1, pullDistance / PULL_THRESHOLD),
-          transform: `rotate(${pullDistance * 3}deg)`,
-        }"
-      />
+      <div class="flex items-center gap-2">
+        <div
+          :class="[
+            'h-4 w-4 rounded-full border-2 border-gray-600 border-t-white',
+            refreshing ? 'animate-spin' : '',
+          ]"
+          :style="{ transform: !refreshing ? `rotate(${pullDistance * 3}deg)` : undefined }"
+        />
+        <span class="text-xs font-medium text-gray-400">{{ pullText }}</span>
+      </div>
     </div>
 
-    <!-- Loading skeleton -->
+    <!-- Loading skeleton (initial load only) -->
     <div
-      v-if="loading"
-      class="h-[100dvh] overflow-hidden pt-24"
+      v-if="loading && !digest"
+      class="h-[100dvh] overflow-hidden pt-16"
     >
       <div class="mx-auto flex max-w-lg flex-col gap-3 px-4">
         <div
@@ -197,7 +210,7 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Error/Empty state with navigation -->
+    <!-- Error/Empty state -->
     <template v-else-if="error">
       <DateHeader
         :date="formattedDate"
@@ -212,23 +225,6 @@ onMounted(async () => {
 
     <!-- Digest content with Swiper -->
     <template v-else-if="digest">
-      <DateHeader
-        :date="formattedDate"
-        :item-count="filteredItems.length"
-        :has-previous="hasPrevious"
-        :has-next="hasNext"
-        @previous="navPrevious"
-        @next="navNext"
-      >
-        <template #filters>
-          <CategoryFilter
-            :items="digest.items"
-            :active-category="activeCategory"
-            @select="(cat) => (activeCategory = cat)"
-          />
-        </template>
-      </DateHeader>
-
       <Swiper
         :initial-slide="1"
         :speed="300"
@@ -236,23 +232,47 @@ onMounted(async () => {
         :threshold="10"
         :touch-angle="35"
         :long-swipes-ratio="0.25"
+        :no-swiping="true"
+        no-swiping-selector=".no-swiper"
         class="h-[100dvh]"
         @swiper="onSwiperInit"
-        @slide-change-transition-end="onSlideChangeTransitionEnd"
+        @slide-change="onSlideChange"
       >
-        <!-- Previous slide (placeholder) -->
         <SwiperSlide>
           <div class="flex h-full items-center justify-center text-gray-600">
             <span v-if="hasPrevious">Previous digest</span>
           </div>
         </SwiperSlide>
 
-        <!-- Current digest -->
         <SwiperSlide>
-          <DigestFeed :items="filteredItems" />
+          <div
+            data-scroll-container
+            class="h-full overflow-y-scroll overscroll-contain pb-[calc(2rem+env(safe-area-inset-bottom))]"
+          >
+            <!-- Date header (scrolls with content) -->
+            <DateHeader
+              :date="formattedDate"
+              :item-count="filteredItems.length"
+              :has-previous="hasPrevious"
+              :has-next="hasNext"
+              @previous="navPrevious"
+              @next="navNext"
+            />
+
+            <!-- Sticky category filters -->
+            <div class="no-swiper sticky top-0 z-10 bg-gray-950/95 px-4 py-2 backdrop-blur-sm">
+              <CategoryFilter
+                :items="digest.items"
+                :active-category="activeCategory"
+                @select="(cat) => (activeCategory = cat)"
+              />
+            </div>
+
+            <!-- Cards -->
+            <DigestFeed :items="filteredItems" />
+          </div>
         </SwiperSlide>
 
-        <!-- Next slide (placeholder) -->
         <SwiperSlide>
           <div class="flex h-full items-center justify-center text-gray-600">
             <span v-if="hasNext">Next digest</span>
