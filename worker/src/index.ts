@@ -1,6 +1,6 @@
 import { Hono, type Context, type Next } from "hono";
 import { cors } from "hono/cors";
-import { Env, RawItem, DigestItem } from "./types";
+import { Env, RawItem, DigestItem, countByCategory } from "./types";
 import { todayDate } from "@feed-ai/shared/utils";
 import { sources, FRESHNESS_THRESHOLDS } from "./sources";
 import type { SourceFetchResult } from "./services/fetcher";
@@ -39,16 +39,6 @@ function safeJsonParse(json: string): unknown {
 }
 
 // --- Shared mapping helpers ---
-
-function countByCategory(
-  items: { category: string }[]
-): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const item of items) {
-    counts[item.category] = (counts[item.category] || 0) + 1;
-  }
-  return counts;
-}
 
 function mapSourceHealth(row: Record<string, unknown>) {
   const source = sources.find((s) => s.id === row.source_id);
@@ -529,20 +519,20 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
 
   async function recordUsages() {
     if (allAiUsages.length === 0) return;
-    const results = await Promise.allSettled(
-      allAiUsages.map(async (usage) => {
-        await recordAIUsage(env.DB, usage);
-        if (usage.status !== "success") {
-          await logEvent(env.DB, {
-            level: usage.status === "rate_limited" ? "warn" : "error",
-            category: "ai",
-            message: `${usage.provider} ${usage.status}: ${usage.error || "unknown"}`,
-            details: { model: usage.model, latencyMs: usage.latencyMs },
-            digestId,
-          });
-        }
-      })
-    );
+    const tasks = allAiUsages.flatMap((usage) => {
+      const recordTask = recordAIUsage(env.DB, usage);
+      if (usage.status === "success") return [recordTask];
+
+      const logTask = logEvent(env.DB, {
+        level: usage.status === "rate_limited" ? "warn" : "error",
+        category: "ai",
+        message: `${usage.provider} ${usage.status}: ${usage.error || "unknown"}`,
+        details: { model: usage.model, latencyMs: usage.latencyMs },
+        digestId,
+      });
+      return [recordTask, logTask];
+    });
+    const results = await Promise.allSettled(tasks);
     await logSettledFailures(env.DB, "AI usage recording", results);
   }
 

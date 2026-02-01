@@ -19,32 +19,6 @@ function submitKey() {
   fetchDashboard();
 }
 
-const aiColumns = [
-  { key: "when", label: "When" },
-  { key: "provider", label: "Provider" },
-  { key: "model", label: "Model" },
-  { key: "in", label: "In" },
-  { key: "out", label: "Out" },
-  { key: "latency", label: "Latency" },
-  { key: "status", label: "Status" },
-];
-
-const sourceColumns = [
-  { key: "source", label: "Source" },
-  { key: "category", label: "Category" },
-  { key: "items", label: "Items" },
-  { key: "lastOk", label: "Last OK" },
-  { key: "failures", label: "Failures" },
-  { key: "status", label: "Status" },
-];
-
-const errorColumns = [
-  { key: "when", label: "When" },
-  { key: "level", label: "Level" },
-  { key: "category", label: "Category" },
-  { key: "message", label: "Message" },
-];
-
 onMounted(fetchDashboard);
 </script>
 
@@ -154,7 +128,15 @@ onMounted(fetchDashboard);
             AI Usage
           </h2>
           <DataTable
-            :columns="aiColumns"
+            :columns="[
+              { key: 'when', label: 'When' },
+              { key: 'provider', label: 'Provider' },
+              { key: 'model', label: 'Model' },
+              { key: 'in', label: 'In' },
+              { key: 'out', label: 'Out' },
+              { key: 'latency', label: 'Latency' },
+              { key: 'status', label: 'Status' },
+            ]"
             :row-count="data.ai.recentCalls.length"
             empty-message="No AI usage recorded yet"
           >
@@ -217,7 +199,14 @@ onMounted(fetchDashboard);
             Source Health
           </h2>
           <DataTable
-            :columns="sourceColumns"
+            :columns="[
+              { key: 'source', label: 'Source' },
+              { key: 'category', label: 'Category' },
+              { key: 'items', label: 'Items' },
+              { key: 'lastOk', label: 'Last OK' },
+              { key: 'failures', label: 'Failures' },
+              { key: 'status', label: 'Status' },
+            ]"
             :row-count="data.sources.length"
             empty-message="No sources tracked"
           >
@@ -277,7 +266,12 @@ onMounted(fetchDashboard);
             Recent Errors
           </h2>
           <DataTable
-            :columns="errorColumns"
+            :columns="[
+              { key: 'when', label: 'When' },
+              { key: 'level', label: 'Level' },
+              { key: 'category', label: 'Category' },
+              { key: 'message', label: 'Message' },
+            ]"
             :row-count="data.errors.length"
             empty-message="No errors recorded"
           >

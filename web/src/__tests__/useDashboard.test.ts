@@ -70,7 +70,7 @@ describe("useDashboard", () => {
     await fetchDashboard();
 
     expect(data.value).toBeNull();
-    expect(error.value).toBe("Network error");
+    expect(error.value).toBe("offline");
   });
 
   it("sets loading during fetch", async () => {

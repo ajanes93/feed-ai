@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { RawItem, DigestItem } from "../types";
+import { RawItem, DigestItem, countByCategory } from "../types";
 import { todayDate } from "@feed-ai/shared/utils";
 import { CATEGORY_LIMITS } from "../sources";
 import type { AIUsageEntry } from "./logger";
@@ -27,16 +27,6 @@ export interface SummarizerLog {
 }
 
 type DigestType = "news" | "jobs";
-
-function countByCategory(
-  items: { category: string }[]
-): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const item of items) {
-    counts[item.category] = (counts[item.category] || 0) + 1;
-  }
-  return counts;
-}
 
 function groupBySource(items: RawItem[]): string {
   const groups = new Map<string, { index: number; item: RawItem }[]>();
@@ -262,15 +252,19 @@ async function callAI(
   logs: SummarizerLog[]
 ): Promise<{ parsed: DigestItemRaw[]; usages: AIUsageEntry[] }> {
   const usages: AIUsageEntry[] = [];
+  let lastError = "";
 
-  if (apiKeys.gemini) {
+  async function tryProvider(
+    name: string,
+    call: () => Promise<{ text: string; usage: AIUsageEntry }>
+  ): Promise<DigestItemRaw[] | null> {
     try {
-      logs.push({ level: "info", message: "Calling Gemini" });
-      const result = await callGemini(prompt, apiKeys.gemini);
+      logs.push({ level: "info", message: `Calling ${name}` });
+      const result = await call();
       usages.push(result.usage);
       logs.push({
         level: "info",
-        message: "Gemini returned response",
+        message: `${name} returned response`,
         details: {
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
@@ -279,48 +273,34 @@ async function callAI(
           responsePreview: result.text.slice(0, 500),
         },
       });
-      const parsed = parseAIResponse(result.text, logs);
-      return { parsed, usages };
+      return parseAIResponse(result.text, logs);
     } catch (err) {
       if (err instanceof AIError) usages.push(err.usage);
-      const errMsg = err instanceof Error ? err.message : String(err);
+      lastError = err instanceof Error ? err.message : String(err);
       logs.push({
         level: "warn",
-        message: `Gemini failed, falling back to Claude: ${errMsg}`,
+        message: `${name} failed: ${lastError}`,
       });
-      if (!apiKeys.anthropic) throw new DigestError(String(err), usages);
+      return null;
     }
   }
 
+  if (apiKeys.gemini) {
+    const parsed = await tryProvider("Gemini", () =>
+      callGemini(prompt, apiKeys.gemini!)
+    );
+    if (parsed) return { parsed, usages };
+    if (!apiKeys.anthropic)
+      throw new DigestError(lastError || "Gemini failed", usages);
+    logs.push({ level: "info", message: "Falling back to Claude" });
+  }
+
   if (apiKeys.anthropic) {
-    try {
-      logs.push({
-        level: "info",
-        message: `Calling Claude (fallback=${usages.length > 0})`,
-      });
-      const result = await callClaude(
-        prompt,
-        apiKeys.anthropic,
-        usages.length > 0
-      );
-      usages.push(result.usage);
-      logs.push({
-        level: "info",
-        message: "Claude returned response",
-        details: {
-          inputTokens: result.usage.inputTokens,
-          outputTokens: result.usage.outputTokens,
-          latencyMs: result.usage.latencyMs,
-          responseLength: result.text.length,
-          responsePreview: result.text.slice(0, 500),
-        },
-      });
-      const parsed = parseAIResponse(result.text, logs);
-      return { parsed, usages };
-    } catch (err) {
-      if (err instanceof AIError) usages.push(err.usage);
-      throw new DigestError(String(err), usages);
-    }
+    const parsed = await tryProvider("Claude", () =>
+      callClaude(prompt, apiKeys.anthropic!, usages.length > 0)
+    );
+    if (parsed) return { parsed, usages };
+    throw new DigestError(lastError || "Claude failed", usages);
   }
 
   throw new DigestError(
@@ -405,12 +385,20 @@ function isValidDigestItem(item: DigestItemRaw, itemCount: number): boolean {
 
 function applyCategoryLimits(items: DigestItemRaw[]): DigestItemRaw[] {
   const counts: Record<string, number> = {};
-  return items.filter((item) => {
-    const count = (counts[item.category] = (counts[item.category] || 0) + 1);
+  const result: DigestItemRaw[] = [];
+
+  for (const item of items) {
+    const count = (counts[item.category] || 0) + 1;
     const limit =
       CATEGORY_LIMITS[item.category as keyof typeof CATEGORY_LIMITS];
-    return !limit || count <= limit;
-  });
+
+    if (!limit || count <= limit) {
+      counts[item.category] = count;
+      result.push(item);
+    }
+  }
+
+  return result;
 }
 
 export async function generateDigest(

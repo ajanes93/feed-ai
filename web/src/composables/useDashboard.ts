@@ -86,18 +86,16 @@ export function useDashboard() {
 
       if (res.status === 401) {
         clearAdminKey();
-        error.value = "Invalid admin key";
-        return;
+        throw new Error("Invalid admin key");
       }
 
       if (!res.ok) {
-        error.value = "Failed to load dashboard";
-        return;
+        throw new Error("Failed to load dashboard");
       }
 
       data.value = await res.json();
-    } catch {
-      error.value = "Network error";
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : "Network error";
     } finally {
       loading.value = false;
     }
