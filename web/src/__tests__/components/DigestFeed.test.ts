@@ -41,6 +41,11 @@ describe("DigestFeed", () => {
       const { getCards } = render({ props: { items: [] } });
       expect(getCards()).toHaveLength(0);
     });
+
+    it("shows empty category message", () => {
+      const { wrapper } = render({ props: { items: [] } });
+      expect(wrapper.text()).toContain("No items in this category today");
+    });
   });
 
   describe("with single item", () => {

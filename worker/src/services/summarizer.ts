@@ -54,9 +54,9 @@ Items are grouped by source. Select the most important items, ensuring coverage 
 
 ${grouped}
 
-You MUST return at least 3 items. Always pick the best available even if nothing seems groundbreaking — something is better than nothing.
+You MUST return at least 8 items — aim for 10-15. Return at least 3 AI items AND at least 4 Dev items. Always pick the best available even if nothing seems groundbreaking — more coverage is better than fewer items.
 
-Select up to ${maxItems} items total (up to ${CATEGORY_LIMITS.ai} AI, up to ${CATEGORY_LIMITS.dev} Dev). Prefer items published today or yesterday. Prioritize:
+Select ${maxItems} items total (${CATEGORY_LIMITS.ai} AI, ${CATEGORY_LIMITS.dev} Dev). Prefer items published today or yesterday. Prioritize:
 - Major AI announcements or breakthroughs
 - Significant open source releases
 - Industry news that affects developers
@@ -67,7 +67,7 @@ For each selected item, provide:
 - item_index: The [number] shown before the item above
 - title: A clear, concise title (rewrite if needed)
 - summary: 2-3 sentence summary of why this matters
-- why_it_matters: 1 sentence on personal relevance (optional, only if genuinely relevant)
+- why_it_matters: 1 sentence on personal relevance to a senior full-stack developer
 - category: One of "ai", "dev"
 - source_name: Original source name
 
@@ -84,9 +84,9 @@ Today's date is ${todayDate()}.
 
 ${grouped}
 
-You MUST return at least 1 item. Always pick the closest matches even if none are a perfect fit — something is better than nothing.
+You MUST return at least 3 items — aim for 5-8. Always pick the closest matches even if none are a perfect fit — more options are better than fewer.
 
-Select up to ${CATEGORY_LIMITS.jobs} relevant job listings. Prioritize:
+Select ${CATEGORY_LIMITS.jobs} relevant job listings. Prioritize:
 - Remote roles accessible from the UK
 - Senior/lead level positions
 - Vue.js, TypeScript, Laravel, full-stack, or AI/ML roles
@@ -97,7 +97,7 @@ For each selected job, provide:
 - item_index: The [number] shown before the item above
 - title: Job title and company (e.g. "Senior Vue.js Engineer — Acme Corp")
 - summary: 2-3 sentences about the role, including salary/location if available
-- why_it_matters: Why this role is a good fit (optional)
+- why_it_matters: 1 sentence on why this role is a good fit
 - category: "jobs"
 - source_name: Original source name
 
