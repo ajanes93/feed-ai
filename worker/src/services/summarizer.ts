@@ -109,6 +109,14 @@ class AIError extends Error {
   }
 }
 
+export class DigestError extends Error {
+  aiUsages: AIUsageEntry[];
+  constructor(message: string, aiUsages: AIUsageEntry[]) {
+    super(message);
+    this.aiUsages = aiUsages;
+  }
+}
+
 function aiError(
   model: string,
   provider: "gemini" | "anthropic",
@@ -229,7 +237,7 @@ async function callClaude(
 async function callAI(
   prompt: string,
   apiKeys: { gemini?: string; anthropic?: string }
-): Promise<{ text: string; usages: AIUsageEntry[] }> {
+): Promise<{ parsed: DigestItemRaw[]; usages: AIUsageEntry[] }> {
   const usages: AIUsageEntry[] = [];
 
   if (apiKeys.gemini) {
@@ -237,27 +245,35 @@ async function callAI(
       console.log("Calling Gemini...");
       const result = await callGemini(prompt, apiKeys.gemini);
       usages.push(result.usage);
-      return { text: result.text, usages };
+      const parsed = parseAIResponse(result.text);
+      return { parsed, usages };
     } catch (err) {
       if (err instanceof AIError) usages.push(err.usage);
       console.error("Gemini failed, falling back to Claude:", err);
-      if (!apiKeys.anthropic) throw err;
+      if (!apiKeys.anthropic) throw new DigestError(String(err), usages);
     }
   }
 
   if (apiKeys.anthropic) {
-    console.log("Calling Claude...");
-    const result = await callClaude(
-      prompt,
-      apiKeys.anthropic,
-      usages.length > 0
-    );
-    usages.push(result.usage);
-    return { text: result.text, usages };
+    try {
+      console.log("Calling Claude...");
+      const result = await callClaude(
+        prompt,
+        apiKeys.anthropic,
+        usages.length > 0
+      );
+      usages.push(result.usage);
+      const parsed = parseAIResponse(result.text);
+      return { parsed, usages };
+    } catch (err) {
+      if (err instanceof AIError) usages.push(err.usage);
+      throw new DigestError(String(err), usages);
+    }
   }
 
-  throw new Error(
-    "No AI API key configured (GEMINI_API_KEY or ANTHROPIC_API_KEY)"
+  throw new DigestError(
+    "No AI API key configured (GEMINI_API_KEY or ANTHROPIC_API_KEY)",
+    usages
   );
 }
 
@@ -329,15 +345,7 @@ export async function generateDigest(
 ): Promise<DigestResult> {
   const prompt =
     type === "jobs" ? buildJobsPrompt(items) : buildNewsPrompt(items);
-  const { text: responseText, usages } = await callAI(prompt, apiKeys);
-
-  let parsed: DigestItemRaw[];
-  try {
-    parsed = parseAIResponse(responseText);
-  } catch {
-    console.error("Failed to parse AI response:", responseText);
-    throw new Error("Failed to parse digest response as JSON");
-  }
+  const { parsed, usages } = await callAI(prompt, apiKeys);
 
   const validated = parsed.filter((item) => {
     const valid = isValidDigestItem(item, items.length);
