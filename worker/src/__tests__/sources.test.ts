@@ -16,10 +16,20 @@ describe("sources", () => {
     for (const source of sources) {
       expect(source.id).toBeTruthy();
       expect(source.name).toBeTruthy();
-      expect(source.url).toMatch(/^https?:\/\//);
-      expect(["rss", "reddit", "hn", "github", "bluesky", "api"]).toContain(
-        source.type
-      );
+      if (source.type === "bluesky") {
+        expect(source.url).toBeTruthy();
+      } else {
+        expect(source.url).toMatch(/^https?:\/\//);
+      }
+      expect([
+        "rss",
+        "reddit",
+        "hn",
+        "github",
+        "bluesky",
+        "api",
+        "scrape",
+      ]).toContain(source.type);
       expect(["ai", "dev", "jobs"]).toContain(source.category);
     }
   });
