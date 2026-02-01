@@ -177,13 +177,18 @@ export async function fetchAllSources(
     .flatMap((r) => r.value);
 
   // Filter items by per-category freshness thresholds (items with no date are kept)
-  const categoryMap = new Map(sources.map((s) => [s.id, s.category]));
   const now = Date.now();
+  const cutoffBySource = new Map(
+    sources.map((s) => [
+      s.id,
+      now - FRESHNESS_THRESHOLDS[s.category] * 24 * 60 * 60 * 1000,
+    ])
+  );
+  const defaultCutoff = now - FRESHNESS_THRESHOLDS.dev * 24 * 60 * 60 * 1000;
+
   const recent = allItems.filter((item) => {
-    if (!item.publishedAt) return true;
-    const category = categoryMap.get(item.sourceId) ?? "dev";
-    const thresholdDays = FRESHNESS_THRESHOLDS[category] ?? 7;
-    return item.publishedAt >= now - thresholdDays * 24 * 60 * 60 * 1000;
+    const cutoff = cutoffBySource.get(item.sourceId) ?? defaultCutoff;
+    return !item.publishedAt || item.publishedAt >= cutoff;
   });
 
   console.log(
