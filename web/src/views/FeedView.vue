@@ -179,7 +179,12 @@ async function onTouchEnd() {
   if (pullDistance.value >= PULL_THRESHOLD && !refreshing.value) {
     refreshing.value = true;
     pullDistance.value = 50;
-    await fetchToday();
+    const currentDate = digest.value?.date;
+    if (currentDate) {
+      await fetchDate(currentDate);
+    } else {
+      await fetchToday();
+    }
     refreshing.value = false;
     await nextTick();
     resetCategory("first");

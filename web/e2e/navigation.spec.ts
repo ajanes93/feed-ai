@@ -47,6 +47,39 @@ test.describe("Date navigation", () => {
     await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
   });
 
+  test("pull-to-refresh on old digest stays on that digest", async ({
+    mockPage,
+  }) => {
+    const { yesterday } = buildTestData();
+
+    await mockPage.goto("/");
+    await mockPage.getByLabel("Previous digest").click();
+    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(mockPage).toHaveURL(new RegExp(yesterday));
+
+    // Simulate pull-to-refresh gesture (needs > 25px dead zone + enough for 80px threshold at 0.4 damping)
+    const box = (await mockPage.locator("body").boundingBox())!;
+    const x = box.width / 2;
+    await mockPage.dispatchEvent("body", "touchstart", {
+      touches: [{ clientX: x, clientY: 100, identifier: 0 }],
+      changedTouches: [{ clientX: x, clientY: 100, identifier: 0 }],
+    });
+    for (let y = 130; y <= 400; y += 30) {
+      await mockPage.dispatchEvent("body", "touchmove", {
+        touches: [{ clientX: x, clientY: y, identifier: 0 }],
+        changedTouches: [{ clientX: x, clientY: y, identifier: 0 }],
+      });
+    }
+    await mockPage.dispatchEvent("body", "touchend", {
+      touches: [],
+      changedTouches: [{ clientX: x, clientY: 400, identifier: 0 }],
+    });
+
+    // Should still show yesterday's digest, not today's
+    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(mockPage).toHaveURL(new RegExp(yesterday));
+  });
+
   test("previous digest URL persists after reload", async ({ mockPage }) => {
     const { yesterday } = buildTestData();
 
