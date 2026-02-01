@@ -199,6 +199,7 @@ onMounted(async () => {
 <template>
   <div class="h-[100dvh] overflow-hidden bg-gray-950">
     <div
+      data-testid="pull-content"
       class="relative h-full"
       :style="{
         transform:
