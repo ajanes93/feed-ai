@@ -22,6 +22,11 @@ const DIGEST_SLIDE = 1;
 // Pull-to-refresh
 const PULL_THRESHOLD = 80;
 const PULL_DEAD_ZONE = 25;
+const PULL_MIN_DISPLAY = 40;
+const PULL_MAX_DISTANCE = 120;
+const PULL_DAMPING = 0.4;
+const PULL_REFRESHING_DISTANCE = 50;
+const SCROLL_THRESHOLD = 2;
 
 const {
   digest,
@@ -153,6 +158,10 @@ const pullText = computed(() => {
     : "Pull to refresh";
 });
 
+const pullDisplayDistance = computed(() =>
+  Math.max(PULL_MIN_DISPLAY, pullDistance.value)
+);
+
 function onTouchStart(e: TouchEvent) {
   touchStartY.value = e.touches[0]?.clientY ?? 0;
   touchStartX.value = e.touches[0]?.clientX ?? 0;
@@ -163,22 +172,29 @@ function onTouchMove(e: TouchEvent) {
   if (refreshing.value || !touchStartY.value || pullLocked.value) return;
   const dy = (e.touches[0]?.clientY ?? 0) - touchStartY.value;
   const dx = (e.touches[0]?.clientX ?? 0) - touchStartX.value;
+
+  // Lock pull-to-refresh if horizontal swipe detected (user is swiping categories)
   if (pullDistance.value === 0 && Math.abs(dx) > Math.abs(dy)) {
     pullLocked.value = true;
     return;
   }
+
   const activeSlide = innerSwiper?.slides?.[innerSwiper.activeIndex];
   const scrollEl = activeSlide?.querySelector("[data-scroll-container]");
-  if (!scrollEl || scrollEl.scrollTop > 2) return;
+  if (!scrollEl || scrollEl.scrollTop > SCROLL_THRESHOLD) return;
+
   if (dy > PULL_DEAD_ZONE) {
-    pullDistance.value = Math.min(120, (dy - PULL_DEAD_ZONE) * 0.4);
+    pullDistance.value = Math.min(
+      PULL_MAX_DISTANCE,
+      (dy - PULL_DEAD_ZONE) * PULL_DAMPING
+    );
   }
 }
 
 async function onTouchEnd() {
   if (pullDistance.value >= PULL_THRESHOLD && !refreshing.value) {
     refreshing.value = true;
-    pullDistance.value = 50;
+    pullDistance.value = PULL_REFRESHING_DISTANCE;
     window.location.reload();
     return;
   }
@@ -204,7 +220,7 @@ onMounted(async () => {
       :style="{
         transform:
           pullDistance > 0 || refreshing
-            ? `translateY(${Math.max(40, pullDistance)}px)`
+            ? `translateY(${pullDisplayDistance}px)`
             : undefined,
         transition: pullDistance > 0 ? 'none' : 'transform 0.3s ease',
       }"
@@ -217,8 +233,8 @@ onMounted(async () => {
         v-if="pullDistance > 0 || refreshing"
         class="absolute right-0 left-0 z-20 flex items-center justify-center"
         :style="{
-          height: `${Math.max(40, pullDistance)}px`,
-          top: `-${Math.max(40, pullDistance)}px`,
+          height: `${pullDisplayDistance}px`,
+          top: `-${pullDisplayDistance}px`,
         }"
       >
         <div class="flex items-center gap-2">
