@@ -44,6 +44,6 @@ Identify complexity and refactor code to be clearer and more maintainable. Alway
 After simplifying, always run:
 
 ```bash
-cd web && npm run lint && npm run build
-cd worker && npm run lint
+npm run lint
+npm run build
 ```

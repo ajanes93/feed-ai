@@ -77,12 +77,11 @@ git diff
 # See staged changes
 git diff --staged
 
-# Check TypeScript (web)
-cd web && npm run build
+# Check TypeScript + build
+npm run build
 
-# Run linting
-cd web && npm run lint
-cd worker && npm run lint
+# Run linting (all packages)
+npm run lint
 ```
 
 ## Feedback Format
