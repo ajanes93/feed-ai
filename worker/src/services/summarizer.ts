@@ -67,7 +67,7 @@ For each selected item, provide:
 - item_index: The [number] shown before the item above
 - title: A clear, concise title (rewrite if needed)
 - summary: 2-3 sentence summary of why this matters
-- why_it_matters: 1 sentence on personal relevance (optional, only if genuinely relevant)
+- why_it_matters: 1 sentence on personal relevance to a senior full-stack developer
 - category: One of "ai", "dev"
 - source_name: Original source name
 
@@ -97,7 +97,7 @@ For each selected job, provide:
 - item_index: The [number] shown before the item above
 - title: Job title and company (e.g. "Senior Vue.js Engineer — Acme Corp")
 - summary: 2-3 sentences about the role, including salary/location if available
-- why_it_matters: Why this role is a good fit (optional)
+- why_it_matters: 1 sentence on why this role is a good fit
 - category: "jobs"
 - source_name: Original source name
 
