@@ -1,6 +1,7 @@
 import { ref } from "vue";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8787";
+const STORAGE_KEY = "admin_key";
 
 export interface AIUsageEntry {
   id: string;
@@ -54,26 +55,59 @@ export function useDashboard() {
   const data = ref<DashboardData | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
+  const needsAuth = ref(false);
+  const adminKey = ref(sessionStorage.getItem(STORAGE_KEY) || "");
+
+  function setAdminKey(key: string) {
+    adminKey.value = key;
+    sessionStorage.setItem(STORAGE_KEY, key);
+    needsAuth.value = false;
+  }
+
+  function clearAdminKey() {
+    adminKey.value = "";
+    sessionStorage.removeItem(STORAGE_KEY);
+    needsAuth.value = true;
+  }
 
   async function fetchDashboard() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
     loading.value = true;
     error.value = null;
 
     try {
-      const res = await fetch(`${API_BASE}/api/admin/dashboard`);
+      const res = await fetch(`${API_BASE}/api/admin/dashboard`, {
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
 
       if (!res.ok) {
-        error.value = "Failed to load dashboard";
-        return;
+        throw new Error("Failed to load dashboard");
       }
 
       data.value = await res.json();
-    } catch {
-      error.value = "Network error";
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : "Network error";
     } finally {
       loading.value = false;
     }
   }
 
-  return { data, loading, error, fetchDashboard };
+  return {
+    data,
+    loading,
+    error,
+    needsAuth,
+    adminKey,
+    setAdminKey,
+    fetchDashboard,
+  };
 }

@@ -15,3 +15,13 @@ export interface Env {
   GEMINI_API_KEY?: string;
   ADMIN_KEY: string;
 }
+
+export function countByCategory(
+  items: { category: string }[]
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    counts[item.category] = (counts[item.category] || 0) + 1;
+  }
+  return counts;
+}

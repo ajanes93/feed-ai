@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useDashboard } from "../composables/useDashboard";
 import { stubFetchJson } from "./helpers";
 
@@ -30,6 +30,11 @@ const DASHBOARD_DATA = {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  sessionStorage.setItem("admin_key", "test-key");
+});
+
+afterEach(() => {
+  sessionStorage.clear();
 });
 
 describe("useDashboard", () => {
@@ -65,7 +70,7 @@ describe("useDashboard", () => {
     await fetchDashboard();
 
     expect(data.value).toBeNull();
-    expect(error.value).toBe("Network error");
+    expect(error.value).toBe("offline");
   });
 
   it("sets loading during fetch", async () => {
@@ -88,5 +93,59 @@ describe("useDashboard", () => {
     await promise;
 
     expect(loading.value).toBe(false);
+  });
+
+  describe("auth flow", () => {
+    it("requires auth when no admin key is set", async () => {
+      sessionStorage.clear();
+      const { needsAuth, fetchDashboard } = useDashboard();
+      await fetchDashboard();
+      expect(needsAuth.value).toBe(true);
+    });
+
+    it("sends admin key as Bearer token", async () => {
+      const fetchSpy = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(DASHBOARD_DATA),
+      });
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const { fetchDashboard } = useDashboard();
+      await fetchDashboard();
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer test-key" },
+        })
+      );
+    });
+
+    it("clears key and sets needsAuth on 401", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: "Unauthorized" }),
+        })
+      );
+
+      const { needsAuth, error, fetchDashboard } = useDashboard();
+      await fetchDashboard();
+
+      expect(needsAuth.value).toBe(true);
+      expect(error.value).toBe("Invalid admin key");
+      expect(sessionStorage.getItem("admin_key")).toBeNull();
+    });
+
+    it("stores key in sessionStorage via setAdminKey", () => {
+      sessionStorage.clear();
+      const { setAdminKey, needsAuth } = useDashboard();
+      setAdminKey("new-key");
+      expect(sessionStorage.getItem("admin_key")).toBe("new-key");
+      expect(needsAuth.value).toBe(false);
+    });
   });
 });

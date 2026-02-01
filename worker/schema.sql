@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS ai_usage (
 CREATE TABLE IF NOT EXISTS error_logs (
   id TEXT PRIMARY KEY,
   level TEXT NOT NULL,          -- 'info', 'warn', 'error'
-  category TEXT NOT NULL,       -- 'ai', 'fetch', 'parse', 'general'
+  category TEXT NOT NULL,       -- 'ai', 'fetch', 'parse', 'general', 'digest', 'summarizer'
   message TEXT NOT NULL,
   details TEXT,                 -- JSON blob for extra context
   source_id TEXT,

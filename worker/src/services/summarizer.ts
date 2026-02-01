@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { RawItem, DigestItem } from "../types";
+import { RawItem, DigestItem, countByCategory } from "../types";
 import { todayDate } from "@feed-ai/shared/utils";
 import { CATEGORY_LIMITS } from "../sources";
 import type { AIUsageEntry } from "./logger";
@@ -16,6 +16,14 @@ interface DigestItemRaw {
 export interface DigestResult {
   items: DigestItem[];
   aiUsages: AIUsageEntry[];
+  /** Structured log entries from the summarizer pipeline for the caller to persist */
+  logs: SummarizerLog[];
+}
+
+export interface SummarizerLog {
+  level: "info" | "warn" | "error";
+  message: string;
+  details?: Record<string, unknown>;
 }
 
 type DigestType = "news" | "jobs";
@@ -240,39 +248,59 @@ async function callClaude(
 
 async function callAI(
   prompt: string,
-  apiKeys: { gemini?: string; anthropic?: string }
+  apiKeys: { gemini?: string; anthropic?: string },
+  logs: SummarizerLog[]
 ): Promise<{ parsed: DigestItemRaw[]; usages: AIUsageEntry[] }> {
   const usages: AIUsageEntry[] = [];
+  let lastError = "";
 
-  if (apiKeys.gemini) {
+  async function tryProvider(
+    name: string,
+    call: () => Promise<{ text: string; usage: AIUsageEntry }>
+  ): Promise<DigestItemRaw[] | null> {
     try {
-      console.log("Calling Gemini...");
-      const result = await callGemini(prompt, apiKeys.gemini);
+      logs.push({ level: "info", message: `Calling ${name}` });
+      const result = await call();
       usages.push(result.usage);
-      const parsed = parseAIResponse(result.text);
-      return { parsed, usages };
+      logs.push({
+        level: "info",
+        message: `${name} returned response`,
+        details: {
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          latencyMs: result.usage.latencyMs,
+          responseLength: result.text.length,
+          responsePreview: result.text.slice(0, 500),
+        },
+      });
+      return parseAIResponse(result.text, logs);
     } catch (err) {
       if (err instanceof AIError) usages.push(err.usage);
-      console.error("Gemini failed, falling back to Claude:", err);
-      if (!apiKeys.anthropic) throw new DigestError(String(err), usages);
+      lastError = err instanceof Error ? err.message : String(err);
+      logs.push({
+        level: "warn",
+        message: `${name} failed: ${lastError}`,
+      });
+      return null;
     }
   }
 
+  if (apiKeys.gemini) {
+    const parsed = await tryProvider("Gemini", () =>
+      callGemini(prompt, apiKeys.gemini!)
+    );
+    if (parsed) return { parsed, usages };
+    if (!apiKeys.anthropic)
+      throw new DigestError(lastError || "Gemini failed", usages);
+    logs.push({ level: "info", message: "Falling back to Claude" });
+  }
+
   if (apiKeys.anthropic) {
-    try {
-      console.log("Calling Claude...");
-      const result = await callClaude(
-        prompt,
-        apiKeys.anthropic,
-        usages.length > 0
-      );
-      usages.push(result.usage);
-      const parsed = parseAIResponse(result.text);
-      return { parsed, usages };
-    } catch (err) {
-      if (err instanceof AIError) usages.push(err.usage);
-      throw new DigestError(String(err), usages);
-    }
+    const parsed = await tryProvider("Claude", () =>
+      callClaude(prompt, apiKeys.anthropic!, usages.length > 0)
+    );
+    if (parsed) return { parsed, usages };
+    throw new DigestError(lastError || "Claude failed", usages);
   }
 
   throw new DigestError(
@@ -281,24 +309,35 @@ async function callAI(
   );
 }
 
-function tryRecoverTruncatedJSON(json: string): DigestItemRaw[] | null {
+function tryRecoverTruncatedJSON(
+  json: string,
+  logs: SummarizerLog[]
+): DigestItemRaw[] | null {
   try {
     const lastComplete = json.lastIndexOf("}");
     if (lastComplete <= 0) return null;
     const recovered = json.slice(0, lastComplete + 1) + "]";
     const parsed = JSON.parse(recovered);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      console.warn(`Recovered ${parsed.length} items from truncated response`);
+      logs.push({
+        level: "warn",
+        message: `Recovered ${parsed.length} items from truncated response`,
+      });
       return parsed;
     }
   } catch (err) {
-    console.error("Truncation recovery also failed:", (err as Error).message);
+    logs.push({
+      level: "error",
+      message: `Truncation recovery also failed: ${(err as Error).message}`,
+    });
   }
   return null;
 }
 
-function parseAIResponse(responseText: string): DigestItemRaw[] {
-  // Strip markdown fences (opening and closing)
+function parseAIResponse(
+  responseText: string,
+  logs: SummarizerLog[]
+): DigestItemRaw[] {
   const cleaned = responseText
     .replace(/```(?:json)?\s*/g, "")
     .replace(/```\s*$/g, "")
@@ -306,13 +345,25 @@ function parseAIResponse(responseText: string): DigestItemRaw[] {
 
   try {
     const parsed = JSON.parse(cleaned);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      logs.push({
+        level: "info",
+        message: `Parsed ${parsed.length} items from AI response`,
+      });
+      return parsed;
+    }
+    logs.push({
+      level: "error",
+      message: "AI returned empty or non-array JSON",
+      details: { parsedType: typeof parsed, isArray: Array.isArray(parsed) },
+    });
   } catch (err) {
-    console.warn(
-      "Initial JSON parse failed, attempting truncation recovery:",
-      (err as Error).message
-    );
-    const recovered = tryRecoverTruncatedJSON(cleaned);
+    logs.push({
+      level: "warn",
+      message: `Initial JSON parse failed: ${(err as Error).message}`,
+      details: { responsePreview: cleaned.slice(0, 300) },
+    });
+    const recovered = tryRecoverTruncatedJSON(cleaned, logs);
     if (recovered) return recovered;
   }
 
@@ -334,12 +385,20 @@ function isValidDigestItem(item: DigestItemRaw, itemCount: number): boolean {
 
 function applyCategoryLimits(items: DigestItemRaw[]): DigestItemRaw[] {
   const counts: Record<string, number> = {};
-  return items.filter((item) => {
-    const count = (counts[item.category] = (counts[item.category] || 0) + 1);
+  const result: DigestItemRaw[] = [];
+
+  for (const item of items) {
+    const count = (counts[item.category] || 0) + 1;
     const limit =
       CATEGORY_LIMITS[item.category as keyof typeof CATEGORY_LIMITS];
-    return !limit || count <= limit;
-  });
+
+    if (!limit || count <= limit) {
+      counts[item.category] = count;
+      result.push(item);
+    }
+  }
+
+  return result;
 }
 
 export async function generateDigest(
@@ -347,17 +406,77 @@ export async function generateDigest(
   apiKeys: { gemini?: string; anthropic?: string },
   type: DigestType = "news"
 ): Promise<DigestResult> {
+  const logs: SummarizerLog[] = [];
+
+  logs.push({
+    level: "info",
+    message: `Starting ${type} digest generation`,
+    details: {
+      inputItemCount: items.length,
+      sources: [...new Set(items.map((i) => i.sourceId))],
+      itemTitles: items.map((i) => i.title),
+    },
+  });
+
   const prompt =
     type === "jobs" ? buildJobsPrompt(items) : buildNewsPrompt(items);
-  const { parsed, usages } = await callAI(prompt, apiKeys);
+
+  logs.push({
+    level: "info",
+    message: `Built ${type} prompt`,
+    details: { promptLength: prompt.length },
+  });
+
+  const { parsed, usages } = await callAI(prompt, apiKeys, logs);
+
+  logs.push({
+    level: "info",
+    message: `AI returned ${parsed.length} raw items`,
+    details: {
+      categories: countByCategory(parsed),
+    },
+  });
 
   const validated = parsed.filter((item) => {
     const valid = isValidDigestItem(item, items.length);
-    if (!valid) console.warn("Dropping malformed digest item:", item);
+    if (!valid) {
+      logs.push({
+        level: "warn",
+        message: "Dropping malformed digest item",
+        details: {
+          item_index: item.item_index,
+          title: item.title,
+          category: item.category,
+          hasTitle: typeof item.title === "string",
+          hasSummary: typeof item.summary === "string",
+          hasCategory: typeof item.category === "string",
+          hasSourceName: typeof item.source_name === "string",
+          indexValid:
+            typeof item.item_index === "number" &&
+            item.item_index >= 0 &&
+            item.item_index < items.length,
+        },
+      });
+    }
     return valid;
   });
 
+  if (validated.length !== parsed.length) {
+    logs.push({
+      level: "warn",
+      message: `Validation dropped ${parsed.length - validated.length} items`,
+      details: { before: parsed.length, after: validated.length },
+    });
+  }
+
   const limited = applyCategoryLimits(validated);
+
+  if (limited.length !== validated.length) {
+    logs.push({
+      level: "info",
+      message: `Category limits reduced items from ${validated.length} to ${limited.length}`,
+    });
+  }
 
   const digestItems: DigestItem[] = limited.map((item, index) => {
     const rawItem = items[item.item_index];
@@ -377,5 +496,13 @@ export async function generateDigest(
     };
   });
 
-  return { items: digestItems, aiUsages: usages };
+  logs.push({
+    level: "info",
+    message: `${type} digest complete: ${digestItems.length} final items`,
+    details: {
+      categories: countByCategory(digestItems),
+    },
+  });
+
+  return { items: digestItems, aiUsages: usages, logs };
 }
