@@ -11,11 +11,13 @@ const DASHBOARD_DATA = dashboardDataFactory.build();
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2025-01-28T12:00:00Z"));
+  sessionStorage.setItem("admin_key", "test-key");
 });
 
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  sessionStorage.clear();
 });
 
 const render = async (data = DASHBOARD_DATA) => {
@@ -147,6 +149,49 @@ describe("DashboardView", () => {
       await flushPromises();
 
       expect(wrapper.text()).toContain("99");
+    });
+  });
+
+  describe("auth flow", () => {
+    it("shows auth prompt when no admin key is set", async () => {
+      sessionStorage.clear();
+      stubFetchJson(DASHBOARD_DATA);
+      const wrapper = mount(DashboardView);
+      await flushPromises();
+
+      expect(wrapper.text()).toContain("Enter admin key");
+      expect(wrapper.find('input[type="password"]').exists()).toBe(true);
+      expect(wrapper.text()).not.toContain("AI Usage");
+    });
+
+    it("fetches dashboard after submitting admin key", async () => {
+      sessionStorage.clear();
+      stubFetchJson(DASHBOARD_DATA);
+      const wrapper = mount(DashboardView);
+      await flushPromises();
+
+      await wrapper.find('input[type="password"]').setValue("my-key");
+      await wrapper.find("form").trigger("submit");
+      await flushPromises();
+
+      expect(wrapper.text()).toContain("AI Usage");
+      expect(wrapper.text()).toContain("Total Digests");
+    });
+
+    it("shows error and re-prompts on 401", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: "Unauthorized" }),
+        })
+      );
+      const wrapper = mount(DashboardView);
+      await flushPromises();
+
+      expect(wrapper.text()).toContain("Invalid admin key");
+      expect(wrapper.find('input[type="password"]').exists()).toBe(true);
     });
   });
 });
