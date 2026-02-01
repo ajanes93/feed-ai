@@ -197,7 +197,9 @@ app.get("/api/health", async (c) => {
   ).all();
 
   return c.json(
-    result.results.map((row) => mapSourceHealth(row as Record<string, unknown>))
+    result.results
+      .filter((row) => activeSourceIds.has(row.source_id as string))
+      .map((row) => mapSourceHealth(row as Record<string, unknown>))
   );
 });
 
@@ -231,9 +233,9 @@ app.get("/api/admin/dashboard", async (c) => {
         .length,
       fallbackCount: aiUsage.results.filter((r) => r.was_fallback === 1).length,
     },
-    sources: sourceHealth.results.map((row) =>
-      mapSourceHealth(row as Record<string, unknown>)
-    ),
+    sources: sourceHealth.results
+      .filter((row) => activeSourceIds.has(row.source_id as string))
+      .map((row) => mapSourceHealth(row as Record<string, unknown>)),
     errors: recentErrors.results.map((row) =>
       mapErrorLog(row as Record<string, unknown>)
     ),
@@ -347,6 +349,7 @@ async function rebuildDigest(env: Env, date: string): Promise<Response> {
 // --- Digest pipeline helpers ---
 
 const sourceCategoryMap = new Map(sources.map((s) => [s.id, s.category]));
+const activeSourceIds = new Set(sources.map((s) => s.id));
 
 export async function deduplicateItems(
   items: RawItem[],
