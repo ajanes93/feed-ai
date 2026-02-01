@@ -31,8 +31,10 @@ export default {
       return new Response("Internal server error", { status: 500 });
     }
 
-    return new Response("feed-ai MCP server. Connect via /mcp", {
-      status: 200,
-    });
+    if (url.pathname === "/") {
+      return new Response("feed-ai MCP server. Connect via /mcp");
+    }
+
+    return new Response("Not found", { status: 404 });
   },
 };
