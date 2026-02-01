@@ -162,6 +162,10 @@ const pullDisplayDistance = computed(() =>
   Math.max(PULL_MIN_DISPLAY, pullDistance.value)
 );
 
+const showPullIndicator = computed(
+  () => pullDistance.value > 0 || refreshing.value
+);
+
 function onTouchStart(e: TouchEvent) {
   touchStartY.value = e.touches[0]?.clientY ?? 0;
   touchStartX.value = e.touches[0]?.clientX ?? 0;
@@ -218,10 +222,9 @@ onMounted(async () => {
       data-testid="pull-content"
       class="relative h-full"
       :style="{
-        transform:
-          pullDistance > 0 || refreshing
-            ? `translateY(${pullDisplayDistance}px)`
-            : undefined,
+        transform: showPullIndicator
+          ? `translateY(${pullDisplayDistance}px)`
+          : undefined,
         transition:
           pullDistance > 0 && !refreshing ? 'none' : 'transform 0.3s ease',
       }"
@@ -233,12 +236,10 @@ onMounted(async () => {
       <div
         class="absolute right-0 left-0 z-20 flex items-center justify-center transition-opacity duration-200"
         :class="
-          pullDistance > 0 || refreshing
-            ? 'opacity-100'
-            : 'pointer-events-none opacity-0'
+          showPullIndicator ? 'opacity-100' : 'pointer-events-none opacity-0'
         "
         :style="
-          pullDistance > 0 || refreshing
+          showPullIndicator
             ? {
                 height: `${pullDisplayDistance}px`,
                 top: `-${pullDisplayDistance}px`,
