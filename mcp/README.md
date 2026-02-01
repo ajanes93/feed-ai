@@ -18,28 +18,24 @@ Admin tools require the `admin_key` parameter (the worker's `ADMIN_KEY` secret).
 
 ## Setup
 
-The MCP server config is committed in `.claude/settings.json` and picked up automatically by Claude Code. After cloning:
+The MCP server is deployed as a Cloudflare Worker. Add the worker URL to Claude.ai or Claude mobile MCP settings:
 
-```bash
-npm install            # From repo root
-npm run build -w mcp   # Build the MCP server
+```
+https://feed-ai-mcp.andresjanes.workers.dev/mcp
 ```
 
 ## Development
 
 ```bash
-npm run build     # Compile TypeScript
 npm test          # Run tests
+npm run dev       # Local development server
+npm run deploy    # Deploy to Cloudflare
 ```
-
-## Environment Variables
-
-- `FEED_AI_API_BASE` — Worker API URL (defaults to production)
 
 ## Architecture
 
-The server is a thin HTTP proxy — each tool maps to a worker API endpoint. It uses stdio transport for Claude Code communication and zod v4 for input validation.
+The MCP server runs as a Cloudflare Worker using the Cloudflare Agents SDK. It's a thin HTTP proxy — each tool maps to the main feed-ai worker API endpoint.
 
 ```
-Claude Code ──stdio──▶ MCP Server ──HTTP──▶ Cloudflare Worker
+Claude (desktop/mobile) ──SSE/HTTP──▶ MCP Worker ──HTTP──▶ feed-ai Worker
 ```
