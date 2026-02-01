@@ -222,7 +222,8 @@ onMounted(async () => {
           pullDistance > 0 || refreshing
             ? `translateY(${pullDisplayDistance}px)`
             : undefined,
-        transition: pullDistance > 0 ? 'none' : 'transform 0.3s ease',
+        transition:
+          pullDistance > 0 && !refreshing ? 'none' : 'transform 0.3s ease',
       }"
       @touchstart.passive="onTouchStart"
       @touchmove.passive="onTouchMove"
@@ -230,12 +231,20 @@ onMounted(async () => {
     >
       <!-- Pull-to-refresh indicator (positioned above the translated content) -->
       <div
-        v-if="pullDistance > 0 || refreshing"
-        class="absolute right-0 left-0 z-20 flex items-center justify-center"
-        :style="{
-          height: `${pullDisplayDistance}px`,
-          top: `-${pullDisplayDistance}px`,
-        }"
+        class="absolute right-0 left-0 z-20 flex items-center justify-center transition-opacity duration-200"
+        :class="
+          pullDistance > 0 || refreshing
+            ? 'opacity-100'
+            : 'pointer-events-none opacity-0'
+        "
+        :style="
+          pullDistance > 0 || refreshing
+            ? {
+                height: `${pullDisplayDistance}px`,
+                top: `-${pullDisplayDistance}px`,
+              }
+            : { height: '0px', top: '0px', overflow: 'hidden' }
+        "
       >
         <div class="flex items-center gap-2">
           <div
