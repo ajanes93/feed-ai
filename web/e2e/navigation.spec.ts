@@ -4,12 +4,13 @@ test.describe("Date navigation", () => {
   test("displays formatted date in header", async ({ mockPage }) => {
     await mockPage.goto("/");
 
-    const today = new Date();
-    const month = today.toLocaleDateString("en-US", { month: "long" });
-    const day = String(today.getDate());
+    const formatted = new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    });
 
-    await expect(mockPage.getByText(month)).toBeVisible();
-    await expect(mockPage.getByText(day)).toBeVisible();
+    await expect(mockPage.getByText(formatted)).toBeVisible();
   });
 
   test("shows story count in header", async ({ mockPage }) => {
