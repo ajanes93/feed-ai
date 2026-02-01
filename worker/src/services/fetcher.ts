@@ -1,29 +1,20 @@
 import { XMLParser } from "fast-xml-parser";
 import { Source } from "../sources";
 import { RawItem } from "../types";
+import { fetchBlueskySource } from "./bluesky";
+import { fetchScrapeSource } from "./scrape";
+import { fetchHNHiring } from "./hn-hiring";
+import {
+  stripHtml,
+  parsePublishedDate,
+  ITEM_LIMIT,
+  USER_AGENT,
+} from "./constants";
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
 });
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function parsePublishedDate(dateStr?: string): number | undefined {
-  if (!dateStr) return undefined;
-  const timestamp = new Date(dateStr).getTime();
-  return isNaN(timestamp) ? undefined : timestamp;
-}
 
 interface FeedItem {
   title?: string;
@@ -52,11 +43,9 @@ function extractItems(parsed: Record<string, unknown>): FeedItem[] {
   return Array.isArray(items) ? items : [items];
 }
 
-const ITEM_LIMIT = 20;
-
 async function fetchRssFeed(source: Source): Promise<RawItem[]> {
   const response = await fetch(source.url, {
-    headers: { "User-Agent": "feed-ai/1.0" },
+    headers: { "User-Agent": USER_AGENT },
   });
 
   if (!response.ok) {
@@ -102,7 +91,7 @@ interface JobicyResponse {
 
 async function fetchJsonApi(source: Source): Promise<RawItem[]> {
   const response = await fetch(source.url, {
-    headers: { "User-Agent": "feed-ai/1.0" },
+    headers: { "User-Agent": USER_AGENT },
   });
 
   if (!response.ok) {
@@ -125,11 +114,21 @@ async function fetchJsonApi(source: Source): Promise<RawItem[]> {
 
 export async function fetchSource(source: Source): Promise<RawItem[]> {
   try {
-    if (source.type === "api") {
-      return await fetchJsonApi(source);
+    switch (source.type) {
+      case "api":
+        return await fetchJsonApi(source);
+      case "bluesky":
+        return await fetchBlueskySource(source);
+      case "scrape":
+        return await fetchScrapeSource(source);
+      default:
+        // rss, reddit, hn, github — all XML feeds
+        // hn-hiring is a special case dispatched by source ID
+        if (source.id === "hn-hiring") {
+          return await fetchHNHiring(source);
+        }
+        return await fetchRssFeed(source);
     }
-    // rss, reddit, hn, github, bluesky — all XML feeds
-    return await fetchRssFeed(source);
   } catch (error) {
     console.error(`Failed to fetch ${source.name}:`, error);
     return [];

@@ -34,9 +34,50 @@ function jobicyJson() {
   });
 }
 
+function blueskyResolveResponse() {
+  return JSON.stringify({ did: "did:plc:test123" });
+}
+
+function blueskyFeedResponse(sourceId: string) {
+  return JSON.stringify({
+    feed: [
+      {
+        post: {
+          uri: `at://did:plc:test123/app.bsky.feed.post/abc`,
+          record: {
+            text: `${sourceId} post content`,
+            createdAt: new Date().toISOString(),
+          },
+        },
+      },
+    ],
+  });
+}
+
+function jinaMarkdown(sourceId: string) {
+  return `[${sourceId} Article](https://every.to/source-code/${sourceId}-article)`;
+}
+
+function hnHiringSearchResponse() {
+  return JSON.stringify({ hits: [{ objectID: "99999" }] });
+}
+
+function hnHiringItemResponse() {
+  return JSON.stringify({
+    children: [
+      {
+        id: 10001,
+        text: "TestCo | Frontend Vue Developer | Remote",
+        created_at: new Date().toISOString(),
+      },
+    ],
+  });
+}
+
 /**
  * Mock every source URL to return valid feed data.
  * Groups sources by origin and registers intercepts for each path.
+ * Handles special source types (bluesky, scrape, hn-hiring).
  */
 function mockAllSources() {
   const byOrigin = new Map<
@@ -44,7 +85,25 @@ function mockAllSources() {
     { path: string; source: (typeof sources)[number] }[]
   >();
 
+  // Collect origins for bluesky/scrape/hn-hiring mocks
+  const blueskyHandles: string[] = [];
+  let hasScrape = false;
+  let hasHnHiring = false;
+
   for (const source of sources) {
+    if (source.type === "bluesky") {
+      blueskyHandles.push(source.url);
+      continue;
+    }
+    if (source.type === "scrape") {
+      hasScrape = true;
+      continue;
+    }
+    if (source.id === "hn-hiring") {
+      hasHnHiring = true;
+      continue;
+    }
+
     const url = new URL(source.url);
     const origin = url.origin;
     const path = url.pathname + url.search;
@@ -53,6 +112,7 @@ function mockAllSources() {
     byOrigin.set(origin, group);
   }
 
+  // Mock standard RSS/API sources
   for (const [origin, entries] of byOrigin) {
     const mock = fetchMock.get(origin);
     for (const { path, source } of entries) {
@@ -63,6 +123,56 @@ function mockAllSources() {
           : { "content-type": "application/xml" };
       mock.intercept({ method: "GET", path }).reply(200, body, { headers });
     }
+  }
+
+  // Mock Bluesky handle resolution + feeds
+  if (blueskyHandles.length > 0) {
+    const bskyMock = fetchMock.get("https://bsky.social");
+    for (const handle of blueskyHandles) {
+      bskyMock
+        .intercept({
+          method: "GET",
+          path: `/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`,
+        })
+        .reply(200, blueskyResolveResponse(), {
+          headers: { "content-type": "application/json" },
+        });
+    }
+
+    const feedMock = fetchMock.get("https://public.api.bsky.app");
+    for (const handle of blueskyHandles) {
+      feedMock
+        .intercept({
+          method: "GET",
+          path: /\/xrpc\/app\.bsky\.feed\.getAuthorFeed/,
+        })
+        .reply(200, blueskyFeedResponse(handle), {
+          headers: { "content-type": "application/json" },
+        });
+    }
+  }
+
+  // Mock Jina scrape
+  if (hasScrape) {
+    const jinaMock = fetchMock.get("https://r.jina.ai");
+    jinaMock
+      .intercept({ method: "GET", path: /.*/ })
+      .reply(200, jinaMarkdown("every-to"));
+  }
+
+  // Mock HN Who's Hiring
+  if (hasHnHiring) {
+    const algolia = fetchMock.get("https://hn.algolia.com");
+    algolia
+      .intercept({ method: "GET", path: /\/api\/v1\/search/ })
+      .reply(200, hnHiringSearchResponse(), {
+        headers: { "content-type": "application/json" },
+      });
+    algolia
+      .intercept({ method: "GET", path: /\/api\/v1\/items/ })
+      .reply(200, hnHiringItemResponse(), {
+        headers: { "content-type": "application/json" },
+      });
   }
 }
 
@@ -218,9 +328,12 @@ describe("POST /api/generate (end-to-end)", () => {
   });
 
   it("returns 500 when all sources fail", async () => {
-    // Mock every source URL to return 500
+    // Mock every source URL to return errors
     const byOrigin = new Map<string, string[]>();
     for (const source of sources) {
+      if (source.type === "bluesky") continue;
+      if (source.type === "scrape") continue;
+      if (source.id === "hn-hiring") continue;
       const url = new URL(source.url);
       const paths = byOrigin.get(url.origin) || [];
       paths.push(url.pathname + url.search);
@@ -232,6 +345,22 @@ describe("POST /api/generate (end-to-end)", () => {
         mock.intercept({ method: "GET", path }).reply(500, "Server Error");
       }
     }
+    // Mock Bluesky to fail
+    fetchMock
+      .get("https://bsky.social")
+      .intercept({ method: "GET", path: /.*/ })
+      .reply(500, "Server Error")
+      .persist();
+    // Mock Jina to fail
+    fetchMock
+      .get("https://r.jina.ai")
+      .intercept({ method: "GET", path: /.*/ })
+      .reply(500, "Server Error");
+    // Mock HN Algolia to fail
+    fetchMock
+      .get("https://hn.algolia.com")
+      .intercept({ method: "GET", path: /.*/ })
+      .reply(500, "Server Error");
 
     const res = await app.request(
       "/api/generate",

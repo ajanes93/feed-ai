@@ -1,7 +1,7 @@
 export interface Source {
   id: string;
   name: string;
-  type: "rss" | "reddit" | "hn" | "github" | "bluesky" | "api";
+  type: "rss" | "reddit" | "hn" | "github" | "bluesky" | "api" | "scrape";
   url: string;
   category: "ai" | "dev" | "jobs";
 }
@@ -20,7 +20,7 @@ export const FRESHNESS_THRESHOLDS: Record<Source["category"], number> = {
 };
 
 export const sources: Source[] = [
-  // === AI (5 sources) ===
+  // === AI (8 sources) ===
   {
     id: "anthropic-news",
     name: "Anthropic News",
@@ -36,17 +36,38 @@ export const sources: Source[] = [
     category: "ai",
   },
   {
+    id: "simon-willison",
+    name: "Simon Willison",
+    type: "rss",
+    url: "https://simonwillison.net/atom/everything/",
+    category: "ai",
+  },
+  {
+    id: "latent-space",
+    name: "Latent Space",
+    type: "rss",
+    url: "https://www.latent.space/feed",
+    category: "ai",
+  },
+  {
+    id: "huggingface-blog",
+    name: "Hugging Face Blog",
+    type: "rss",
+    url: "https://huggingface.co/blog/feed.xml",
+    category: "ai",
+  },
+  {
+    id: "every-to",
+    name: "Every.to",
+    type: "scrape",
+    url: "https://every.to/newsletter",
+    category: "ai",
+  },
+  {
     id: "hn-ai",
     name: "Hacker News AI",
     type: "hn",
     url: "https://hnrss.org/newest?q=AI+OR+LLM+OR+Claude+OR+GPT&points=100",
-    category: "ai",
-  },
-  {
-    id: "r-machinelearning",
-    name: "r/MachineLearning",
-    type: "reddit",
-    url: "https://www.reddit.com/r/MachineLearning/top/.rss?t=day",
     category: "ai",
   },
   {
@@ -59,24 +80,24 @@ export const sources: Source[] = [
 
   // === Dev — Vue/Vite Ecosystem (10 sources) ===
   {
+    id: "vue-blog",
+    name: "Vue.js Blog",
+    type: "rss",
+    url: "https://blog.vuejs.org/feed.rss",
+    category: "dev",
+  },
+  {
     id: "evan-you-bluesky",
     name: "Evan You",
     type: "bluesky",
-    url: "https://bsky.app/profile/evanyou.me/rss",
+    url: "evanyou.me",
     category: "dev",
   },
   {
     id: "anthony-fu-bluesky",
     name: "Anthony Fu",
     type: "bluesky",
-    url: "https://bsky.app/profile/antfu.me/rss",
-    category: "dev",
-  },
-  {
-    id: "vuejsfeed",
-    name: "Vue.js Feed",
-    type: "rss",
-    url: "https://vuejsfeed.com/feed",
+    url: "antfu.me",
     category: "dev",
   },
   {
@@ -108,28 +129,12 @@ export const sources: Source[] = [
     category: "dev",
   },
   {
-    id: "gh-pinia",
-    name: "Pinia Releases",
-    type: "github",
-    url: "https://github.com/vuejs/pinia/releases.atom",
-    category: "dev",
-  },
-  {
-    id: "gh-vue-router",
-    name: "Vue Router Releases",
-    type: "github",
-    url: "https://github.com/vuejs/router/releases.atom",
-    category: "dev",
-  },
-  {
     id: "gh-vueuse",
     name: "VueUse Releases",
     type: "github",
     url: "https://github.com/vueuse/vueuse/releases.atom",
     category: "dev",
   },
-
-  // === Dev — More GitHub Releases (4 sources) ===
   {
     id: "gh-nuxt",
     name: "Nuxt Releases",
@@ -144,27 +149,27 @@ export const sources: Source[] = [
     url: "https://github.com/vitest-dev/vitest/releases.atom",
     category: "dev",
   },
-  {
-    id: "gh-oxc",
-    name: "OXC Releases",
-    type: "github",
-    url: "https://github.com/oxc-project/oxc/releases.atom",
-    category: "dev",
-  },
-  {
-    id: "gh-rolldown",
-    name: "Rolldown Releases",
-    type: "github",
-    url: "https://github.com/rolldown/rolldown/releases.atom",
-    category: "dev",
-  },
 
-  // === Dev — Laravel (2 sources) ===
+  // === Dev — Laravel (4 sources) ===
   {
     id: "laravel-news",
     name: "Laravel News",
     type: "rss",
     url: "https://feed.laravel-news.com",
+    category: "dev",
+  },
+  {
+    id: "taylor-otwell-bluesky",
+    name: "Taylor Otwell",
+    type: "bluesky",
+    url: "taylorotwell.com",
+    category: "dev",
+  },
+  {
+    id: "gh-laravel",
+    name: "Laravel Releases",
+    type: "github",
+    url: "https://github.com/laravel/framework/releases.atom",
     category: "dev",
   },
   {
@@ -175,16 +180,7 @@ export const sources: Source[] = [
     category: "dev",
   },
 
-  // === Dev — Rails (1 source) ===
-  {
-    id: "ruby-weekly",
-    name: "Ruby Weekly",
-    type: "rss",
-    url: "https://rubyweekly.com/rss",
-    category: "dev",
-  },
-
-  // === Dev — Frontend General (4 sources) ===
+  // === Dev — Frontend/Web Platform (6 sources) ===
   {
     id: "nerdy-dev",
     name: "nerdy.dev / Adam Argyle",
@@ -200,10 +196,10 @@ export const sources: Source[] = [
     category: "dev",
   },
   {
-    id: "hn-frontend",
-    name: "Hacker News Frontend",
-    type: "hn",
-    url: "https://hnrss.org/newest?q=CSS+OR+JavaScript+OR+browser&points=75",
+    id: "chrome-developers",
+    name: "Chrome Developers",
+    type: "rss",
+    url: "https://developer.chrome.com/blog/feed.xml",
     category: "dev",
   },
   {
@@ -213,13 +209,50 @@ export const sources: Source[] = [
     url: "https://javascriptweekly.com/rss",
     category: "dev",
   },
+  {
+    id: "hn-frontend",
+    name: "Hacker News Frontend",
+    type: "hn",
+    url: "https://hnrss.org/newest?q=CSS+OR+JavaScript+OR+TypeScript&points=75",
+    category: "dev",
+  },
+  {
+    id: "cloudflare-blog",
+    name: "Cloudflare Blog",
+    type: "rss",
+    url: "https://blog.cloudflare.com/rss/",
+    category: "dev",
+  },
 
-  // === Jobs (4 sources) ===
+  // === Dev — YouTube (2 sources) ===
+  {
+    id: "yt-aaron-francis",
+    name: "Aaron Francis",
+    type: "rss",
+    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCXBhQ05nu8Pxn4Ey093Upwg",
+    category: "dev",
+  },
+  {
+    id: "yt-fireship",
+    name: "Fireship",
+    type: "rss",
+    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrPoezykLs9EqgamOA",
+    category: "dev",
+  },
+
+  // === Jobs (5 sources) ===
   {
     id: "vuejobs",
     name: "VueJobs",
     type: "rss",
     url: "https://vuejobs.com/feed",
+    category: "jobs",
+  },
+  {
+    id: "hn-hiring",
+    name: "HN Who's Hiring",
+    type: "hn",
+    url: "https://hn.algolia.com/api/v1/search?query=%22Ask%20HN%3A%20Who%20is%20hiring%22&tags=ask_hn&hitsPerPage=1",
     category: "jobs",
   },
   {
