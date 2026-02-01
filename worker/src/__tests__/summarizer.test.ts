@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { fetchMock } from "cloudflare:test";
-import { generateDigest } from "../services/summarizer";
+import { generateDigest, DigestError } from "../services/summarizer";
 import { rawItemFactory } from "./factories";
 import {
   mockGeminiSuccess,
@@ -239,6 +239,44 @@ describe("generateDigest", () => {
     expect(result.items[0].title).toBe("Recovered");
   });
 
+  it("falls back to Claude when Gemini returns unparseable response", async () => {
+    const items = rawItemFactory.buildList(3);
+    const response = aiResponse(items, [0, 1]);
+
+    mockGeminiSuccess("[]"); // parseable but empty — triggers fallback
+    mockAnthropicSuccess(response);
+
+    const result = await generateDigest(
+      items,
+      { gemini: "gem-key", anthropic: "ant-key" },
+      "news"
+    );
+
+    expect(result.items).toHaveLength(2);
+    expect(result.aiUsages).toHaveLength(2);
+    expect(result.aiUsages[0].provider).toBe("gemini");
+    expect(result.aiUsages[0].status).toBe("success");
+    expect(result.aiUsages[1].provider).toBe("anthropic");
+    expect(result.aiUsages[1].wasFallback).toBe(true);
+  });
+
+  it("includes usages in DigestError when all providers fail to parse", async () => {
+    const items = rawItemFactory.buildList(3);
+
+    mockGeminiSuccess("[]");
+
+    try {
+      await generateDigest(items, { gemini: "test-key" }, "news");
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(DigestError);
+      const digestErr = err as DigestError;
+      expect(digestErr.aiUsages).toHaveLength(1);
+      expect(digestErr.aiUsages[0].provider).toBe("gemini");
+      expect(digestErr.aiUsages[0].status).toBe("success");
+    }
+  });
+
   it("throws on completely invalid JSON response", async () => {
     const items = rawItemFactory.buildList(3);
 
@@ -246,7 +284,7 @@ describe("generateDigest", () => {
 
     await expect(
       generateDigest(items, { gemini: "test-key" }, "news")
-    ).rejects.toThrow("Failed to parse digest response as JSON");
+    ).rejects.toThrow("Expected non-empty JSON array from AI");
   });
 
   it("throws on empty array response", async () => {
@@ -256,6 +294,6 @@ describe("generateDigest", () => {
 
     await expect(
       generateDigest(items, { gemini: "test-key" }, "news")
-    ).rejects.toThrow("Failed to parse digest response as JSON");
+    ).rejects.toThrow("Expected non-empty JSON array from AI");
   });
 });

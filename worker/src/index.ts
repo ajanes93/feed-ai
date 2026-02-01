@@ -5,7 +5,7 @@ import { todayDate } from "@feed-ai/shared/utils";
 import { sources, FRESHNESS_THRESHOLDS } from "./sources";
 import type { SourceFetchResult } from "./services/fetcher";
 import { fetchAllSources } from "./services/fetcher";
-import { generateDigest } from "./services/summarizer";
+import { generateDigest, DigestError } from "./services/summarizer";
 import { logEvent, recordAIUsage, type AIUsageEntry } from "./services/logger";
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -386,24 +386,53 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   const allDigestItems: DigestItem[] = [];
   const allAiUsages: AIUsageEntry[] = [];
 
-  if (newsItems.length > 0) {
-    console.log(`Generating news digest from ${newsItems.length} items...`);
-    const { items, aiUsages } = await generateDigest(
-      newsItems,
-      apiKeys,
-      "news"
+  async function recordUsages() {
+    if (allAiUsages.length === 0) return;
+    const results = await Promise.allSettled(
+      allAiUsages.map(async (usage) => {
+        await recordAIUsage(env.DB, usage);
+        if (usage.status !== "success") {
+          await logEvent(env.DB, {
+            level: usage.status === "rate_limited" ? "warn" : "error",
+            category: "ai",
+            message: `${usage.provider} ${usage.status}: ${usage.error || "unknown"}`,
+            details: { model: usage.model, latencyMs: usage.latencyMs },
+            digestId,
+          });
+        }
+      })
     );
-    allDigestItems.push(...items);
-    allAiUsages.push(...aiUsages);
-    console.log(`News: ${items.length} items`);
+    await logSettledFailures(env.DB, "AI usage recording", results);
   }
 
-  if (jobItems.length > 0) {
-    console.log(`Generating jobs digest from ${jobItems.length} items...`);
-    const { items, aiUsages } = await generateDigest(jobItems, apiKeys, "jobs");
-    allDigestItems.push(...items);
-    allAiUsages.push(...aiUsages);
-    console.log(`Jobs: ${items.length} items`);
+  try {
+    if (newsItems.length > 0) {
+      console.log(`Generating news digest from ${newsItems.length} items...`);
+      const { items, aiUsages } = await generateDigest(
+        newsItems,
+        apiKeys,
+        "news"
+      );
+      allDigestItems.push(...items);
+      allAiUsages.push(...aiUsages);
+      console.log(`News: ${items.length} items`);
+    }
+
+    if (jobItems.length > 0) {
+      console.log(`Generating jobs digest from ${jobItems.length} items...`);
+      const { items, aiUsages } = await generateDigest(
+        jobItems,
+        apiKeys,
+        "jobs"
+      );
+      allDigestItems.push(...items);
+      allAiUsages.push(...aiUsages);
+      console.log(`Jobs: ${items.length} items`);
+    }
+  } catch (err) {
+    if (err instanceof DigestError) allAiUsages.push(...err.aiUsages);
+    await recordUsages();
+    throw err;
   }
 
   // Assign digestId and sequential positions to all items
@@ -415,22 +444,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
 
   console.log(`Total digest: ${allDigestItems.length} items`);
 
-  // Record AI usage (best-effort)
-  const usageResults = await Promise.allSettled(
-    allAiUsages.map(async (usage) => {
-      await recordAIUsage(env.DB, usage);
-      if (usage.status !== "success") {
-        await logEvent(env.DB, {
-          level: usage.status === "rate_limited" ? "warn" : "error",
-          category: "ai",
-          message: `${usage.provider} ${usage.status}: ${usage.error || "unknown"}`,
-          details: { model: usage.model, latencyMs: usage.latencyMs },
-          digestId,
-        });
-      }
-    })
-  );
-  await logSettledFailures(env.DB, "AI usage recording", usageResults);
+  await recordUsages();
 
   await env.DB.batch([
     env.DB.prepare(
