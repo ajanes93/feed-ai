@@ -1,0 +1,19 @@
+name = "feed-ai-mcp"
+main = "src/index.ts"
+compatibility_date = "2025-03-10"
+compatibility_flags = ["nodejs_compat"]
+
+[durable_objects]
+bindings = [
+  { name = "MCP_OBJECT", class_name = "FeedAiMcp" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FeedAiMcp"]
+
+# API_BASE — set via Cloudflare dashboard (Workers > Settings > Variables)
+# Defaults to production URL in code if not set
+
+[observability]
+enabled = true

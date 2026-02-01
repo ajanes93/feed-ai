@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { createServer } from "../server.js";
+import { createServer } from "../tools.js";
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);

@@ -14,10 +14,9 @@ After cloning the repo, run these commands to set up the development environment
 
 ```bash
 npm install          # Install all workspace deps + lefthook commit hooks
-npm run build -w mcp # Build the MCP server (required for Claude Code tools)
 ```
 
-The MCP server config is committed in `.claude/settings.json` and will be picked up automatically by Claude Code. It exposes 7 tools for querying production data (digests, logs, sources, AI usage) and triggering digest rebuilds.
+The MCP server is deployed as a remote Cloudflare Worker. Add the worker URL to Claude.ai or Claude mobile MCP settings to access 7 tools for querying production data (digests, logs, sources, AI usage) and triggering digest rebuilds.
 
 ## Quick Reference Commands
 
@@ -59,10 +58,10 @@ worker/                     # Cloudflare Worker (API + Cron)
   schema.sql               # D1 database schema
   wrangler.toml            # Cloudflare config
 
-mcp/                        # MCP server (Claude Code tools)
+mcp/                        # MCP server (Cloudflare Worker)
   src/
-    index.ts               # Stdio transport entrypoint
-    server.ts              # Tool definitions + API client
+    index.ts               # Worker entrypoint (McpAgent + fetch handler)
+    tools.ts               # Tool definitions + API client
 
 web/                        # Vue 3 frontend (Cloudflare Pages)
   src/
@@ -93,7 +92,7 @@ web/                        # Vue 3 frontend (Cloudflare Pages)
 - **Frontend**: Vue 3 with Composition API (`<script setup>`), TypeScript (strict mode)
 - **Build**: Vite
 - **Styling**: Tailwind CSS 4 (via `@tailwindcss/vite` plugin)
-- **MCP**: `@modelcontextprotocol/sdk` with zod v4 schemas
+- **MCP**: `@modelcontextprotocol/sdk` + Cloudflare Agents SDK, zod v4 schemas
 - **Deployment**: GitHub Actions → Cloudflare Workers + Pages
 
 ## Monorepo Structure
@@ -140,9 +139,9 @@ Shared config at root level:
 
 - `VITE_API_BASE` — Worker API URL (set via GitHub Actions vars)
 
-### MCP Server (optional)
+### MCP Server (Cloudflare Worker)
 
-- `FEED_AI_API_BASE` — Worker API URL (defaults to production)
+- `API_BASE` — Worker API URL (defaults to production in `wrangler.toml`, override via Cloudflare dashboard)
 
 ## Code Formatting
 
