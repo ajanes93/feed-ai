@@ -154,6 +154,29 @@ describe("FeedView", () => {
     });
   });
 
+  describe("pull-to-refresh", () => {
+    it("content wrapper uses relative positioning for translateY approach", async () => {
+      const { wrapper } = await render();
+      const content = wrapper.find("[data-testid='pull-content']");
+      expect(content.exists()).toBe(true);
+      expect(content.classes()).toContain("relative");
+    });
+
+    it("outer wrapper clips overflow to prevent pull indicator from leaking", async () => {
+      const { wrapper } = await render();
+      // The outer wrapper (parent of pull-content) should have overflow-hidden
+      const outer = wrapper.find("[data-testid='pull-content']").element
+        .parentElement!;
+      expect(outer.className).toContain("overflow-hidden");
+    });
+
+    it("does not use fixed positioning for pull indicator", async () => {
+      const { wrapper } = await render();
+      // No element with class "fixed" should exist in the component
+      expect(wrapper.find(".fixed").exists()).toBe(false);
+    });
+  });
+
   describe("URL sync", () => {
     it("syncs digest date to route on load", async () => {
       await render();
