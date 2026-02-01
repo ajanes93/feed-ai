@@ -96,10 +96,10 @@ You MUST return at least 3 items — aim for 5-8. Always pick the closest matche
 
 Select ${CATEGORY_LIMITS.jobs} relevant job listings. Prioritize:
 - Remote roles accessible from the UK
-- Senior/lead level positions
-- Vue.js, TypeScript, Laravel, full-stack, or AI/ML roles
+- Senior, lead, or staff level positions only — exclude mid-level and junior roles
+- Vue.js or TypeScript frontend with Laravel or Ruby/Rails backends
 - Salary £75k+ (include roles with undisclosed salary)
-- Exclude roles that are clearly US-only, on-site only, or junior level
+- Exclude roles that are clearly US-only or on-site only
 
 For each selected job, provide:
 - item_index: The [number] shown before the item above
