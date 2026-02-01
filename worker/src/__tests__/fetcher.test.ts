@@ -196,9 +196,9 @@ describe("fetchSource", () => {
 });
 
 describe("fetchAllSources", () => {
-  it("filters out items older than 48 hours", async () => {
+  it("filters out items older than freshness threshold", async () => {
     const now = Date.now();
-    const oldDate = new Date(now - 72 * 60 * 60 * 1000).toUTCString();
+    const oldDate = new Date(now - 10 * 24 * 60 * 60 * 1000).toUTCString(); // 10 days old (dev threshold = 7 days)
     const newDate = new Date(now - 1 * 60 * 60 * 1000).toUTCString();
 
     const feed = `<?xml version="1.0"?><rss><channel>
@@ -214,6 +214,39 @@ describe("fetchAllSources", () => {
     expect(items[0].title).toBe("New");
     expect(health).toHaveLength(1);
     expect(health[0].success).toBe(true);
+  });
+
+  it("applies different thresholds per category", async () => {
+    const now = Date.now();
+    const twoDaysAgo = new Date(now - 2 * 24 * 60 * 60 * 1000).toUTCString();
+
+    const aiFeed = `<?xml version="1.0"?><rss><channel>
+      <item><title>Old AI</title><link>https://ai.example.com/old</link><pubDate>${twoDaysAgo}</pubDate></item>
+    </channel></rss>`;
+    const devFeed = `<?xml version="1.0"?><rss><channel>
+      <item><title>Recent Dev</title><link>https://dev.example.com/recent</link><pubDate>${twoDaysAgo}</pubDate></item>
+    </channel></rss>`;
+
+    const aiSource = sourceFactory.build({
+      id: "test-ai",
+      url: "https://ai.example.com/feed.xml",
+      category: "ai",
+    });
+    const devSource = sourceFactory.build({
+      id: "test-dev",
+      url: "https://dev.example.com/feed.xml",
+      category: "dev",
+    });
+
+    mockFetchResponse("https://ai.example.com", "/feed.xml", aiFeed);
+    mockFetchResponse("https://dev.example.com", "/feed.xml", devFeed);
+
+    const { items } = await fetchAllSources([aiSource, devSource]);
+
+    // AI threshold is 1 day, so 2-day-old AI item is filtered out
+    // Dev threshold is 7 days, so 2-day-old dev item is kept
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toBe("Recent Dev");
   });
 
   it("keeps items with no publish date", async () => {
