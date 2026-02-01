@@ -1,5 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
-import { Source } from "../sources";
+import { Source, FRESHNESS_THRESHOLDS } from "../sources";
 import { RawItem } from "../types";
 import { fetchBlueskySource } from "./bluesky";
 import { fetchScrapeSource } from "./scrape";
@@ -176,14 +176,18 @@ export async function fetchAllSources(
     )
     .flatMap((r) => r.value);
 
-  // Filter to items published within the last 48 hours (items with no date are kept)
-  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-  const recent = allItems.filter(
-    (item) => !item.publishedAt || item.publishedAt >= cutoff
-  );
+  // Filter items by per-category freshness thresholds (items with no date are kept)
+  const categoryMap = new Map(sources.map((s) => [s.id, s.category]));
+  const now = Date.now();
+  const recent = allItems.filter((item) => {
+    if (!item.publishedAt) return true;
+    const category = categoryMap.get(item.sourceId) ?? "dev";
+    const thresholdDays = FRESHNESS_THRESHOLDS[category] ?? 7;
+    return item.publishedAt >= now - thresholdDays * 24 * 60 * 60 * 1000;
+  });
 
   console.log(
-    `Filtered ${allItems.length} items to ${recent.length} recent items (last 48h)`
+    `Filtered ${allItems.length} items to ${recent.length} recent items`
   );
 
   return { items: recent, health };

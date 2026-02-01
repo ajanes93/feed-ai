@@ -196,9 +196,9 @@ describe("fetchSource", () => {
 });
 
 describe("fetchAllSources", () => {
-  it("filters out items older than 48 hours", async () => {
+  it("filters out items older than freshness threshold", async () => {
     const now = Date.now();
-    const oldDate = new Date(now - 72 * 60 * 60 * 1000).toUTCString();
+    const oldDate = new Date(now - 10 * 24 * 60 * 60 * 1000).toUTCString(); // 10 days old (dev threshold = 7 days)
     const newDate = new Date(now - 1 * 60 * 60 * 1000).toUTCString();
 
     const feed = `<?xml version="1.0"?><rss><channel>
