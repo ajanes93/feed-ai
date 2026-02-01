@@ -1,19 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-const API_BASE =
-  process.env.FEED_AI_API_BASE ??
-  "https://feed-ai-worker.andresjanes.workers.dev";
+const DEFAULT_API_BASE = "https://feed-ai-worker.andresjanes.workers.dev";
 
 export async function api(
   path: string,
-  options?: { method?: string; adminKey?: string }
+  options?: { method?: string; adminKey?: string; apiBase?: string }
 ): Promise<unknown> {
+  const base = options?.apiBase ?? DEFAULT_API_BASE;
   const headers: Record<string, string> = {};
   if (options?.adminKey) {
     headers["Authorization"] = `Bearer ${options.adminKey}`;
   }
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${base}${path}`, {
     method: options?.method ?? "GET",
     headers,
   });
@@ -50,11 +49,13 @@ const getLogsSchema = {
   limit: z.number().max(500).optional().default(50),
 };
 
-export function createServer(): McpServer {
-  const server = new McpServer({
-    name: "feed-ai",
-    version: "1.0.0",
-  });
+// Use Pick so registerTools works with McpServer from any SDK copy (avoids
+// duplicate-declaration conflicts when the `agents` package bundles its own).
+export function registerTools(
+  server: Pick<McpServer, "tool">,
+  apiBase?: string
+): void {
+  const opts = apiBase ? { apiBase } : undefined;
 
   // --- Public tools (no auth) ---
 
@@ -64,7 +65,7 @@ export function createServer(): McpServer {
     getDigestSchema,
     async ({ date }) => {
       const path = date ? `/api/digest/${date}` : "/api/today";
-      const data = await api(path);
+      const data = await api(path, opts);
       return jsonResult(data);
     }
   );
@@ -74,7 +75,7 @@ export function createServer(): McpServer {
     "List the last 30 digests with dates and item counts.",
     {},
     async () => {
-      const data = await api("/api/digests");
+      const data = await api("/api/digests", opts);
       return jsonResult(data);
     }
   );
@@ -84,7 +85,7 @@ export function createServer(): McpServer {
     "Check health of all RSS sources — staleness, failures, last success.",
     {},
     async () => {
-      const data = await api("/api/health");
+      const data = await api("/api/health", opts);
       return jsonResult(data);
     }
   );
@@ -98,6 +99,7 @@ export function createServer(): McpServer {
     async ({ admin_key }) => {
       const data = await api("/api/admin/dashboard", {
         adminKey: admin_key,
+        ...opts,
       });
       return jsonResult(data);
     }
@@ -116,6 +118,7 @@ export function createServer(): McpServer {
       const query = params.toString();
       const data = await api(`/api/admin/logs${query ? `?${query}` : ""}`, {
         adminKey: admin_key,
+        ...opts,
       });
       return jsonResult(data);
     }
@@ -129,6 +132,7 @@ export function createServer(): McpServer {
       const data = await api("/api/rebuild", {
         method: "POST",
         adminKey: admin_key,
+        ...opts,
       });
       return jsonResult(data);
     }
@@ -142,10 +146,18 @@ export function createServer(): McpServer {
       const data = await api("/api/generate", {
         method: "POST",
         adminKey: admin_key,
+        ...opts,
       });
       return jsonResult(data);
     }
   );
+}
 
+export function createServer(apiBase?: string): McpServer {
+  const server = new McpServer({
+    name: "feed-ai",
+    version: "1.0.0",
+  });
+  registerTools(server, apiBase);
   return server;
 }
