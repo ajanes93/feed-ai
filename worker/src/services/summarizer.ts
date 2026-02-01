@@ -28,6 +28,16 @@ export interface SummarizerLog {
 
 type DigestType = "news" | "jobs";
 
+function countByCategory(
+  items: { category: string }[]
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    counts[item.category] = (counts[item.category] || 0) + 1;
+  }
+  return counts;
+}
+
 function groupBySource(items: RawItem[]): string {
   const groups = new Map<string, { index: number; item: RawItem }[]>();
   for (let i = 0; i < items.length; i++) {
@@ -435,13 +445,7 @@ export async function generateDigest(
     level: "info",
     message: `AI returned ${parsed.length} raw items`,
     details: {
-      categories: parsed.reduce(
-        (acc, item) => {
-          acc[item.category] = (acc[item.category] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>
-      ),
+      categories: countByCategory(parsed),
     },
   });
 
@@ -508,13 +512,7 @@ export async function generateDigest(
     level: "info",
     message: `${type} digest complete: ${digestItems.length} final items`,
     details: {
-      categories: digestItems.reduce(
-        (acc, item) => {
-          acc[item.category] = (acc[item.category] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>
-      ),
+      categories: countByCategory(digestItems),
     },
   });
 

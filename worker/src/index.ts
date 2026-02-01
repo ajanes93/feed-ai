@@ -40,6 +40,16 @@ function safeJsonParse(json: string): unknown {
 
 // --- Shared mapping helpers ---
 
+function countByCategory(
+  items: { category: string }[]
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    counts[item.category] = (counts[item.category] || 0) + 1;
+  }
+  return counts;
+}
+
 function mapSourceHealth(row: Record<string, unknown>) {
   const source = sources.find((s) => s.id === row.source_id);
   const thresholdDays = source ? FRESHNESS_THRESHOLDS[source.category] : 14;
@@ -245,7 +255,10 @@ app.get("/api/admin/dashboard", async (c) => {
 app.get("/api/admin/logs", async (c) => {
   const level = c.req.query("level"); // info, warn, error
   const category = c.req.query("category"); // ai, fetch, parse, general, digest, summarizer
-  const limit = Math.min(parseInt(c.req.query("limit") || "100", 10), 500);
+  const limit = Math.min(
+    parseInt(c.req.query("limit") || "100", 10) || 100,
+    500
+  );
   const digestId = c.req.query("digest_id");
 
   let query = "SELECT * FROM error_logs WHERE 1=1";
@@ -286,6 +299,7 @@ const authMiddleware = async (c: Context<{ Bindings: Env }>, next: Next) => {
   }
   await next();
 };
+app.use("/api/admin/*", authMiddleware);
 app.use("/api/generate", authMiddleware);
 app.use("/api/rebuild", authMiddleware);
 
@@ -368,19 +382,16 @@ export async function deduplicateItems(
 export function capPerSource(items: RawItem[], max: number): RawItem[] {
   const bySource = new Map<string, RawItem[]>();
   for (const item of items) {
-    const sourceItems = bySource.get(item.sourceId);
-    if (sourceItems) {
-      sourceItems.push(item);
-    } else {
-      bySource.set(item.sourceId, [item]);
+    if (!bySource.has(item.sourceId)) {
+      bySource.set(item.sourceId, []);
     }
+    bySource.get(item.sourceId)!.push(item);
   }
-  const capped: RawItem[] = [];
-  for (const sourceItems of bySource.values()) {
+
+  return Array.from(bySource.values()).flatMap((sourceItems) => {
     sourceItems.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
-    capped.push(...sourceItems.slice(0, max));
-  }
-  return capped;
+    return sourceItems.slice(0, max);
+  });
 }
 
 export function splitJobsAndNews(items: RawItem[]) {
@@ -483,14 +494,12 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     category: "digest",
     message: `Cap per-source: ${dedupedItems.length} → ${rawItems.length} items`,
     details: {
-      sourceBreakdown: Object.fromEntries(
-        rawItems.reduce(
-          (map, item) => {
-            map.set(item.sourceId, (map.get(item.sourceId) || 0) + 1);
-            return map;
-          },
-          new Map<string, number>()
-        )
+      sourceBreakdown: rawItems.reduce(
+        (acc, item) => {
+          acc[item.sourceId] = (acc[item.sourceId] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
       ),
     },
     digestId,
@@ -575,13 +584,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
         category: "summarizer",
         message: `${type} digest complete: ${items.length} items`,
         details: {
-          categories: items.reduce(
-            (acc, item) => {
-              acc[item.category] = (acc[item.category] || 0) + 1;
-              return acc;
-            },
-            {} as Record<string, number>
-          ),
+          categories: countByCategory(items),
         },
         digestId,
       });
@@ -632,7 +635,8 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     await logEvent(env.DB, {
       level: "error",
       category: "digest",
-      message: "No digest items generated from any source — pipeline produced nothing",
+      message:
+        "No digest items generated from any source — pipeline produced nothing",
       details: {
         newsItemsInput: newsItems.length,
         jobItemsInput: jobItems.length,
@@ -673,13 +677,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     details: {
       pipelineMs,
       totalItems: allDigestItems.length,
-      categories: allDigestItems.reduce(
-        (acc, item) => {
-          acc[item.category] = (acc[item.category] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>
-      ),
+      categories: countByCategory(allDigestItems),
     },
     digestId,
   });
