@@ -46,30 +46,8 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - name: Get Playwright version
-        id: pw-version
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
-        id: pw-cache
-        with:
-          path: |
-            ~/.cache/ms-playwright
-            ~/pw-apt-cache
-          key: playwright-${{ steps.pw-version.outputs.version }}
-          save-always: true
-      - name: Restore cached apt packages
-        if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: |
-          if [ -d ~/pw-apt-cache ]; then
-            sudo cp ~/pw-apt-cache/*.deb /var/cache/apt/archives/ 2>/dev/null || true
-          fi
       - run: npx playwright install chromium --with-deps
         working-directory: web
-      - name: Save apt packages to cache dir
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p ~/pw-apt-cache
-          cp /var/cache/apt/archives/*.deb ~/pw-apt-cache/ 2>/dev/null || true
       - run: npm run test:e2e
         working-directory: web
       - uses: actions/upload-artifact@v4
