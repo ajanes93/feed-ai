@@ -54,6 +54,8 @@ Items are grouped by source. Select the most important items, ensuring coverage 
 
 ${grouped}
 
+You MUST return at least 3 items. Always pick the best available even if nothing seems groundbreaking — something is better than nothing.
+
 Select up to ${maxItems} items total (up to ${CATEGORY_LIMITS.ai} AI, up to ${CATEGORY_LIMITS.dev} Dev). Prefer items published today or yesterday. Prioritize:
 - Major AI announcements or breakthroughs
 - Significant open source releases
@@ -81,6 +83,8 @@ function buildJobsPrompt(items: RawItem[]): string {
 Today's date is ${todayDate()}.
 
 ${grouped}
+
+You MUST return at least 1 item. Always pick the closest matches even if none are a perfect fit — something is better than nothing.
 
 Select up to ${CATEGORY_LIMITS.jobs} relevant job listings. Prioritize:
 - Remote roles accessible from the UK
