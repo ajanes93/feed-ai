@@ -3,6 +3,7 @@
   "workspaces": ["shared", "worker", "web", "mcp"],
   "scripts": {
     "lint": "npm run lint --workspaces --if-present",
+    "lint:check": "npm run lint:check --workspaces --if-present",
     "format": "npm run format --workspaces --if-present",
     "format:check": "npm run format:check --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
