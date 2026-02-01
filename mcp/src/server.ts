@@ -24,9 +24,31 @@ export async function api(
   return res.json();
 }
 
-function formatJson(data: unknown): string {
-  return JSON.stringify(data, null, 2);
+function jsonResult(data: unknown) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+  };
 }
+
+// --- Schemas ---
+
+const adminKeySchema = {
+  admin_key: z.string().describe("Worker ADMIN_KEY for authentication"),
+};
+
+const getDigestSchema = {
+  date: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+};
+
+const getLogsSchema = {
+  ...adminKeySchema,
+  level: z.enum(["info", "warn", "error"]).optional(),
+  category: z
+    .enum(["ai", "fetch", "parse", "general", "digest", "summarizer"])
+    .optional(),
+  digest_id: z.string().optional(),
+  limit: z.number().max(500).optional().default(50),
+};
 
 export function createServer(): McpServer {
   const server = new McpServer({
@@ -39,11 +61,11 @@ export function createServer(): McpServer {
   server.tool(
     "get_digest",
     "Fetch a digest by date. Returns items with title, summary, category, source.",
-    { date: z.string().optional().describe("YYYY-MM-DD, defaults to today") },
+    getDigestSchema,
     async ({ date }) => {
       const path = date ? `/api/digest/${date}` : "/api/today";
       const data = await api(path);
-      return { content: [{ type: "text" as const, text: formatJson(data) }] };
+      return jsonResult(data);
     }
   );
 
@@ -53,7 +75,7 @@ export function createServer(): McpServer {
     {},
     async () => {
       const data = await api("/api/digests");
-      return { content: [{ type: "text" as const, text: formatJson(data) }] };
+      return jsonResult(data);
     }
   );
 
@@ -63,7 +85,7 @@ export function createServer(): McpServer {
     {},
     async () => {
       const data = await api("/api/health");
-      return { content: [{ type: "text" as const, text: formatJson(data) }] };
+      return jsonResult(data);
     }
   );
 
@@ -72,27 +94,19 @@ export function createServer(): McpServer {
   server.tool(
     "get_dashboard",
     "Full admin dashboard: AI usage stats, source health, recent errors, digest count.",
-    { admin_key: z.string().describe("Worker ADMIN_KEY for authentication") },
+    adminKeySchema,
     async ({ admin_key }) => {
       const data = await api("/api/admin/dashboard", {
         adminKey: admin_key,
       });
-      return { content: [{ type: "text" as const, text: formatJson(data) }] };
+      return jsonResult(data);
     }
   );
 
   server.tool(
     "get_logs",
     "Query structured logs. Filter by level (info/warn/error), category (ai/fetch/parse/digest/summarizer), digest_id.",
-    {
-      admin_key: z.string().describe("Worker ADMIN_KEY for authentication"),
-      level: z.enum(["info", "warn", "error"]).optional(),
-      category: z
-        .enum(["ai", "fetch", "parse", "general", "digest", "summarizer"])
-        .optional(),
-      digest_id: z.string().optional(),
-      limit: z.number().max(500).optional().default(50),
-    },
+    getLogsSchema,
     async ({ admin_key, level, category, digest_id, limit }) => {
       const params = new URLSearchParams();
       if (level) params.set("level", level);
@@ -103,33 +117,33 @@ export function createServer(): McpServer {
       const data = await api(`/api/admin/logs${query ? `?${query}` : ""}`, {
         adminKey: admin_key,
       });
-      return { content: [{ type: "text" as const, text: formatJson(data) }] };
+      return jsonResult(data);
     }
   );
 
   server.tool(
     "rebuild_digest",
     "Delete and regenerate today's digest. Use when sources or prompts have changed.",
-    { admin_key: z.string().describe("Worker ADMIN_KEY for authentication") },
+    adminKeySchema,
     async ({ admin_key }) => {
       const data = await api("/api/rebuild", {
         method: "POST",
         adminKey: admin_key,
       });
-      return { content: [{ type: "text" as const, text: formatJson(data) }] };
+      return jsonResult(data);
     }
   );
 
   server.tool(
     "generate_digest",
     "Trigger daily digest generation (skips if already exists).",
-    { admin_key: z.string().describe("Worker ADMIN_KEY for authentication") },
+    adminKeySchema,
     async ({ admin_key }) => {
       const data = await api("/api/generate", {
         method: "POST",
         adminKey: admin_key,
       });
-      return { content: [{ type: "text" as const, text: formatJson(data) }] };
+      return jsonResult(data);
     }
   );
 
