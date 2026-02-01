@@ -1,6 +1,7 @@
 import { Hono, type Context, type Next } from "hono";
 import { cors } from "hono/cors";
 import { Env, RawItem, DigestItem } from "./types";
+import { todayDate } from "@feed-ai/shared/utils";
 import { sources, FRESHNESS_THRESHOLDS } from "./sources";
 import type { SourceFetchResult } from "./services/fetcher";
 import { fetchAllSources } from "./services/fetcher";
@@ -145,7 +146,7 @@ app.onError(async (err, c) => {
 
 // Get today's digest
 app.get("/api/today", async (c) => {
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDate();
   return c.redirect(`/api/digest/${today}`);
 });
 
@@ -250,13 +251,13 @@ app.post("/api/generate", async (c) => {
 });
 
 app.post("/api/rebuild", async (c) => {
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDate();
   return rebuildDigest(c.env, today);
 });
 
 // Cron handler
 async function generateDailyDigest(env: Env): Promise<Response> {
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDate();
 
   // Check if already generated
   const existing = await env.DB.prepare("SELECT id FROM digests WHERE date = ?")

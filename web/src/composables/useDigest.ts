@@ -1,11 +1,8 @@
 import { ref, computed } from "vue";
 import type { Digest } from "../types";
+import { todayDate } from "@feed-ai/shared/utils";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8787";
-
-function todayDate(): string {
-  return new Date().toISOString().split("T")[0];
-}
 
 export function useDigest() {
   const digest = ref<Digest | null>(null);

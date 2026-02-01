@@ -100,12 +100,13 @@ function setCategory(cat: string) {
   innerSwiper?.slideTo(CATEGORIES.indexOf(cat), 250);
 }
 
-// Header arrow navigation
+// Header arrow navigation — always land on "all" category
 async function navigateDigest(direction: "prev" | "next") {
   transitioning.value = true;
   try {
     await (direction === "prev" ? goToPrevious() : goToNext());
-    resetCategory(direction === "prev" ? "last" : "first");
+    activeCategory.value = "all";
+    innerSwiper?.slideTo(0, 0);
   } finally {
     transitioning.value = false;
   }
@@ -130,7 +131,13 @@ watch(
 );
 
 watch(activeCategory, (cat) => {
-  router.replace({ ...route, query: cat !== "all" ? { category: cat } : {} });
+  const date = digest.value?.date;
+  if (!date) return;
+  router.replace({
+    name: "digest",
+    params: { date },
+    query: cat !== "all" ? { category: cat } : {},
+  });
 });
 
 // Pull-to-refresh state
@@ -319,6 +326,7 @@ onMounted(async () => {
                 >
                   <div
                     data-scroll-container
+                    :data-testid="`feed-${cat}`"
                     class="h-full overflow-y-scroll overscroll-contain pb-[calc(2rem+env(safe-area-inset-bottom))]"
                   >
                     <DigestFeed :items="itemsForCategory(cat)" />

@@ -1,24 +1,65 @@
 import { Factory } from "fishery";
-import type { Digest, DigestItem } from "../types";
+import type {
+  AIUsageEntry,
+  DashboardData,
+  ErrorLogEntry,
+  SourceHealthEntry,
+} from "../composables/useDashboard";
 
-export const digestItemFactory = Factory.define<DigestItem>(({ sequence }) => ({
-  id: `item-${sequence}`,
-  category: "ai",
-  title: `Item ${sequence}`,
-  summary: `Summary ${sequence}`,
-  sourceName: `Source ${sequence}`,
-  sourceUrl: `https://example.com/${sequence}`,
-  position: sequence,
+export { digestItemFactory, digestFactory } from "@feed-ai/shared/factories";
+
+export const aiUsageFactory = Factory.define<AIUsageEntry>(({ sequence }) => ({
+  id: `call-${sequence}`,
+  model: "gemini-2.0-flash",
+  provider: "gemini",
+  inputTokens: 100,
+  outputTokens: 50,
+  totalTokens: 150,
+  latencyMs: 2500,
+  wasFallback: false,
+  error: null,
+  status: "success",
+  createdAt: 1706443200,
 }));
 
-export const digestFactory = Factory.define<Digest>(({ sequence, params }) => {
-  const date =
-    params.date ?? `2025-01-${String(28 - sequence).padStart(2, "0")}`;
-  const items = params.items ?? digestItemFactory.buildList(2);
-  return {
-    id: `digest-${date}`,
-    date,
-    itemCount: items.length,
-    items,
-  };
-});
+export const sourceHealthFactory = Factory.define<SourceHealthEntry>(
+  ({ sequence }) => ({
+    sourceId: `source-${sequence}`,
+    sourceName: `Source ${sequence}`,
+    category: "dev",
+    lastSuccessAt: 1706443200,
+    lastErrorAt: null,
+    lastError: null,
+    itemCount: 10,
+    consecutiveFailures: 0,
+    stale: false,
+  })
+);
+
+export const errorLogFactory = Factory.define<ErrorLogEntry>(
+  ({ sequence }) => ({
+    id: `error-${sequence}`,
+    level: "error",
+    category: "fetch",
+    message: `Error ${sequence}`,
+    details: null,
+    sourceId: null,
+    createdAt: 1706443200,
+  })
+);
+
+export const dashboardDataFactory = Factory.define<DashboardData>(
+  ({ params }) => ({
+    ai: {
+      recentCalls: params.ai?.recentCalls ?? [aiUsageFactory.build()],
+      totalTokens: params.ai?.totalTokens ?? 150,
+      rateLimitCount: params.ai?.rateLimitCount ?? 0,
+      fallbackCount: params.ai?.fallbackCount ?? 0,
+    },
+    sources: params.sources ?? [sourceHealthFactory.build()],
+    errors: params.errors ?? [
+      errorLogFactory.build({ message: "Connection timeout" }),
+    ],
+    totalDigests: params.totalDigests ?? 25,
+  })
+);

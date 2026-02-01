@@ -16,7 +16,7 @@ describe("API routes", () => {
     const res = await app.request("/api/digest/2025-01-28", {}, env);
 
     expect(res.status).toBe(404);
-    const body = await res.json();
+    const body = (await res.json()) as { error: string };
     expect(body.error).toContain("No digest");
   });
 
@@ -50,7 +50,10 @@ describe("API routes", () => {
     const res = await app.request("/api/digest/2025-01-28", {}, env);
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as {
+      id: string;
+      items: { title: string; whyItMatters?: string }[];
+    };
     expect(body.id).toBe("digest-2025-01-28");
     expect(body.items).toHaveLength(2);
     expect(body.items[0].title).toBe("AI News");
@@ -85,7 +88,7 @@ describe("API routes", () => {
     const res = await app.request("/api/digests", {}, env);
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { date: string }[];
     expect(body).toHaveLength(2);
     expect(body[0].date).toBe("2025-01-28");
     expect(body[1].date).toBe("2025-01-27");
@@ -117,7 +120,7 @@ describe("API routes", () => {
     const res = await app.request("/api/health", {}, env);
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as unknown[];
     expect(Array.isArray(body)).toBe(true);
   });
 
@@ -125,7 +128,7 @@ describe("API routes", () => {
     const res = await app.request("/api/admin/dashboard", {}, env);
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body).toHaveProperty("ai");
     expect(body).toHaveProperty("sources");
     expect(body).toHaveProperty("errors");

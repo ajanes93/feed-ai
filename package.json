@@ -1,5 +1,6 @@
 {
   "private": true,
+  "workspaces": ["shared", "worker", "web"],
   "devDependencies": {
     "lefthook": "^1.11.0"
   }

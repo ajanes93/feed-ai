@@ -1,3 +1,5 @@
+export type { DigestItem, Digest } from "@feed-ai/shared/types";
+
 export interface RawItem {
   id: string;
   sourceId: string;
@@ -5,26 +7,6 @@ export interface RawItem {
   link: string;
   content?: string;
   publishedAt?: number;
-}
-
-export interface DigestItem {
-  id: string;
-  digestId: string;
-  category: string;
-  title: string;
-  summary: string;
-  whyItMatters?: string;
-  sourceName: string;
-  sourceUrl: string;
-  publishedAt?: string;
-  position: number;
-}
-
-export interface Digest {
-  id: string;
-  date: string;
-  itemCount: number;
-  items: DigestItem[];
 }
 
 export interface Env {

@@ -1,0 +1,14 @@
+{
+  "name": "@feed-ai/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./types": "./types.ts",
+    "./factories": "./factories.ts",
+    "./utils": "./utils.ts"
+  },
+  "dependencies": {
+    "fishery": "^2.4.0"
+  }
+}
