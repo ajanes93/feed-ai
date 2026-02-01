@@ -1,5 +1,11 @@
 type LogLevel = "info" | "warn" | "error";
-type LogCategory = "ai" | "fetch" | "parse" | "general";
+type LogCategory =
+  | "ai"
+  | "fetch"
+  | "parse"
+  | "general"
+  | "digest"
+  | "summarizer";
 
 interface LogEntry {
   level: LogLevel;
@@ -70,4 +76,12 @@ export async function recordAIUsage(db: D1Database, usage: AIUsageEntry) {
       usage.status
     )
     .run();
+}
+
+/**
+ * Convenience: log multiple entries in sequence (best-effort).
+ * Each entry is written independently so one failure doesn't block the rest.
+ */
+export async function logEvents(db: D1Database, entries: LogEntry[]) {
+  await Promise.allSettled(entries.map((e) => logEvent(db, e)));
 }

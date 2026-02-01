@@ -6,7 +6,12 @@ import { sources, FRESHNESS_THRESHOLDS } from "./sources";
 import type { SourceFetchResult } from "./services/fetcher";
 import { fetchAllSources } from "./services/fetcher";
 import { generateDigest, DigestError } from "./services/summarizer";
-import { logEvent, recordAIUsage, type AIUsageEntry } from "./services/logger";
+import {
+  logEvent,
+  logEvents,
+  recordAIUsage,
+  type AIUsageEntry,
+} from "./services/logger";
 
 function timingSafeEqual(a: string, b: string): boolean {
   const encoder = new TextEncoder();
@@ -236,6 +241,44 @@ app.get("/api/admin/dashboard", async (c) => {
   });
 });
 
+// --- Logs endpoint for debugging ---
+app.get("/api/admin/logs", async (c) => {
+  const level = c.req.query("level"); // info, warn, error
+  const category = c.req.query("category"); // ai, fetch, parse, general, digest, summarizer
+  const limit = Math.min(parseInt(c.req.query("limit") || "100", 10), 500);
+  const digestId = c.req.query("digest_id");
+
+  let query = "SELECT * FROM error_logs WHERE 1=1";
+  const bindings: (string | number)[] = [];
+
+  if (level) {
+    query += " AND level = ?";
+    bindings.push(level);
+  }
+  if (category) {
+    query += " AND category = ?";
+    bindings.push(category);
+  }
+  if (digestId) {
+    query += " AND digest_id = ?";
+    bindings.push(digestId);
+  }
+
+  query += " ORDER BY created_at DESC LIMIT ?";
+  bindings.push(limit);
+
+  const result = await c.env.DB.prepare(query)
+    .bind(...bindings)
+    .all();
+
+  return c.json({
+    count: result.results.length,
+    logs: result.results.map((row) =>
+      mapErrorLog(row as Record<string, unknown>)
+    ),
+  });
+});
+
 // Auth middleware for write endpoints
 const authMiddleware = async (c: Context<{ Bindings: Env }>, next: Next) => {
   if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
@@ -265,6 +308,12 @@ async function generateDailyDigest(env: Env): Promise<Response> {
     .first();
 
   if (existing) {
+    await logEvent(env.DB, {
+      level: "info",
+      category: "digest",
+      message: `Digest already exists for ${today}, skipping generation`,
+      digestId: `digest-${today}`,
+    });
     return new Response(`Digest already exists for ${today}`, { status: 200 });
   }
 
@@ -280,7 +329,13 @@ async function rebuildDigest(env: Env, date: string): Promise<Response> {
     env.DB.prepare("DELETE FROM items WHERE digest_id = ?").bind(digestId),
     env.DB.prepare("DELETE FROM digests WHERE id = ?").bind(digestId),
   ]);
-  console.log(`Deleted existing digest for ${date}`);
+
+  await logEvent(env.DB, {
+    level: "info",
+    category: "digest",
+    message: `Deleted existing digest for rebuild`,
+    digestId,
+  });
 
   return buildAndSaveDigest(env, date);
 }
@@ -307,9 +362,6 @@ export async function deduplicateItems(
     (item) =>
       !seenUrls.has(item.link) && !seenTitles.has(item.title.toLowerCase())
   );
-  console.log(
-    `Deduped: ${items.length} → ${deduped.length} items (${seenUrls.size} urls, ${seenTitles.size} titles seen)`
-  );
   return deduped;
 }
 
@@ -328,9 +380,6 @@ export function capPerSource(items: RawItem[], max: number): RawItem[] {
     sourceItems.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
     capped.push(...sourceItems.slice(0, max));
   }
-  console.log(
-    `Capped per-source: ${items.length} → ${capped.length} items (${bySource.size} sources)`
-  );
   return capped;
 }
 
@@ -346,10 +395,41 @@ export function splitJobsAndNews(items: RawItem[]) {
 
 async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   const digestId = `digest-${date}`;
+  const pipelineStart = Date.now();
 
-  console.log("Fetching sources...");
+  await logEvent(env.DB, {
+    level: "info",
+    category: "digest",
+    message: "Starting digest pipeline",
+    details: { date, sourceCount: sources.length },
+    digestId,
+  });
+
+  // --- Fetch ---
+  const fetchStart = Date.now();
   const { items: allRawItems, health } = await fetchAllSources(sources);
-  console.log(`Fetched ${allRawItems.length} items`);
+  const fetchMs = Date.now() - fetchStart;
+
+  const successSources = health.filter((h) => h.success);
+  const failedSources = health.filter((h) => !h.success);
+
+  await logEvent(env.DB, {
+    level: "info",
+    category: "fetch",
+    message: `Fetched ${allRawItems.length} items from ${successSources.length}/${health.length} sources`,
+    details: {
+      fetchMs,
+      successSources: successSources.map((s) => ({
+        id: s.sourceId,
+        items: s.itemCount,
+      })),
+      failedSources: failedSources.map((s) => ({
+        id: s.sourceId,
+        error: s.error,
+      })),
+    },
+    digestId,
+  });
 
   await recordSourceHealth(env, health);
 
@@ -357,28 +437,80 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     await logEvent(env.DB, {
       level: "error",
       category: "fetch",
-      message: "No items fetched from any source",
+      message: "No items fetched from any source — aborting digest",
+      details: {
+        failedSources: failedSources.map((s) => ({
+          id: s.sourceId,
+          error: s.error,
+        })),
+      },
       digestId,
     });
     return new Response("No items fetched", { status: 500 });
   }
 
+  // --- Dedup ---
   const dedupedItems = await deduplicateItems(allRawItems, env.DB);
+
+  await logEvent(env.DB, {
+    level: "info",
+    category: "digest",
+    message: `Dedup: ${allRawItems.length} → ${dedupedItems.length} items`,
+    details: {
+      removed: allRawItems.length - dedupedItems.length,
+    },
+    digestId,
+  });
+
   if (dedupedItems.length === 0) {
     await logEvent(env.DB, {
       level: "warn",
-      category: "fetch",
+      category: "digest",
       message: "All fetched items were duplicates of recent digests",
       details: { fetchedCount: allRawItems.length },
+      digestId,
     });
     return new Response("All fetched items were duplicates of recent digests", {
       status: 200,
     });
   }
 
+  // --- Cap per source ---
   const rawItems = capPerSource(dedupedItems, 3);
+
+  await logEvent(env.DB, {
+    level: "info",
+    category: "digest",
+    message: `Cap per-source: ${dedupedItems.length} → ${rawItems.length} items`,
+    details: {
+      sourceBreakdown: Object.fromEntries(
+        rawItems.reduce(
+          (map, item) => {
+            map.set(item.sourceId, (map.get(item.sourceId) || 0) + 1);
+            return map;
+          },
+          new Map<string, number>()
+        )
+      ),
+    },
+    digestId,
+  });
+
+  // --- Split jobs/news ---
   const { jobItems, newsItems } = splitJobsAndNews(rawItems);
 
+  await logEvent(env.DB, {
+    level: "info",
+    category: "digest",
+    message: `Split: ${newsItems.length} news items, ${jobItems.length} job items`,
+    details: {
+      newsSources: [...new Set(newsItems.map((i) => i.sourceId))],
+      jobSources: [...new Set(jobItems.map((i) => i.sourceId))],
+    },
+    digestId,
+  });
+
+  // --- Generate digests ---
   const apiKeys = {
     gemini: env.GEMINI_API_KEY,
     anthropic: env.ANTHROPIC_API_KEY,
@@ -406,17 +538,58 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   }
 
   async function runDigest(rawItems: RawItem[], type: "news" | "jobs") {
+    await logEvent(env.DB, {
+      level: "info",
+      category: "summarizer",
+      message: `Generating ${type} digest from ${rawItems.length} items`,
+      details: {
+        sources: [...new Set(rawItems.map((i) => i.sourceId))],
+        titles: rawItems.map((i) => i.title),
+      },
+      digestId,
+    });
+
     try {
-      const { items, aiUsages } = await generateDigest(rawItems, apiKeys, type);
+      const { items, aiUsages, logs } = await generateDigest(
+        rawItems,
+        apiKeys,
+        type
+      );
       allDigestItems.push(...items);
       allAiUsages.push(...aiUsages);
-      console.log(`${type}: ${items.length} items`);
+
+      // Persist all summarizer logs to DB
+      await logEvents(
+        env.DB,
+        logs.map((log) => ({
+          level: log.level,
+          category: "summarizer" as const,
+          message: `[${type}] ${log.message}`,
+          details: log.details,
+          digestId,
+        }))
+      );
+
+      await logEvent(env.DB, {
+        level: "info",
+        category: "summarizer",
+        message: `${type} digest complete: ${items.length} items`,
+        details: {
+          categories: items.reduce(
+            (acc, item) => {
+              acc[item.category] = (acc[item.category] || 0) + 1;
+              return acc;
+            },
+            {} as Record<string, number>
+          ),
+        },
+        digestId,
+      });
     } catch (err) {
       if (err instanceof DigestError) allAiUsages.push(...err.aiUsages);
-      console.error(`${type} digest failed, continuing:`, err);
       await logEvent(env.DB, {
         level: "error",
-        category: "general",
+        category: "summarizer",
         message: `${type} digest generation failed: ${err instanceof Error ? err.message : String(err)}`,
         details: { stack: err instanceof Error ? err.stack : undefined },
         digestId,
@@ -425,13 +598,25 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   }
 
   if (newsItems.length > 0) {
-    console.log(`Generating news digest from ${newsItems.length} items...`);
     await runDigest(newsItems, "news");
+  } else {
+    await logEvent(env.DB, {
+      level: "warn",
+      category: "digest",
+      message: "No news items to generate digest from",
+      digestId,
+    });
   }
 
   if (jobItems.length > 0) {
-    console.log(`Generating jobs digest from ${jobItems.length} items...`);
     await runDigest(jobItems, "jobs");
+  } else {
+    await logEvent(env.DB, {
+      level: "info",
+      category: "digest",
+      message: "No job items found — skipping jobs digest",
+      digestId,
+    });
   }
 
   // Assign digestId and sequential positions to all items
@@ -441,11 +626,19 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     allDigestItems[i].position = i;
   }
 
-  console.log(`Total digest: ${allDigestItems.length} items`);
-
   await recordUsages();
 
   if (allDigestItems.length === 0) {
+    await logEvent(env.DB, {
+      level: "error",
+      category: "digest",
+      message: "No digest items generated from any source — pipeline produced nothing",
+      details: {
+        newsItemsInput: newsItems.length,
+        jobItemsInput: jobItems.length,
+      },
+      digestId,
+    });
     return new Response("No digest items generated", { status: 500 });
   }
 
@@ -470,6 +663,26 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
       )
     ),
   ]);
+
+  const pipelineMs = Date.now() - pipelineStart;
+
+  await logEvent(env.DB, {
+    level: "info",
+    category: "digest",
+    message: `Digest pipeline complete: ${allDigestItems.length} items saved`,
+    details: {
+      pipelineMs,
+      totalItems: allDigestItems.length,
+      categories: allDigestItems.reduce(
+        (acc, item) => {
+          acc[item.category] = (acc[item.category] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      ),
+    },
+    digestId,
+  });
 
   return new Response(`Generated digest with ${allDigestItems.length} items`, {
     status: 200,

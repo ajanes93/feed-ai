@@ -16,6 +16,14 @@ interface DigestItemRaw {
 export interface DigestResult {
   items: DigestItem[];
   aiUsages: AIUsageEntry[];
+  /** Structured log entries from the summarizer pipeline for the caller to persist */
+  logs: SummarizerLog[];
+}
+
+export interface SummarizerLog {
+  level: "info" | "warn" | "error";
+  message: string;
+  details?: Record<string, unknown>;
 }
 
 type DigestType = "news" | "jobs";
@@ -240,34 +248,64 @@ async function callClaude(
 
 async function callAI(
   prompt: string,
-  apiKeys: { gemini?: string; anthropic?: string }
+  apiKeys: { gemini?: string; anthropic?: string },
+  logs: SummarizerLog[]
 ): Promise<{ parsed: DigestItemRaw[]; usages: AIUsageEntry[] }> {
   const usages: AIUsageEntry[] = [];
 
   if (apiKeys.gemini) {
     try {
-      console.log("Calling Gemini...");
+      logs.push({ level: "info", message: "Calling Gemini" });
       const result = await callGemini(prompt, apiKeys.gemini);
       usages.push(result.usage);
-      const parsed = parseAIResponse(result.text);
+      logs.push({
+        level: "info",
+        message: "Gemini returned response",
+        details: {
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          latencyMs: result.usage.latencyMs,
+          responseLength: result.text.length,
+          responsePreview: result.text.slice(0, 500),
+        },
+      });
+      const parsed = parseAIResponse(result.text, logs);
       return { parsed, usages };
     } catch (err) {
       if (err instanceof AIError) usages.push(err.usage);
-      console.error("Gemini failed, falling back to Claude:", err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logs.push({
+        level: "warn",
+        message: `Gemini failed, falling back to Claude: ${errMsg}`,
+      });
       if (!apiKeys.anthropic) throw new DigestError(String(err), usages);
     }
   }
 
   if (apiKeys.anthropic) {
     try {
-      console.log("Calling Claude...");
+      logs.push({
+        level: "info",
+        message: `Calling Claude (fallback=${usages.length > 0})`,
+      });
       const result = await callClaude(
         prompt,
         apiKeys.anthropic,
         usages.length > 0
       );
       usages.push(result.usage);
-      const parsed = parseAIResponse(result.text);
+      logs.push({
+        level: "info",
+        message: "Claude returned response",
+        details: {
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          latencyMs: result.usage.latencyMs,
+          responseLength: result.text.length,
+          responsePreview: result.text.slice(0, 500),
+        },
+      });
+      const parsed = parseAIResponse(result.text, logs);
       return { parsed, usages };
     } catch (err) {
       if (err instanceof AIError) usages.push(err.usage);
@@ -281,24 +319,35 @@ async function callAI(
   );
 }
 
-function tryRecoverTruncatedJSON(json: string): DigestItemRaw[] | null {
+function tryRecoverTruncatedJSON(
+  json: string,
+  logs: SummarizerLog[]
+): DigestItemRaw[] | null {
   try {
     const lastComplete = json.lastIndexOf("}");
     if (lastComplete <= 0) return null;
     const recovered = json.slice(0, lastComplete + 1) + "]";
     const parsed = JSON.parse(recovered);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      console.warn(`Recovered ${parsed.length} items from truncated response`);
+      logs.push({
+        level: "warn",
+        message: `Recovered ${parsed.length} items from truncated response`,
+      });
       return parsed;
     }
   } catch (err) {
-    console.error("Truncation recovery also failed:", (err as Error).message);
+    logs.push({
+      level: "error",
+      message: `Truncation recovery also failed: ${(err as Error).message}`,
+    });
   }
   return null;
 }
 
-function parseAIResponse(responseText: string): DigestItemRaw[] {
-  // Strip markdown fences (opening and closing)
+function parseAIResponse(
+  responseText: string,
+  logs: SummarizerLog[]
+): DigestItemRaw[] {
   const cleaned = responseText
     .replace(/```(?:json)?\s*/g, "")
     .replace(/```\s*$/g, "")
@@ -306,13 +355,25 @@ function parseAIResponse(responseText: string): DigestItemRaw[] {
 
   try {
     const parsed = JSON.parse(cleaned);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      logs.push({
+        level: "info",
+        message: `Parsed ${parsed.length} items from AI response`,
+      });
+      return parsed;
+    }
+    logs.push({
+      level: "error",
+      message: "AI returned empty or non-array JSON",
+      details: { parsedType: typeof parsed, isArray: Array.isArray(parsed) },
+    });
   } catch (err) {
-    console.warn(
-      "Initial JSON parse failed, attempting truncation recovery:",
-      (err as Error).message
-    );
-    const recovered = tryRecoverTruncatedJSON(cleaned);
+    logs.push({
+      level: "warn",
+      message: `Initial JSON parse failed: ${(err as Error).message}`,
+      details: { responsePreview: cleaned.slice(0, 300) },
+    });
+    const recovered = tryRecoverTruncatedJSON(cleaned, logs);
     if (recovered) return recovered;
   }
 
@@ -347,17 +408,83 @@ export async function generateDigest(
   apiKeys: { gemini?: string; anthropic?: string },
   type: DigestType = "news"
 ): Promise<DigestResult> {
+  const logs: SummarizerLog[] = [];
+
+  logs.push({
+    level: "info",
+    message: `Starting ${type} digest generation`,
+    details: {
+      inputItemCount: items.length,
+      sources: [...new Set(items.map((i) => i.sourceId))],
+      itemTitles: items.map((i) => i.title),
+    },
+  });
+
   const prompt =
     type === "jobs" ? buildJobsPrompt(items) : buildNewsPrompt(items);
-  const { parsed, usages } = await callAI(prompt, apiKeys);
+
+  logs.push({
+    level: "info",
+    message: `Built ${type} prompt`,
+    details: { promptLength: prompt.length },
+  });
+
+  const { parsed, usages } = await callAI(prompt, apiKeys, logs);
+
+  logs.push({
+    level: "info",
+    message: `AI returned ${parsed.length} raw items`,
+    details: {
+      categories: parsed.reduce(
+        (acc, item) => {
+          acc[item.category] = (acc[item.category] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      ),
+    },
+  });
 
   const validated = parsed.filter((item) => {
     const valid = isValidDigestItem(item, items.length);
-    if (!valid) console.warn("Dropping malformed digest item:", item);
+    if (!valid) {
+      logs.push({
+        level: "warn",
+        message: "Dropping malformed digest item",
+        details: {
+          item_index: item.item_index,
+          title: item.title,
+          category: item.category,
+          hasTitle: typeof item.title === "string",
+          hasSummary: typeof item.summary === "string",
+          hasCategory: typeof item.category === "string",
+          hasSourceName: typeof item.source_name === "string",
+          indexValid:
+            typeof item.item_index === "number" &&
+            item.item_index >= 0 &&
+            item.item_index < items.length,
+        },
+      });
+    }
     return valid;
   });
 
+  if (validated.length !== parsed.length) {
+    logs.push({
+      level: "warn",
+      message: `Validation dropped ${parsed.length - validated.length} items`,
+      details: { before: parsed.length, after: validated.length },
+    });
+  }
+
   const limited = applyCategoryLimits(validated);
+
+  if (limited.length !== validated.length) {
+    logs.push({
+      level: "info",
+      message: `Category limits reduced items from ${validated.length} to ${limited.length}`,
+    });
+  }
 
   const digestItems: DigestItem[] = limited.map((item, index) => {
     const rawItem = items[item.item_index];
@@ -377,5 +504,19 @@ export async function generateDigest(
     };
   });
 
-  return { items: digestItems, aiUsages: usages };
+  logs.push({
+    level: "info",
+    message: `${type} digest complete: ${digestItems.length} final items`,
+    details: {
+      categories: digestItems.reduce(
+        (acc, item) => {
+          acc[item.category] = (acc[item.category] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      ),
+    },
+  });
+
+  return { items: digestItems, aiUsages: usages, logs };
 }
