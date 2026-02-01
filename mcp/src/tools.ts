@@ -1,17 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-const API_BASE = "https://feed-ai-worker.andresjanes.workers.dev";
+const DEFAULT_API_BASE = "https://feed-ai-worker.andresjanes.workers.dev";
 
 export async function api(
   path: string,
-  options?: { method?: string; adminKey?: string }
+  options?: { method?: string; adminKey?: string; apiBase?: string }
 ): Promise<unknown> {
+  const base = options?.apiBase ?? DEFAULT_API_BASE;
   const headers: Record<string, string> = {};
   if (options?.adminKey) {
     headers["Authorization"] = `Bearer ${options.adminKey}`;
   }
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${base}${path}`, {
     method: options?.method ?? "GET",
     headers,
   });
@@ -48,14 +49,16 @@ const getLogsSchema = {
   limit: z.number().max(500).optional().default(50),
 };
 
-export function registerTools(server: McpServer): void {
+export function registerTools(server: McpServer, apiBase?: string): void {
+  const base = apiBase ? { apiBase } : undefined;
+
   server.tool(
     "get_digest",
     "Fetch a digest by date. Returns items with title, summary, category, source.",
     getDigestSchema,
     async ({ date }) => {
       const path = date ? `/api/digest/${date}` : "/api/today";
-      const data = await api(path);
+      const data = await api(path, base);
       return jsonResult(data);
     }
   );
@@ -65,7 +68,7 @@ export function registerTools(server: McpServer): void {
     "List the last 30 digests with dates and item counts.",
     {},
     async () => {
-      const data = await api("/api/digests");
+      const data = await api("/api/digests", base);
       return jsonResult(data);
     }
   );
@@ -75,7 +78,7 @@ export function registerTools(server: McpServer): void {
     "Check health of all RSS sources — staleness, failures, last success.",
     {},
     async () => {
-      const data = await api("/api/health");
+      const data = await api("/api/health", base);
       return jsonResult(data);
     }
   );
@@ -87,6 +90,7 @@ export function registerTools(server: McpServer): void {
     async ({ admin_key }) => {
       const data = await api("/api/admin/dashboard", {
         adminKey: admin_key,
+        ...base,
       });
       return jsonResult(data);
     }
@@ -105,6 +109,7 @@ export function registerTools(server: McpServer): void {
       const query = params.toString();
       const data = await api(`/api/admin/logs${query ? `?${query}` : ""}`, {
         adminKey: admin_key,
+        ...base,
       });
       return jsonResult(data);
     }
@@ -118,6 +123,7 @@ export function registerTools(server: McpServer): void {
       const data = await api("/api/rebuild", {
         method: "POST",
         adminKey: admin_key,
+        ...base,
       });
       return jsonResult(data);
     }
@@ -131,6 +137,7 @@ export function registerTools(server: McpServer): void {
       const data = await api("/api/generate", {
         method: "POST",
         adminKey: admin_key,
+        ...base,
       });
       return jsonResult(data);
     }

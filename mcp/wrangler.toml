@@ -12,5 +12,8 @@ bindings = [
 tag = "v1"
 new_sqlite_classes = ["FeedAiMcp"]
 
+# API_BASE — set via Cloudflare dashboard (Workers > Settings > Variables)
+# Defaults to production URL in code if not set
+
 [observability]
 enabled = true

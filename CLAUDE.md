@@ -16,7 +16,7 @@ After cloning the repo, run these commands to set up the development environment
 npm install          # Install all workspace deps + lefthook commit hooks
 ```
 
-The MCP server is deployed as a remote Cloudflare Worker at `/mcp`. Add the worker URL to Claude.ai's MCP settings to access 7 tools for querying production data (digests, logs, sources, AI usage) and triggering digest rebuilds.
+The MCP server is deployed as a remote Cloudflare Worker. Add the worker URL to Claude.ai or Claude mobile MCP settings to access 7 tools for querying production data (digests, logs, sources, AI usage) and triggering digest rebuilds.
 
 ## Quick Reference Commands
 
@@ -139,9 +139,9 @@ Shared config at root level:
 
 - `VITE_API_BASE` — Worker API URL (set via GitHub Actions vars)
 
-### MCP Server
+### MCP Server (Cloudflare Worker)
 
-Deployed as a Cloudflare Worker. No environment variables needed — API base is hardcoded to the production worker URL.
+- `API_BASE` — Worker API URL (defaults to production in `wrangler.toml`, override via Cloudflare dashboard)
 
 ## Code Formatting
 

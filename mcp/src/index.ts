@@ -2,14 +2,19 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpAgent } from "agents/mcp";
 import { registerTools } from "./tools.js";
 
-export class FeedAiMcp extends McpAgent {
+interface Env {
+  MCP_OBJECT: DurableObjectNamespace;
+  API_BASE?: string;
+}
+
+export class FeedAiMcp extends McpAgent<Env> {
   server = new McpServer({
     name: "feed-ai",
     version: "1.0.0",
   });
 
   async init() {
-    registerTools(this.server);
+    registerTools(this.server, this.env.API_BASE);
   }
 }
 
