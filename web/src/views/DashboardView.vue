@@ -1,12 +1,23 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, ref } from "vue";
 import { motion } from "motion-v";
 import { useDashboard } from "../composables/useDashboard";
 import { timeAgo, formatTokens } from "../utils/formatting";
 import DataTable from "../components/DataTable.vue";
 import StatCard from "../components/StatCard.vue";
 
-const { data, loading, error, fetchDashboard } = useDashboard();
+const { data, loading, error, needsAuth, setAdminKey, fetchDashboard } =
+  useDashboard();
+
+const keyInput = ref("");
+
+function submitKey() {
+  const trimmed = keyInput.value.trim();
+  if (!trimmed) return;
+  setAdminKey(trimmed);
+  keyInput.value = "";
+  fetchDashboard();
+}
 
 const aiColumns = [
   { key: "when", label: "When" },
@@ -51,9 +62,42 @@ onMounted(fetchDashboard);
         </router-link>
       </div>
 
+      <!-- Auth prompt -->
+      <div
+        v-if="needsAuth"
+        class="mx-auto max-w-sm py-20"
+      >
+        <p class="mb-4 text-center text-sm text-gray-400">
+          Enter admin key to access the dashboard
+        </p>
+        <form
+          class="flex gap-2"
+          @submit.prevent="submitKey"
+        >
+          <input
+            v-model="keyInput"
+            type="password"
+            placeholder="Admin key"
+            class="flex-1 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-gray-500 focus:outline-none"
+          />
+          <button
+            type="submit"
+            class="rounded-lg bg-gray-700 px-4 py-2 text-sm text-white hover:bg-gray-600"
+          >
+            Go
+          </button>
+        </form>
+        <p
+          v-if="error"
+          class="mt-3 text-center text-sm text-red-400"
+        >
+          {{ error }}
+        </p>
+      </div>
+
       <!-- Loading -->
       <div
-        v-if="loading"
+        v-else-if="loading"
         class="flex justify-center py-20"
       >
         <div
