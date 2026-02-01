@@ -1,13 +1,28 @@
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createServer } from "./server.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpAgent } from "agents/mcp";
+import { registerTools } from "./tools.js";
 
-async function main() {
-  const server = createServer(process.env.FEED_AI_API_BASE);
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+export class FeedAiMcp extends McpAgent {
+  server = new McpServer({
+    name: "feed-ai",
+    version: "1.0.0",
+  });
+
+  async init() {
+    registerTools(this.server);
+  }
 }
 
-main().catch((err) => {
-  console.error("MCP server failed:", err);
-  process.exit(1);
-});
+export default {
+  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const url = new URL(request.url);
+
+    if (url.pathname === "/mcp" || url.pathname === "/sse") {
+      return FeedAiMcp.serve(url.pathname).fetch(request, env, ctx);
+    }
+
+    return new Response("feed-ai MCP server. Connect via /mcp", {
+      status: 200,
+    });
+  },
+};

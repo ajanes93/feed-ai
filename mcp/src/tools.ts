@@ -1,18 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-const DEFAULT_API_BASE = "https://feed-ai-worker.andresjanes.workers.dev";
+const API_BASE = "https://feed-ai-worker.andresjanes.workers.dev";
 
 export async function api(
   path: string,
-  options?: { method?: string; adminKey?: string; apiBase?: string }
+  options?: { method?: string; adminKey?: string }
 ): Promise<unknown> {
-  const base = options?.apiBase ?? DEFAULT_API_BASE;
   const headers: Record<string, string> = {};
   if (options?.adminKey) {
     headers["Authorization"] = `Bearer ${options.adminKey}`;
   }
-  const res = await fetch(`${base}${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     method: options?.method ?? "GET",
     headers,
   });
@@ -49,23 +48,14 @@ const getLogsSchema = {
   limit: z.number().max(500).optional().default(50),
 };
 
-// Use Pick so registerTools works with McpServer from any SDK copy (avoids
-// duplicate-declaration conflicts when the `agents` package bundles its own).
-export function registerTools(
-  server: Pick<McpServer, "tool">,
-  apiBase?: string
-): void {
-  const opts = apiBase ? { apiBase } : undefined;
-
-  // --- Public tools (no auth) ---
-
+export function registerTools(server: McpServer): void {
   server.tool(
     "get_digest",
     "Fetch a digest by date. Returns items with title, summary, category, source.",
     getDigestSchema,
     async ({ date }) => {
       const path = date ? `/api/digest/${date}` : "/api/today";
-      const data = await api(path, opts);
+      const data = await api(path);
       return jsonResult(data);
     }
   );
@@ -75,7 +65,7 @@ export function registerTools(
     "List the last 30 digests with dates and item counts.",
     {},
     async () => {
-      const data = await api("/api/digests", opts);
+      const data = await api("/api/digests");
       return jsonResult(data);
     }
   );
@@ -85,12 +75,10 @@ export function registerTools(
     "Check health of all RSS sources — staleness, failures, last success.",
     {},
     async () => {
-      const data = await api("/api/health", opts);
+      const data = await api("/api/health");
       return jsonResult(data);
     }
   );
-
-  // --- Admin tools (require admin_key parameter) ---
 
   server.tool(
     "get_dashboard",
@@ -99,7 +87,6 @@ export function registerTools(
     async ({ admin_key }) => {
       const data = await api("/api/admin/dashboard", {
         adminKey: admin_key,
-        ...opts,
       });
       return jsonResult(data);
     }
@@ -118,7 +105,6 @@ export function registerTools(
       const query = params.toString();
       const data = await api(`/api/admin/logs${query ? `?${query}` : ""}`, {
         adminKey: admin_key,
-        ...opts,
       });
       return jsonResult(data);
     }
@@ -132,7 +118,6 @@ export function registerTools(
       const data = await api("/api/rebuild", {
         method: "POST",
         adminKey: admin_key,
-        ...opts,
       });
       return jsonResult(data);
     }
@@ -146,18 +131,14 @@ export function registerTools(
       const data = await api("/api/generate", {
         method: "POST",
         adminKey: admin_key,
-        ...opts,
       });
       return jsonResult(data);
     }
   );
 }
 
-export function createServer(apiBase?: string): McpServer {
-  const server = new McpServer({
-    name: "feed-ai",
-    version: "1.0.0",
-  });
-  registerTools(server, apiBase);
+export function createServer(): McpServer {
+  const server = new McpServer({ name: "feed-ai", version: "1.0.0" });
+  registerTools(server);
   return server;
 }
