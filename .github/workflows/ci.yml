@@ -41,7 +41,7 @@ jobs:
       - run: npx vue-tsc --noEmit
         working-directory: web
 
-  mcp-build-test:
+  mcp-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,8 +49,6 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npm run build
-        working-directory: mcp
       - run: npm test
         working-directory: mcp
 

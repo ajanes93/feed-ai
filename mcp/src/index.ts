@@ -19,11 +19,16 @@ export class FeedAiMcp extends McpAgent<Env> {
 }
 
 export default {
-  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
 
-    if (url.pathname === "/mcp" || url.pathname === "/sse") {
-      return FeedAiMcp.serve(url.pathname).fetch(request, env, ctx);
+    try {
+      if (url.pathname === "/mcp" || url.pathname === "/sse") {
+        return await FeedAiMcp.serve(url.pathname).fetch(request, env, ctx);
+      }
+    } catch (err) {
+      console.error("MCP error:", err);
+      return new Response("Internal server error", { status: 500 });
     }
 
     return new Response("feed-ai MCP server. Connect via /mcp", {
