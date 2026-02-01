@@ -129,6 +129,13 @@ export const sources: Source[] = [
     category: "dev",
   },
   {
+    id: "voidzero",
+    name: "VoidZero Blog",
+    type: "rss",
+    url: "https://voidzero.dev/feed.xml",
+    category: "dev",
+  },
+  {
     id: "gh-vueuse",
     name: "VueUse Releases",
     type: "github",
