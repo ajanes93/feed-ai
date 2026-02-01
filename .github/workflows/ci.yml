@@ -52,15 +52,24 @@ jobs:
       - uses: actions/cache@v4
         id: pw-cache
         with:
-          path: ~/.cache/ms-playwright
+          path: |
+            ~/.cache/ms-playwright
+            ~/pw-apt-cache
           key: playwright-${{ steps.pw-version.outputs.version }}
           save-always: true
-      - run: npx playwright install chromium --with-deps
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        working-directory: web
-      - run: npx playwright install-deps chromium
+      - name: Restore cached apt packages
         if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: |
+          if [ -d ~/pw-apt-cache ]; then
+            sudo cp ~/pw-apt-cache/*.deb /var/cache/apt/archives/ 2>/dev/null || true
+          fi
+      - run: npx playwright install chromium --with-deps
         working-directory: web
+      - name: Save apt packages to cache dir
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/pw-apt-cache
+          cp /var/cache/apt/archives/*.deb ~/pw-apt-cache/ 2>/dev/null || true
       - run: npm run test:e2e
         working-directory: web
       - uses: actions/upload-artifact@v4
