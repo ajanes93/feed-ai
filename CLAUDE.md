@@ -8,6 +8,17 @@ Evening Scroll (feed-ai) — a personal daily digest app that fetches news/jobs/
 
 **Stack:** Cloudflare Workers + D1 + Pages (Vue 3 + TypeScript + Tailwind CSS 4)
 
+## First-Time Setup
+
+After cloning the repo, run these commands to set up the development environment:
+
+```bash
+npm install          # Install all workspace deps + lefthook commit hooks
+npm run build -w mcp # Build the MCP server (required for Claude Code tools)
+```
+
+The MCP server config is committed in `.claude/settings.json` and will be picked up automatically by Claude Code. It exposes 7 tools for querying production data (digests, logs, sources, AI usage) and triggering digest rebuilds.
+
 ## Quick Reference Commands
 
 | Task                | Command (web)          | Command (worker)      |
@@ -32,6 +43,11 @@ worker/                     # Cloudflare Worker (API + Cron)
       summarizer.ts        # Claude API integration
   schema.sql               # D1 database schema
   wrangler.toml            # Cloudflare config
+
+mcp/                        # MCP server (Claude Code tools)
+  src/
+    index.ts               # Stdio transport entrypoint
+    server.ts              # Tool definitions + API client
 
 web/                        # Vue 3 frontend
   src/
