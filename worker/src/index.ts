@@ -405,34 +405,33 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     await logSettledFailures(env.DB, "AI usage recording", results);
   }
 
-  try {
-    if (newsItems.length > 0) {
-      console.log(`Generating news digest from ${newsItems.length} items...`);
-      const { items, aiUsages } = await generateDigest(
-        newsItems,
-        apiKeys,
-        "news"
-      );
+  async function runDigest(rawItems: RawItem[], type: "news" | "jobs") {
+    try {
+      const { items, aiUsages } = await generateDigest(rawItems, apiKeys, type);
       allDigestItems.push(...items);
       allAiUsages.push(...aiUsages);
-      console.log(`News: ${items.length} items`);
+      console.log(`${type}: ${items.length} items`);
+    } catch (err) {
+      if (err instanceof DigestError) allAiUsages.push(...err.aiUsages);
+      console.error(`${type} digest failed, continuing:`, err);
+      await logEvent(env.DB, {
+        level: "error",
+        category: "general",
+        message: `${type} digest generation failed: ${err instanceof Error ? err.message : String(err)}`,
+        details: { stack: err instanceof Error ? err.stack : undefined },
+        digestId,
+      });
     }
+  }
 
-    if (jobItems.length > 0) {
-      console.log(`Generating jobs digest from ${jobItems.length} items...`);
-      const { items, aiUsages } = await generateDigest(
-        jobItems,
-        apiKeys,
-        "jobs"
-      );
-      allDigestItems.push(...items);
-      allAiUsages.push(...aiUsages);
-      console.log(`Jobs: ${items.length} items`);
-    }
-  } catch (err) {
-    if (err instanceof DigestError) allAiUsages.push(...err.aiUsages);
-    await recordUsages();
-    throw err;
+  if (newsItems.length > 0) {
+    console.log(`Generating news digest from ${newsItems.length} items...`);
+    await runDigest(newsItems, "news");
+  }
+
+  if (jobItems.length > 0) {
+    console.log(`Generating jobs digest from ${jobItems.length} items...`);
+    await runDigest(jobItems, "jobs");
   }
 
   // Assign digestId and sequential positions to all items
@@ -445,6 +444,10 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   console.log(`Total digest: ${allDigestItems.length} items`);
 
   await recordUsages();
+
+  if (allDigestItems.length === 0) {
+    return new Response("No digest items generated", { status: 500 });
+  }
 
   await env.DB.batch([
     env.DB.prepare(
