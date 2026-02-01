@@ -8,6 +8,10 @@ pre-commit:
       glob: "worker/src/**/*.ts"
       root: "worker/"
       run: npx eslint --fix {staged_files} && git add {staged_files}
+    lint-mcp:
+      glob: "mcp/src/**/*.ts"
+      root: "mcp/"
+      run: npx eslint --fix {staged_files} && git add {staged_files}
     format-web:
       glob: "web/src/**/*.{ts,vue,css}"
       root: "web/"
@@ -15,4 +19,8 @@ pre-commit:
     format-worker:
       glob: "worker/src/**/*.ts"
       root: "worker/"
+      run: npx prettier --write {staged_files} && git add {staged_files}
+    format-mcp:
+      glob: "mcp/src/**/*.ts"
+      root: "mcp/"
       run: npx prettier --write {staged_files} && git add {staged_files}

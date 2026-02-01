@@ -4,58 +4,106 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Project Overview
 
-Evening Scroll (feed-ai) — a personal daily digest app that fetches news/jobs/updates from configured RSS sources, uses Claude to summarize into 8-10 important items, and displays them in a TikTok-style scrollable feed.
+feed-ai — a personal daily digest app that fetches news/jobs/updates from configured RSS sources, uses AI to curate and summarize into 8-10 important items, and displays them in a scrollable feed.
 
 **Stack:** Cloudflare Workers + D1 + Pages (Vue 3 + TypeScript + Tailwind CSS 4)
 
+## First-Time Setup
+
+After cloning the repo, run these commands to set up the development environment:
+
+```bash
+npm install          # Install all workspace deps + lefthook commit hooks
+npm run build -w mcp # Build the MCP server (required for Claude Code tools)
+```
+
+The MCP server config is committed in `.claude/settings.json` and will be picked up automatically by Claude Code. It exposes 7 tools for querying production data (digests, logs, sources, AI usage) and triggering digest rebuilds.
+
 ## Quick Reference Commands
 
-| Task                | Command (web)          | Command (worker)      |
-| ------------------- | ---------------------- | --------------------- |
-| Start dev server    | `npm run dev`          | `npm run dev`         |
-| Build               | `npm run build`        | N/A                   |
-| Lint & fix          | `npm run lint`         | `npm run lint`        |
-| Format code         | `npm run format`       | `npm run format`      |
-| Deploy worker       | N/A                    | `npm run deploy`      |
-| Query D1            | N/A                    | `wrangler d1 execute` |
+Commands can be run from the root (applies to all workspaces) or from individual packages.
+
+| Task             | Root (all packages)    | Per-package            |
+| ---------------- | ---------------------- | ---------------------- |
+| Install deps     | `npm install`          | N/A (use root)         |
+| Build            | `npm run build`        | `npm run build`        |
+| Lint & fix       | `npm run lint`         | `npm run lint`         |
+| Lint (check)     | `npm run lint:check`   | `npm run lint:check`   |
+| Format           | `npm run format`       | `npm run format`       |
+| Format (check)   | `npm run format:check` | `npm run format:check` |
+| Test             | `npm test`             | `npm test`             |
+| Dev server       | N/A                    | `npm run dev` (worker/web) |
+| Deploy worker    | N/A                    | `npm run deploy` (worker)  |
 
 ## Directory Structure
 
 ```
+shared/                     # Shared types, factories, utilities
+  types.ts                 # TypeScript types shared across packages
+  factories.ts             # Test factories (fishery)
+  utils.ts                 # Shared utility functions
+
 worker/                     # Cloudflare Worker (API + Cron)
   src/
     index.ts               # Main worker entry (Hono router + cron)
-    types.ts               # TypeScript types
+    types.ts               # Worker-specific types
     sources.ts             # RSS source configuration
     services/
-      fetcher.ts           # RSS/Reddit/GitHub fetching
-      summarizer.ts        # Claude API integration
+      fetcher.ts           # RSS/Reddit/GitHub/Bluesky fetching
+      summarizer.ts        # AI integration (Gemini + Claude fallback)
+      logger.ts            # Structured logging to D1
+      hn-hiring.ts         # HN hiring thread parser
+      bluesky.ts           # Bluesky feed fetcher
+      scrape.ts            # HTML scraping utilities
+      constants.ts         # Shared constants
   schema.sql               # D1 database schema
   wrangler.toml            # Cloudflare config
 
-web/                        # Vue 3 frontend
+mcp/                        # MCP server (Claude Code tools)
+  src/
+    index.ts               # Stdio transport entrypoint
+    server.ts              # Tool definitions + API client
+
+web/                        # Vue 3 frontend (Cloudflare Pages)
   src/
     App.vue                # Root component
     main.ts                # App entry point
+    router.ts              # Vue Router config
     style.css              # Global styles + Tailwind
     types.ts               # Frontend TypeScript types
     components/
-      DigestFeed.vue       # Snap-scroll container
+      DigestFeed.vue       # Snap-scroll container (Swiper.js)
       DigestCard.vue       # Individual item card
       DateHeader.vue       # Date + item count
       EmptyState.vue       # No digest yet today
+      CategoryFilter.vue   # Category filtering
+      DataTable.vue        # Data table component
+      StatCard.vue         # Dashboard stat card
     composables/
-      useDigest.ts         # Fetch + state management
+      useDigest.ts         # Digest fetch + state management
+      useDashboard.ts      # Dashboard data fetching
+    views/                 # Route views
+    utils/                 # Frontend utilities
 ```
 
 ## Technology Stack
 
-- **Worker**: Cloudflare Workers, Hono (router), D1 (database), rss-parser
-- **AI**: Anthropic Claude API (Haiku for summarization)
+- **Worker**: Cloudflare Workers, Hono (router), D1 (database), fast-xml-parser
+- **AI**: Gemini 2.0 Flash (primary) with Claude Haiku 4.5 fallback
 - **Frontend**: Vue 3 with Composition API (`<script setup>`), TypeScript (strict mode)
 - **Build**: Vite
 - **Styling**: Tailwind CSS 4 (via `@tailwindcss/vite` plugin)
+- **MCP**: `@modelcontextprotocol/sdk` with zod v4 schemas
 - **Deployment**: GitHub Actions → Cloudflare Workers + Pages
+
+## Monorepo Structure
+
+npm workspaces with 4 packages: `shared`, `worker`, `web`, `mcp`.
+
+Shared config at root level:
+- `eslint.config.base.js` — shared ESLint rules, extended by each package
+- `.prettierrc` — shared Prettier config (web extends with tailwind plugin)
+- `lefthook.yml` — pre-commit hooks for all packages
 
 ## Key Conventions
 
@@ -84,16 +132,23 @@ web/                        # Vue 3 frontend
 
 ### Worker (Cloudflare secrets)
 
-- `ANTHROPIC_API_KEY` — Claude API key (set via `wrangler secret put`)
+- `ADMIN_KEY` — Bearer token for admin endpoints
+- `GEMINI_API_KEY` — Google Gemini API key (primary AI provider)
+- `ANTHROPIC_API_KEY` — Anthropic API key (fallback AI provider)
 
 ### Frontend (build-time via Vite)
 
 - `VITE_API_BASE` — Worker API URL (set via GitHub Actions vars)
 
+### MCP Server (optional)
+
+- `FEED_AI_API_BASE` — Worker API URL (defaults to production)
+
 ## Code Formatting
 
-- **ESLint**: Handles linting and code quality (`npm run lint`)
-- **Prettier**: Handles code formatting (`npm run format`)
+- **ESLint**: Handles linting and code quality (`npm run lint` / `npm run lint:check`)
+- **Prettier**: Handles code formatting (`npm run format` / `npm run format:check`)
+- Both run from root across all workspaces
 
 ## Agents & Commands
 

@@ -1,7 +1,22 @@
 {
   "private": true,
-  "workspaces": ["shared", "worker", "web"],
+  "type": "module",
+  "workspaces": ["shared", "worker", "web", "mcp"],
+  "scripts": {
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:check": "npm run lint:check --workspaces --if-present",
+    "format": "npm run format --workspaces --if-present",
+    "format:check": "npm run format:check --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  },
   "devDependencies": {
-    "lefthook": "^1.11.0"
+    "@eslint/js": "^9.18.0",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.1.0",
+    "lefthook": "^1.11.0",
+    "prettier": "^3.8.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.21.0"
   }
 }

@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  worker:
+  lint-format:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,14 +14,21 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npx eslint src
-        working-directory: worker
-      - run: npx prettier --check src
-        working-directory: worker
+      - run: npm run lint:check
+      - run: npm run format:check
+
+  worker-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
       - run: npm test
         working-directory: worker
 
-  web:
+  web-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,14 +36,23 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npx eslint src
-        working-directory: web
-      - run: npx prettier --check src
-        working-directory: web
       - run: npm test
         working-directory: web
       - run: npx vue-tsc --noEmit
         working-directory: web
+
+  mcp-build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+        working-directory: mcp
+      - run: npm test
+        working-directory: mcp
 
   e2e:
     runs-on: ubuntu-latest

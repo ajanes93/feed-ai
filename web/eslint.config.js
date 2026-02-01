@@ -1,11 +1,10 @@
-import eslint from "@eslint/js";
+import tseslint from "typescript-eslint";
 import eslintConfigPrettier from "eslint-config-prettier";
 import pluginVue from "eslint-plugin-vue";
-import tseslint from "typescript-eslint";
+import { base } from "../eslint.config.base.js";
 
 export default tseslint.config(
-  eslint.configs.recommended,
-  ...tseslint.configs.recommended,
+  ...base,
   ...pluginVue.configs["flat/recommended"],
   eslintConfigPrettier,
   {
@@ -18,13 +17,6 @@ export default tseslint.config(
   },
   {
     rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        { argsIgnorePattern: "^_" },
-      ],
-      eqeqeq: ["error", "always"],
-      "no-debugger": "error",
       "vue/multi-word-component-names": "off",
       "vue/html-self-closing": [
         "error",
@@ -34,8 +26,5 @@ export default tseslint.config(
         },
       ],
     },
-  },
-  {
-    ignores: ["dist/**", "node_modules/**", "*.d.ts"],
   }
 );
