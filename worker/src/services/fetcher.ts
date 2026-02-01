@@ -114,6 +114,11 @@ async function fetchJsonApi(source: Source): Promise<RawItem[]> {
 
 export async function fetchSource(source: Source): Promise<RawItem[]> {
   try {
+    // Special case: hn-hiring uses Algolia API instead of RSS
+    if (source.id === "hn-hiring") {
+      return await fetchHNHiring(source);
+    }
+
     switch (source.type) {
       case "api":
         return await fetchJsonApi(source);
@@ -123,10 +128,6 @@ export async function fetchSource(source: Source): Promise<RawItem[]> {
         return await fetchScrapeSource(source);
       default:
         // rss, reddit, hn, github — all XML feeds
-        // hn-hiring is a special case dispatched by source ID
-        if (source.id === "hn-hiring") {
-          return await fetchHNHiring(source);
-        }
         return await fetchRssFeed(source);
     }
   } catch (error) {

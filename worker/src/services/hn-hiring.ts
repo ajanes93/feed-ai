@@ -24,7 +24,7 @@ interface AlgoliaItemResponse {
 export async function fetchHNHiring(source: Source): Promise<RawItem[]> {
   // Step 1: Find the latest "Who is hiring" thread
   const searchRes = await fetch(source.url, {
-    headers: { "User-Agent": "feed-ai/1.0" },
+    headers: { "User-Agent": USER_AGENT },
   });
 
   if (!searchRes.ok) {
@@ -57,10 +57,12 @@ export async function fetchHNHiring(source: Source): Promise<RawItem[]> {
     .slice(0, ITEM_LIMIT)
     .map((c) => {
       const plainText = stripHtml(c.text);
+      const title =
+        plainText.length > 100 ? plainText.slice(0, 100) + "…" : plainText;
       return {
         id: crypto.randomUUID(),
         sourceId: source.id,
-        title: plainText.slice(0, 100) + (plainText.length > 100 ? "…" : ""),
+        title,
         link: `https://news.ycombinator.com/item?id=${c.id}`,
         content: plainText,
         publishedAt: parsePublishedDate(c.created_at),
