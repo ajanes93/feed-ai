@@ -100,12 +100,13 @@ function setCategory(cat: string) {
   innerSwiper?.slideTo(CATEGORIES.indexOf(cat), 250);
 }
 
-// Header arrow navigation
+// Header arrow navigation — always land on "all" category
 async function navigateDigest(direction: "prev" | "next") {
   transitioning.value = true;
   try {
     await (direction === "prev" ? goToPrevious() : goToNext());
-    resetCategory(direction === "prev" ? "last" : "first");
+    activeCategory.value = "all";
+    innerSwiper?.slideTo(0, 0);
   } finally {
     transitioning.value = false;
   }

@@ -172,7 +172,7 @@ describe("FeedView", () => {
       expect(wrapper.text()).toContain("January");
     });
 
-    it("uses digest date (not stale route) when category changes during navigation", async () => {
+    it("arrow navigation resets to 'all' category and updates URL to new date", async () => {
       const YESTERDAY_DIGEST = digestFactory.build({
         date: "2025-01-27",
         items: [
@@ -188,23 +188,16 @@ describe("FeedView", () => {
 
       mockRouter.replace.mockClear();
 
-      // Click "Previous digest" — triggers goToPrevious() + resetCategory("last")
       await wrapper
         .find('button[aria-label="Previous digest"]')
         .trigger("click");
       await flushPromises();
 
-      // All router.replace calls after navigation should use yesterday's date
+      // URL should use yesterday's date with no category query (defaults to "all")
       const calls = mockRouter.replace.mock.calls;
       const lastCall = calls[calls.length - 1][0];
       expect(lastCall.params.date).toBe("2025-01-27");
-
-      // No call should have written today's date with a category query param
-      const badCall = calls.find(
-        (c: { params?: { date: string }; query?: { category?: string } }[]) =>
-          c[0]?.params?.date === "2025-01-28" && c[0]?.query?.category
-      );
-      expect(badCall).toBeUndefined();
+      expect(lastCall.query).toEqual({});
     });
   });
 });
