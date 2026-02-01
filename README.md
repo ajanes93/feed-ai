@@ -1,4 +1,4 @@
-# Evening Scroll (feed-ai)
+# feed-ai
 
 Personal daily digest app that fetches news, jobs, and updates from configured RSS/API sources, uses AI to curate and summarize into 8-10 important items, and displays them in a scrollable feed.
 

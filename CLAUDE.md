@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Project Overview
 
-Evening Scroll (feed-ai) — a personal daily digest app that fetches news/jobs/updates from configured RSS sources, uses AI to curate and summarize into 8-10 important items, and displays them in a scrollable feed.
+feed-ai — a personal daily digest app that fetches news/jobs/updates from configured RSS sources, uses AI to curate and summarize into 8-10 important items, and displays them in a scrollable feed.
 
 **Stack:** Cloudflare Workers + D1 + Pages (Vue 3 + TypeScript + Tailwind CSS 4)
 

@@ -1,6 +1,6 @@
-# evening-scroll-worker
+# feed-ai-worker
 
-Cloudflare Worker that powers the Evening Scroll API. Handles RSS fetching, AI summarization, and digest storage.
+Cloudflare Worker that powers the feed-ai API. Handles RSS fetching, AI summarization, and digest storage.
 
 ## Key Files
 

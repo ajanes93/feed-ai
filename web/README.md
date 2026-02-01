@@ -1,6 +1,6 @@
-# evening-scroll-web
+# feed-ai-web
 
-Vue 3 frontend for Evening Scroll. Displays daily digests in a TikTok-style vertical scroll feed.
+Vue 3 frontend for feed-ai. Displays daily digests in a TikTok-style vertical scroll feed.
 
 ## Key Files
 

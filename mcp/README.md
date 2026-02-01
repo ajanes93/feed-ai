@@ -1,6 +1,6 @@
 # feed-ai-mcp
 
-MCP (Model Context Protocol) server that gives Claude Code direct access to Evening Scroll production data and actions.
+MCP (Model Context Protocol) server that gives Claude Code direct access to feed-ai production data and actions.
 
 ## Tools
 
