@@ -52,7 +52,7 @@ export async function fetchBlueskySource(source: Source): Promise<RawItem[]> {
   const { feed } = (await feedRes.json()) as BlueskyFeedResponse;
 
   return (feed || []).slice(0, ITEM_LIMIT).map((item) => {
-    const rkey = item.post.uri.split("/").pop();
+    const rkey = item.post.uri.split("/").pop() ?? "";
     return {
       id: crypto.randomUUID(),
       sourceId: source.id,
