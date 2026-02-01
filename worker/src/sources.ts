@@ -67,7 +67,7 @@ export const sources: Source[] = [
     id: "hn-ai",
     name: "Hacker News AI",
     type: "hn",
-    url: "https://hnrss.org/newest?q=AI+OR+LLM+OR+Claude+OR+GPT&points=100",
+    url: "https://hnrss.org/newest?q=AI+OR+LLM+OR+Claude+OR+GPT+OR+Anthropic&points=50",
     category: "ai",
   },
   {
@@ -111,7 +111,7 @@ export const sources: Source[] = [
     id: "hn-vue",
     name: "Hacker News Vue/Vite",
     type: "hn",
-    url: "https://hnrss.org/newest?q=Vue+OR+Vite+OR+Nuxt&points=50",
+    url: "https://hnrss.org/newest?q=Vue+OR+Vite+OR+Nuxt&points=10",
     category: "dev",
   },
   {
@@ -213,7 +213,7 @@ export const sources: Source[] = [
     id: "hn-frontend",
     name: "Hacker News Frontend",
     type: "hn",
-    url: "https://hnrss.org/newest?q=CSS+OR+JavaScript+OR+TypeScript&points=75",
+    url: "https://hnrss.org/newest?q=CSS+OR+JavaScript+OR+TypeScript+OR+Tailwind+OR+Wasm&points=30",
     category: "dev",
   },
   {
