@@ -14,9 +14,9 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npx eslint src
+      - run: npm run lint
         working-directory: worker
-      - run: npx prettier --check src
+      - run: npm run format:check
         working-directory: worker
       - run: npm test
         working-directory: worker
@@ -29,14 +29,31 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npx eslint src
+      - run: npm run lint
         working-directory: web
-      - run: npx prettier --check src
+      - run: npm run format:check
         working-directory: web
       - run: npm test
         working-directory: web
       - run: npx vue-tsc --noEmit
         working-directory: web
+
+  mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run lint
+        working-directory: mcp
+      - run: npm run format:check
+        working-directory: mcp
+      - run: npm run build
+        working-directory: mcp
+      - run: npm test
+        working-directory: mcp
 
   e2e:
     runs-on: ubuntu-latest
