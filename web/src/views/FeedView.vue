@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed, watch, nextTick } from "vue";
+import { onMounted, ref, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Swiper, SwiperSlide } from "swiper/vue";
 import type Swiper_T from "swiper";
@@ -179,15 +179,8 @@ async function onTouchEnd() {
   if (pullDistance.value >= PULL_THRESHOLD && !refreshing.value) {
     refreshing.value = true;
     pullDistance.value = 50;
-    const currentDate = digest.value?.date;
-    if (currentDate) {
-      await fetchDate(currentDate);
-    } else {
-      await fetchToday();
-    }
-    refreshing.value = false;
-    await nextTick();
-    resetCategory("first");
+    window.location.reload();
+    return;
   }
   pullDistance.value = 0;
   touchStartY.value = 0;
