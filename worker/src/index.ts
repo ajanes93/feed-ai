@@ -297,11 +297,7 @@ app.use("/api/generate", authMiddleware);
 app.use("/api/rebuild", authMiddleware);
 
 app.post("/api/fetch", async (c) => {
-  const { items, health } = await fetchAllSources(sources);
-  await recordSourceHealth(c.env, health);
-
-  const today = new Date().toISOString().split("T")[0];
-  await storeRawItems(c.env.DB, items, today);
+  const { items, health } = await runFetchAndStore(c.env);
 
   const perSource = health.map((h) => ({
     sourceId: h.sourceId,
@@ -406,23 +402,41 @@ async function storeRawItems(
   }
 }
 
+// --- Shared fetch + store logic ---
+
+async function runFetchAndStore(env: Env) {
+  const today = todayDate();
+  const { items, health } = await fetchAllSources(sources);
+  await recordSourceHealth(env, health);
+  await storeRawItems(env.DB, items, today);
+  return { items, health, today };
+}
+
 // --- Fetch-only: accumulate articles without summarizing ---
 
 export async function fetchAndStoreArticles(env: Env): Promise<Response> {
-  const today = todayDate();
   const start = Date.now();
 
   await logEvent(env.DB, {
     level: "info",
     category: "fetch",
     message: "Starting scheduled fetch-and-store",
-    details: { date: today, sourceCount: sources.length },
+    details: { date: todayDate(), sourceCount: sources.length },
   });
 
-  const { items: allRawItems, health } = await fetchAllSources(sources);
-  await recordSourceHealth(env, health);
+  let result;
+  try {
+    result = await runFetchAndStore(env);
+  } catch (err) {
+    await logEvent(env.DB, {
+      level: "error",
+      category: "fetch",
+      message: `Failed to fetch/store: ${err instanceof Error ? err.message : String(err)}`,
+    });
+    return new Response("Failed to store items", { status: 500 });
+  }
 
-  const successSources = health.filter((h) => h.success);
+  const { items, health, today } = result;
   const failedSources = health.filter((h) => !h.success);
 
   if (failedSources.length > 0) {
@@ -439,30 +453,19 @@ export async function fetchAndStoreArticles(env: Env): Promise<Response> {
     });
   }
 
-  try {
-    await storeRawItems(env.DB, allRawItems, today);
-  } catch (err) {
-    await logEvent(env.DB, {
-      level: "error",
-      category: "fetch",
-      message: `Failed to store raw items: ${err instanceof Error ? err.message : String(err)}`,
-    });
-    return new Response("Failed to store items", { status: 500 });
-  }
-
   await logEvent(env.DB, {
     level: "info",
     category: "fetch",
-    message: `Fetch-and-store complete: ${allRawItems.length} items stored for ${today}`,
+    message: `Fetch-and-store complete: ${items.length} items stored for ${today}`,
     details: {
-      fetched: allRawItems.length,
-      successSources: successSources.length,
+      fetched: items.length,
+      successSources: health.filter((h) => h.success).length,
       failedSources: failedSources.length,
       durationMs: Date.now() - start,
     },
   });
 
-  return new Response(`Stored ${allRawItems.length} items for ${today}`, {
+  return new Response(`Stored ${items.length} items for ${today}`, {
     status: 200,
   });
 }
