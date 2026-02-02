@@ -166,10 +166,10 @@ export const sources: Source[] = [
     category: "dev",
   },
   {
-    id: "taylor-otwell-bluesky",
-    name: "Taylor Otwell",
+    id: "guillaume-chau-bluesky",
+    name: "Guillaume Chau",
     type: "bluesky",
-    url: "taylorotwell.bsky.social",
+    url: "guillaume.akryum.dev",
     category: "dev",
   },
   {
