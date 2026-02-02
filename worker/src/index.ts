@@ -389,6 +389,7 @@ async function storeRawItems(
 
 async function fetchAndStoreArticles(env: Env): Promise<Response> {
   const today = todayDate();
+  const start = Date.now();
 
   await logEvent(env.DB, {
     level: "info",
@@ -400,20 +401,49 @@ async function fetchAndStoreArticles(env: Env): Promise<Response> {
   const { items: allRawItems, health } = await fetchAllSources(sources);
   await recordSourceHealth(env, health);
 
-  const stored = await storeRawItems(env.DB, allRawItems, today);
+  const failedSources = health.filter((h) => !h.success);
+  if (failedSources.length > 0) {
+    await logEvent(env.DB, {
+      level: "warn",
+      category: "fetch",
+      message: `${failedSources.length} sources failed during fetch-and-store`,
+      details: {
+        failedSources: failedSources.map((s) => ({
+          id: s.sourceId,
+          error: s.error,
+        })),
+      },
+    });
+  }
+
+  try {
+    await storeRawItems(env.DB, allRawItems, today);
+  } catch (err) {
+    await logEvent(env.DB, {
+      level: "error",
+      category: "fetch",
+      message: `Failed to store raw items: ${err instanceof Error ? err.message : String(err)}`,
+    });
+    return new Response("Failed to store items", { status: 500 });
+  }
+
+  const durationMs = Date.now() - start;
 
   await logEvent(env.DB, {
     level: "info",
     category: "fetch",
-    message: `Fetch-and-store complete: ${stored} items fetched, stored for ${today}`,
+    message: `Fetch-and-store complete: ${allRawItems.length} items stored for ${today}`,
     details: {
       fetched: allRawItems.length,
       successSources: health.filter((h) => h.success).length,
-      failedSources: health.filter((h) => !h.success).length,
+      failedSources: failedSources.length,
+      durationMs,
     },
   });
 
-  return new Response(`Stored ${stored} items for ${today}`, { status: 200 });
+  return new Response(`Stored ${allRawItems.length} items for ${today}`, {
+    status: 200,
+  });
 }
 
 // --- Load accumulated raw items from DB ---
@@ -539,6 +569,15 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     level: "info",
     category: "digest",
     message: `Loaded ${allRawItems.length} accumulated items (last 24h)`,
+    details: {
+      sourceBreakdown: allRawItems.reduce(
+        (acc, item) => {
+          acc[item.sourceId] = (acc[item.sourceId] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      ),
+    },
     digestId,
   });
 
@@ -827,10 +866,17 @@ export default {
     // 6am and 12pm UTC: fetch-only (accumulate articles)
     // 6pm UTC: full digest generation (fetch + summarize)
     const hour = new Date(event.scheduledTime).getUTCHours();
-    if (hour === 18) {
-      ctx.waitUntil(generateDailyDigest(env));
-    } else {
-      ctx.waitUntil(fetchAndStoreArticles(env));
-    }
+    const mode = hour === 18 ? "digest" : "fetch-only";
+    ctx.waitUntil(
+      logEvent(env.DB, {
+        level: "info",
+        category: "digest",
+        message: `Cron triggered at ${hour}:00 UTC — mode: ${mode}`,
+      }).then(() =>
+        mode === "digest"
+          ? generateDailyDigest(env)
+          : fetchAndStoreArticles(env)
+      )
+    );
   },
 };

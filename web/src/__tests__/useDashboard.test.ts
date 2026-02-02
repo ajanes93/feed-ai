@@ -207,10 +207,11 @@ describe("useDashboard", () => {
         })
       );
 
-      const { rebuildResult, rebuildDigest } = useDashboard();
+      const { rebuildResult, rebuildSuccess, rebuildDigest } = useDashboard();
       await rebuildDigest();
 
       expect(rebuildResult.value).toBe("Generated digest with 12 items");
+      expect(rebuildSuccess.value).toBe(true);
     });
 
     it("sets rebuildResult to error message on failure", async () => {
@@ -223,10 +224,11 @@ describe("useDashboard", () => {
         })
       );
 
-      const { rebuildResult, rebuildDigest } = useDashboard();
+      const { rebuildResult, rebuildSuccess, rebuildDigest } = useDashboard();
       await rebuildDigest();
 
       expect(rebuildResult.value).toBe("No items fetched");
+      expect(rebuildSuccess.value).toBe(false);
     });
 
     it("clears auth on 401 during rebuild", async () => {
