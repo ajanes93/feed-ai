@@ -103,6 +103,14 @@ describe("DashboardView", () => {
       const { wrapper } = await render(data);
       expect(wrapper.text()).toContain("Stale");
     });
+
+    it("shows Check status for source with 0 items", async () => {
+      const data = dashboardDataFactory.build({
+        sources: [sourceHealthFactory.build({ itemCount: 0, stale: false })],
+      } as Partial<DashboardData>);
+      const { wrapper } = await render(data);
+      expect(wrapper.text()).toContain("Check");
+    });
   });
 
   describe("error logs", () => {
