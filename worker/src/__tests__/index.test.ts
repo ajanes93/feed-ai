@@ -116,6 +116,22 @@ describe("API routes", () => {
     expect(res.status).toBe(401);
   });
 
+  it("POST /api/fetch requires auth", async () => {
+    const res = await app.request("/api/fetch", { method: "POST" }, env);
+
+    expect(res.status).toBe(401);
+  });
+
+  it("POST /api/fetch rejects wrong token", async () => {
+    const res = await app.request(
+      "/api/fetch",
+      { method: "POST", headers: { Authorization: "Bearer wrong-key" } },
+      env
+    );
+
+    expect(res.status).toBe(401);
+  });
+
   it("GET /api/health returns source health", async () => {
     const res = await app.request("/api/health", {}, env);
 
