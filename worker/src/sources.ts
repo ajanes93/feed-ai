@@ -169,7 +169,7 @@ export const sources: Source[] = [
     id: "taylor-otwell-bluesky",
     name: "Taylor Otwell",
     type: "bluesky",
-    url: "taylorotwell.com",
+    url: "taylorotwell.bsky.social",
     category: "dev",
   },
   {
@@ -231,12 +231,12 @@ export const sources: Source[] = [
     category: "dev",
   },
 
-  // === Dev — YouTube (2 sources) ===
+  // === Dev — Other (2 sources) ===
   {
-    id: "yt-aaron-francis",
+    id: "aaron-francis-bluesky",
     name: "Aaron Francis",
-    type: "rss",
-    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCXBhQ05nu8Pxn4Ey093Upwg",
+    type: "bluesky",
+    url: "aaronfrancis.com",
     category: "dev",
   },
   {
@@ -280,7 +280,7 @@ export const sources: Source[] = [
     id: "jobicy-vue-uk",
     name: "Jobicy Vue UK/Remote",
     type: "api",
-    url: "https://jobicy.com/api/v2/remote-jobs?tag=vue&geo=uk",
+    url: "https://jobicy.com/api/v2/remote-jobs?tag=frontend&geo=uk",
     category: "jobs",
   },
 ];
