@@ -140,6 +140,33 @@ export async function seedRawItems(
   );
 }
 
+export async function seedLog(
+  db: D1Database,
+  log: { id: string; level: string; category: string; message: string }
+) {
+  await db
+    .prepare(
+      "INSERT INTO error_logs (id, level, category, message, created_at) VALUES (?, ?, ?, ?, ?)"
+    )
+    .bind(log.id, log.level, log.category, log.message, Date.now())
+    .run();
+}
+
+export async function seedLogs(
+  db: D1Database,
+  logs: Array<{ id: string; level: string; category: string; message: string }>
+) {
+  await db.batch(
+    logs.map((log) =>
+      db
+        .prepare(
+          "INSERT INTO error_logs (id, level, category, message, created_at) VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(log.id, log.level, log.category, log.message, Date.now())
+    )
+  );
+}
+
 // -- Feed XML fixtures --
 
 export const RSS_FEED = `<?xml version="1.0"?>
