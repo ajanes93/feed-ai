@@ -387,7 +387,7 @@ async function storeRawItems(
 
 // --- Fetch-only: accumulate articles without summarizing ---
 
-async function fetchAndStoreArticles(env: Env): Promise<Response> {
+export async function fetchAndStoreArticles(env: Env): Promise<Response> {
   const today = todayDate();
   const start = Date.now();
 
@@ -553,31 +553,13 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   await recordSourceHealth(env, health);
 
   // Store fresh items, then load all accumulated items (today + yesterday)
-  try {
-    await storeRawItems(env.DB, freshItems, date);
-  } catch (err) {
-    await logEvent(env.DB, {
-      level: "warn",
-      category: "fetch",
-      message: `Failed to store raw items: ${err instanceof Error ? err.message : String(err)}`,
-      digestId,
-    });
-  }
+  await storeRawItems(env.DB, freshItems, date);
   const allRawItems = await loadRecentRawItems(env.DB);
 
   await logEvent(env.DB, {
     level: "info",
     category: "digest",
     message: `Loaded ${allRawItems.length} accumulated items (last 24h)`,
-    details: {
-      sourceBreakdown: allRawItems.reduce(
-        (acc, item) => {
-          acc[item.sourceId] = (acc[item.sourceId] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>
-      ),
-    },
     digestId,
   });
 
@@ -866,17 +848,19 @@ export default {
     // 6am and 12pm UTC: fetch-only (accumulate articles)
     // 6pm UTC: full digest generation (fetch + summarize)
     const hour = new Date(event.scheduledTime).getUTCHours();
-    const mode = hour === 18 ? "digest" : "fetch-only";
+    const isDigestTime = hour === 18;
+
     ctx.waitUntil(
-      logEvent(env.DB, {
-        level: "info",
-        category: "digest",
-        message: `Cron triggered at ${hour}:00 UTC — mode: ${mode}`,
-      }).then(() =>
-        mode === "digest"
+      (async () => {
+        await logEvent(env.DB, {
+          level: "info",
+          category: "digest",
+          message: `Cron triggered at ${hour}:00 UTC — ${isDigestTime ? "full digest" : "fetch-only"}`,
+        });
+        return isDigestTime
           ? generateDailyDigest(env)
-          : fetchAndStoreArticles(env)
-      )
+          : fetchAndStoreArticles(env);
+      })()
     );
   },
 };

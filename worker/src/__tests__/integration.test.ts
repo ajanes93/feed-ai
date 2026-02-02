@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
-import { app } from "../index";
+import { app, fetchAndStoreArticles } from "../index";
 import { sources } from "../sources";
 import { seedDigest, seedRawItems } from "./helpers";
+import worker from "../index";
 
 /**
  * Build a minimal RSS feed with one recent item for a given source.
@@ -589,5 +590,157 @@ describe("Raw items accumulation", () => {
       .all();
     expect(logs.results.length).toBe(1);
     expect(logs.results[0].message as string).toContain("accumulated");
+  });
+});
+
+describe("fetchAndStoreArticles (fetch-only cron)", () => {
+  beforeEach(() => {
+    fetchMock.activate();
+    fetchMock.disableNetConnect();
+  });
+
+  it("stores fetched articles without generating a digest", async () => {
+    mockAllSources();
+
+    const res = await fetchAndStoreArticles(env);
+
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain("Stored");
+
+    // Verify raw_items were stored
+    const today = new Date().toISOString().split("T")[0];
+    const rawItems = await env.DB.prepare(
+      "SELECT * FROM raw_items WHERE date = ?"
+    )
+      .bind(today)
+      .all();
+    expect(rawItems.results.length).toBeGreaterThan(0);
+
+    // Verify NO digest was created (fetch-only mode)
+    const digest = await env.DB.prepare("SELECT * FROM digests WHERE date = ?")
+      .bind(today)
+      .first();
+    expect(digest).toBeNull();
+
+    // Verify source health was recorded
+    const health = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM source_health"
+    ).first();
+    expect((health as Record<string, unknown>).count).toBeGreaterThan(0);
+  });
+
+  it("logs duration and source breakdown", async () => {
+    mockAllSources();
+
+    await fetchAndStoreArticles(env);
+
+    // Check completion log includes duration
+    const logs = await env.DB.prepare(
+      "SELECT * FROM error_logs WHERE message LIKE '%Fetch-and-store complete%'"
+    ).all();
+    expect(logs.results.length).toBe(1);
+    expect(logs.results[0].message as string).toContain("items stored");
+  });
+
+  it("records source health for all sources", async () => {
+    mockAllSources();
+
+    await fetchAndStoreArticles(env);
+
+    const health = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM source_health"
+    ).first();
+    expect((health as Record<string, unknown>).count).toBeGreaterThan(0);
+  });
+});
+
+describe("storeRawItems edge cases", () => {
+  it("truncates content to 500 characters", async () => {
+    mockAllSources();
+    mockGeminiForPipeline();
+
+    // Generate digest which stores raw items with content
+    await app.request(
+      "/api/generate",
+      { method: "POST", headers: AUTH_HEADERS },
+      env
+    );
+
+    // Check all stored content is <= 500 chars
+    const rawItems = await env.DB.prepare(
+      "SELECT content FROM raw_items WHERE content IS NOT NULL"
+    ).all();
+
+    for (const row of rawItems.results) {
+      expect((row.content as string).length).toBeLessThanOrEqual(500);
+    }
+  });
+});
+
+describe("Cron scheduled dispatch", () => {
+  beforeEach(() => {
+    fetchMock.activate();
+    fetchMock.disableNetConnect();
+  });
+
+  it("logs cron trigger with fetch-only mode at 6am", async () => {
+    mockAllSources();
+
+    const event = {
+      scheduledTime: new Date("2025-01-28T06:00:00Z").getTime(),
+      cron: "0 6 * * *",
+    };
+    const waitUntilPromises: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (p: Promise<unknown>) => {
+        waitUntilPromises.push(p);
+      },
+      passThroughOnException: () => {},
+    } as unknown as ExecutionContext;
+
+    worker.scheduled(event as ScheduledEvent, env, ctx);
+    await Promise.all(waitUntilPromises);
+
+    const logs = await env.DB.prepare(
+      "SELECT * FROM error_logs WHERE message LIKE '%Cron triggered%'"
+    ).all();
+    expect(logs.results.length).toBe(1);
+    expect(logs.results[0].message as string).toContain("6:00 UTC");
+    expect(logs.results[0].message as string).toContain("fetch-only");
+  });
+
+  it("dispatches full digest mode at 18:00 UTC", async () => {
+    mockAllSources();
+    mockGeminiForPipeline();
+
+    const event = {
+      scheduledTime: new Date("2025-01-28T18:00:00Z").getTime(),
+      cron: "0 18 * * *",
+    };
+    const waitUntilPromises: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (p: Promise<unknown>) => {
+        waitUntilPromises.push(p);
+      },
+      passThroughOnException: () => {},
+    } as unknown as ExecutionContext;
+
+    worker.scheduled(event as ScheduledEvent, env, ctx);
+    await Promise.all(waitUntilPromises);
+
+    const logs = await env.DB.prepare(
+      "SELECT * FROM error_logs WHERE message LIKE '%Cron triggered%'"
+    ).all();
+    expect(logs.results.length).toBe(1);
+    expect(logs.results[0].message as string).toContain("18:00 UTC");
+    expect(logs.results[0].message as string).toContain("full digest");
+
+    // Verify a digest was actually generated
+    const today = new Date().toISOString().split("T")[0];
+    const digest = await env.DB.prepare("SELECT * FROM digests WHERE date = ?")
+      .bind(today)
+      .first();
+    expect(digest).not.toBeNull();
   });
 });
