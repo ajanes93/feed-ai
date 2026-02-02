@@ -154,6 +154,110 @@ describe("DashboardView", () => {
     });
   });
 
+  describe("refresh digest button", () => {
+    it("renders Refresh Digest button when dashboard is loaded", async () => {
+      const { wrapper } = await render();
+      expect(wrapper.text()).toContain("Refresh Digest");
+    });
+
+    it("does not render Refresh Digest button before auth", async () => {
+      sessionStorage.clear();
+      stubFetchJson(DASHBOARD_DATA);
+      const wrapper = mount(DashboardView);
+      await flushPromises();
+
+      expect(wrapper.text()).not.toContain("Refresh Digest");
+    });
+
+    it("shows Rebuilding... text while rebuild is in progress", async () => {
+      const { wrapper } = await render();
+
+      // Mock fetch to hang (simulate slow rebuild)
+      vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
+
+      const rebuildBtn = wrapper
+        .findAll("button")
+        .find((b) => b.text().includes("Refresh Digest"));
+      expect(rebuildBtn).toBeDefined();
+      await rebuildBtn!.trigger("click");
+      await nextTick();
+
+      expect(wrapper.text()).toContain("Rebuilding...");
+    });
+
+    it("shows success message after successful rebuild", async () => {
+      const { wrapper } = await render();
+
+      // First call = rebuild (text response), second call = dashboard refresh (json response)
+      let callCount = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            return Promise.resolve({
+              ok: true,
+              status: 200,
+              text: () => Promise.resolve("Generated digest with 10 items"),
+            });
+          }
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(DASHBOARD_DATA),
+          });
+        })
+      );
+
+      const rebuildBtn = wrapper
+        .findAll("button")
+        .find((b) => b.text().includes("Refresh Digest"));
+      await rebuildBtn!.trigger("click");
+      await flushPromises();
+
+      expect(wrapper.text()).toContain("Generated digest with 10 items");
+    });
+
+    it("shows error message after failed rebuild", async () => {
+      const { wrapper } = await render();
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 500,
+          text: () => Promise.resolve("No items fetched"),
+        })
+      );
+
+      const rebuildBtn = wrapper
+        .findAll("button")
+        .find((b) => b.text().includes("Refresh Digest"));
+      await rebuildBtn!.trigger("click");
+      await flushPromises();
+
+      expect(wrapper.text()).toContain("No items fetched");
+    });
+
+    it("disables button while rebuilding", async () => {
+      const { wrapper } = await render();
+
+      vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
+
+      const rebuildBtn = wrapper
+        .findAll("button")
+        .find((b) => b.text().includes("Refresh Digest"));
+      await rebuildBtn!.trigger("click");
+      await nextTick();
+
+      // Re-find the button after state change
+      const disabledBtn = wrapper
+        .findAll("button")
+        .find((b) => b.text().includes("Rebuilding..."));
+      expect(disabledBtn?.attributes("disabled")).toBeDefined();
+    });
+  });
+
   describe("auth flow", () => {
     it("shows auth prompt when no admin key is set", async () => {
       sessionStorage.clear();

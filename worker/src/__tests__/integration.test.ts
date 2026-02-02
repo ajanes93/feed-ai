@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { app } from "../index";
 import { sources } from "../sources";
-import { seedDigest } from "./helpers";
+import { seedDigest, seedRawItems } from "./helpers";
 
 /**
  * Build a minimal RSS feed with one recent item for a given source.
@@ -431,5 +431,164 @@ describe("POST /api/rebuild (end-to-end)", () => {
       .first();
     expect(digest).not.toBeNull();
     expect(digest!.item_count).toBeGreaterThan(0);
+  });
+});
+
+describe("Raw items accumulation", () => {
+  beforeEach(() => {
+    fetchMock.activate();
+    fetchMock.disableNetConnect();
+  });
+
+  it("generate stores fetched articles in raw_items table", async () => {
+    mockAllSources();
+    mockGeminiForPipeline();
+
+    const res = await app.request(
+      "/api/generate",
+      { method: "POST", headers: AUTH_HEADERS },
+      env
+    );
+
+    expect(res.status).toBe(200);
+
+    // Verify raw_items were stored
+    const today = new Date().toISOString().split("T")[0];
+    const rawItems = await env.DB.prepare(
+      "SELECT * FROM raw_items WHERE date = ?"
+    )
+      .bind(today)
+      .all();
+    expect(rawItems.results.length).toBeGreaterThan(0);
+
+    // Each raw item should have required fields
+    const first = rawItems.results[0] as Record<string, unknown>;
+    expect(first.source_id).toBeTruthy();
+    expect(first.link).toBeTruthy();
+    expect(first.date).toBe(today);
+  });
+
+  it("rebuild includes previously accumulated raw_items", async () => {
+    const today = new Date().toISOString().split("T")[0];
+
+    // Pre-seed raw_items from an earlier fetch (simulating 6am cron)
+    await seedRawItems(env.DB, [
+      {
+        sourceId: "anthropic-news",
+        title: "Early Morning Article",
+        link: "https://example.com/early-morning",
+        content: "Fetched at 6am",
+        date: today,
+      },
+    ]);
+
+    // Seed an existing digest to rebuild
+    await seedDigest(
+      env.DB,
+      { id: `digest-${today}`, date: today, itemCount: 1 },
+      [
+        {
+          id: "old-item",
+          category: "ai",
+          title: "Old Item",
+          summary: "Will be replaced",
+          sourceName: "Test",
+          sourceUrl: "https://example.com/old",
+          position: 0,
+        },
+      ]
+    );
+
+    mockAllSources();
+    mockGeminiForPipeline();
+
+    const res = await app.request(
+      "/api/rebuild",
+      { method: "POST", headers: AUTH_HEADERS },
+      env
+    );
+
+    expect(res.status).toBe(200);
+
+    // Verify the early morning article is still in raw_items (not deleted by rebuild)
+    const rawItems = await env.DB.prepare(
+      "SELECT * FROM raw_items WHERE link = ?"
+    )
+      .bind("https://example.com/early-morning")
+      .first();
+    expect(rawItems).not.toBeNull();
+  });
+
+  it("raw_items deduplicates by source_id + link", async () => {
+    const today = new Date().toISOString().split("T")[0];
+
+    // Seed same article twice
+    await seedRawItems(env.DB, [
+      {
+        sourceId: "anthropic-news",
+        title: "Same Article",
+        link: "https://example.com/same",
+        date: today,
+      },
+    ]);
+
+    // Insert again — should be ignored due to unique constraint
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO raw_items (id, source_id, title, link, date) VALUES (?, ?, ?, ?, ?)"
+    )
+      .bind(
+        crypto.randomUUID(),
+        "anthropic-news",
+        "Same Article Updated",
+        "https://example.com/same",
+        today
+      )
+      .run();
+
+    const count = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM raw_items WHERE link = ?"
+    )
+      .bind("https://example.com/same")
+      .first();
+    expect((count as Record<string, unknown>).count).toBe(1);
+  });
+
+  it("includes yesterday's raw_items in digest generation", async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const yesterday = new Date(Date.now() - 86400000)
+      .toISOString()
+      .split("T")[0];
+
+    // Seed a raw item from yesterday's late fetch
+    await seedRawItems(env.DB, [
+      {
+        sourceId: "anthropic-news",
+        title: "Late Yesterday Article",
+        link: "https://example.com/yesterday-late",
+        content: "Fetched yesterday at 6pm",
+        date: yesterday,
+      },
+    ]);
+
+    mockAllSources();
+    mockGeminiForPipeline();
+
+    const res = await app.request(
+      "/api/generate",
+      { method: "POST", headers: AUTH_HEADERS },
+      env
+    );
+
+    expect(res.status).toBe(200);
+
+    // Verify merge log shows stored items were included
+    const logs = await env.DB.prepare(
+      "SELECT * FROM error_logs WHERE message LIKE '%Merged items%' AND digest_id = ?"
+    )
+      .bind(`digest-${today}`)
+      .all();
+    expect(logs.results.length).toBe(1);
+    // The stored count should include the yesterday item
+    expect(logs.results[0].message as string).toContain("stored");
   });
 });
