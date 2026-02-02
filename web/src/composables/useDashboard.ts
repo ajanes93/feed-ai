@@ -70,6 +70,13 @@ export function useDashboard() {
     needsAuth.value = true;
   }
 
+  function handleUnauthorized(res: Response) {
+    if (res.status === 401) {
+      clearAdminKey();
+      throw new Error("Invalid admin key");
+    }
+  }
+
   const rebuilding = ref(false);
   const rebuildResult = ref<string | null>(null);
   const rebuildSuccess = ref(false);
@@ -90,10 +97,7 @@ export function useDashboard() {
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
 
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
+      handleUnauthorized(res);
 
       const text = await res.text();
       if (!res.ok) {
@@ -102,7 +106,6 @@ export function useDashboard() {
 
       rebuildResult.value = text;
       rebuildSuccess.value = true;
-      // Refresh dashboard data after rebuild
       await fetchDashboard();
     } catch (err) {
       rebuildResult.value =
@@ -127,10 +130,7 @@ export function useDashboard() {
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
 
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
+      handleUnauthorized(res);
 
       if (!res.ok) {
         throw new Error("Failed to load dashboard");
