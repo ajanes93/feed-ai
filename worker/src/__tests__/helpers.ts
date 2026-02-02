@@ -140,14 +140,15 @@ export async function seedRawItems(
   );
 }
 
+const LOG_INSERT =
+  "INSERT INTO error_logs (id, level, category, message, created_at) VALUES (?, ?, ?, ?, ?)";
+
 export async function seedLog(
   db: D1Database,
   log: { id: string; level: string; category: string; message: string }
 ) {
   await db
-    .prepare(
-      "INSERT INTO error_logs (id, level, category, message, created_at) VALUES (?, ?, ?, ?, ?)"
-    )
+    .prepare(LOG_INSERT)
     .bind(log.id, log.level, log.category, log.message, Date.now())
     .run();
 }
@@ -159,9 +160,7 @@ export async function seedLogs(
   await db.batch(
     logs.map((log) =>
       db
-        .prepare(
-          "INSERT INTO error_logs (id, level, category, message, created_at) VALUES (?, ?, ?, ?, ?)"
-        )
+        .prepare(LOG_INSERT)
         .bind(log.id, log.level, log.category, log.message, Date.now())
     )
   );
