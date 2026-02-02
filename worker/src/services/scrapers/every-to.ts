@@ -4,18 +4,8 @@ import { ScrapeHandler } from "./types";
 
 const BASE_URL = "https://every.to";
 
-const EXCLUDED_PATHS = new Set([
-  "/newsletter",
-  "/podcast",
-  "/store",
-  "/courses",
-  "/consulting",
-  "/columnists",
-  "/products",
-]);
-
-function isArticlePath(path: string): boolean {
-  return !EXCLUDED_PATHS.has(path) && path.split("/").length > 2;
+function isArticlePath(href: string): boolean {
+  return href.startsWith("/") && href.split("/").length > 2;
 }
 
 export const everyToScraper: ScrapeHandler = {
@@ -56,7 +46,6 @@ export const everyToScraper: ScrapeHandler = {
               sourceId,
               title,
               link: `${BASE_URL}${href}`,
-              publishedAt: undefined,
             });
           });
         },
