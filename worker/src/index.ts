@@ -297,8 +297,15 @@ app.use("/api/generate", authMiddleware);
 app.use("/api/rebuild", authMiddleware);
 
 app.post("/api/fetch", async (c) => {
-  const { items, health } = await runFetchAndStore(c.env);
+  let result;
+  try {
+    result = await runFetchAndStore(c.env);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Failed to fetch sources: ${message}` }, 500);
+  }
 
+  const { items, health } = result;
   const perSource = health.map((h) => ({
     sourceId: h.sourceId,
     items: h.itemCount,
