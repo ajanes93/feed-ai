@@ -418,10 +418,7 @@ async function fetchAndStoreArticles(env: Env): Promise<Response> {
 
 // --- Load accumulated raw items from DB ---
 
-async function loadRecentRawItems(
-  db: D1Database,
-  date: string
-): Promise<RawItem[]> {
+async function loadRecentRawItems(db: D1Database): Promise<RawItem[]> {
   // Include articles from the last 24 hours so nothing falls through the cracks
   const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
   const result = await db
@@ -434,8 +431,8 @@ async function loadRecentRawItems(
     sourceId: row.source_id as string,
     title: (row.title as string) || "",
     link: (row.link as string) || "",
-    content: (row.content as string) || undefined,
-    publishedAt: (row.published_at as number) || undefined,
+    content: (row.content as string) ?? undefined,
+    publishedAt: (row.published_at as number) ?? undefined,
   }));
 }
 
@@ -525,21 +522,23 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
 
   await recordSourceHealth(env, health);
 
-  // Store fresh items for future rebuilds
-  await storeRawItems(env.DB, freshItems, date);
-
-  // Load all accumulated items for today (includes earlier fetches + fresh)
-  const storedItems = await loadRecentRawItems(env.DB, date);
-
-  // Merge: use stored items as base, add any fresh items not already stored (by link)
-  const storedLinks = new Set(storedItems.map((i) => i.link));
-  const extraFresh = freshItems.filter((i) => !storedLinks.has(i.link));
-  const allRawItems = [...storedItems, ...extraFresh];
+  // Store fresh items, then load all accumulated items (today + yesterday)
+  try {
+    await storeRawItems(env.DB, freshItems, date);
+  } catch (err) {
+    await logEvent(env.DB, {
+      level: "warn",
+      category: "fetch",
+      message: `Failed to store raw items: ${err instanceof Error ? err.message : String(err)}`,
+      digestId,
+    });
+  }
+  const allRawItems = await loadRecentRawItems(env.DB);
 
   await logEvent(env.DB, {
     level: "info",
     category: "digest",
-    message: `Merged items: ${storedItems.length} stored + ${extraFresh.length} new fresh = ${allRawItems.length} total`,
+    message: `Loaded ${allRawItems.length} accumulated items (last 24h)`,
     digestId,
   });
 

@@ -13,6 +13,7 @@ const {
   needsAuth,
   rebuilding,
   rebuildResult,
+  rebuildSuccess,
   setAdminKey,
   fetchDashboard,
   rebuildDigest,
@@ -60,7 +61,7 @@ onMounted(fetchDashboard);
         v-if="rebuildResult"
         class="mb-4 rounded-lg border px-4 py-2 text-sm"
         :class="
-          rebuildResult.includes('Generated')
+          rebuildSuccess
             ? 'border-green-800 bg-green-950 text-green-300'
             : 'border-amber-800 bg-amber-950 text-amber-300'
         "

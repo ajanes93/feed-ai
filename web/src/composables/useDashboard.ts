@@ -72,6 +72,7 @@ export function useDashboard() {
 
   const rebuilding = ref(false);
   const rebuildResult = ref<string | null>(null);
+  const rebuildSuccess = ref(false);
 
   async function rebuildDigest() {
     if (!adminKey.value) {
@@ -81,6 +82,7 @@ export function useDashboard() {
 
     rebuilding.value = true;
     rebuildResult.value = null;
+    rebuildSuccess.value = false;
 
     try {
       const res = await fetch(`${API_BASE}/api/rebuild`, {
@@ -99,11 +101,13 @@ export function useDashboard() {
       }
 
       rebuildResult.value = text;
+      rebuildSuccess.value = true;
       // Refresh dashboard data after rebuild
       await fetchDashboard();
     } catch (err) {
       rebuildResult.value =
         err instanceof Error ? err.message : "Rebuild failed";
+      rebuildSuccess.value = false;
     } finally {
       rebuilding.value = false;
     }
@@ -148,6 +152,7 @@ export function useDashboard() {
     adminKey,
     rebuilding,
     rebuildResult,
+    rebuildSuccess,
     setAdminKey,
     fetchDashboard,
     rebuildDigest,

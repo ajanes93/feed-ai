@@ -581,14 +581,13 @@ describe("Raw items accumulation", () => {
 
     expect(res.status).toBe(200);
 
-    // Verify merge log shows stored items were included
+    // Verify log shows accumulated items were loaded (includes yesterday's item)
     const logs = await env.DB.prepare(
-      "SELECT * FROM error_logs WHERE message LIKE '%Merged items%' AND digest_id = ?"
+      "SELECT * FROM error_logs WHERE message LIKE '%accumulated items%' AND digest_id = ?"
     )
       .bind(`digest-${today}`)
       .all();
     expect(logs.results.length).toBe(1);
-    // The stored count should include the yesterday item
-    expect(logs.results[0].message as string).toContain("stored");
+    expect(logs.results[0].message as string).toContain("accumulated");
   });
 });
