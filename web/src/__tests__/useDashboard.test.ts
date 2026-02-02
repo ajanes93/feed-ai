@@ -148,4 +148,116 @@ describe("useDashboard", () => {
       expect(needsAuth.value).toBe(false);
     });
   });
+
+  describe("rebuildDigest", () => {
+    it("calls POST /api/rebuild with auth header", async () => {
+      const fetchSpy = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve("Generated digest with 10 items"),
+      });
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const { rebuildDigest } = useDashboard();
+      await rebuildDigest();
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining("/api/rebuild"),
+        expect.objectContaining({
+          method: "POST",
+          headers: { Authorization: "Bearer test-key" },
+        })
+      );
+    });
+
+    it("sets rebuilding state during request", async () => {
+      let resolvePromise: (v: unknown) => void;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockReturnValue(
+          new Promise((r) => {
+            resolvePromise = r;
+          })
+        )
+      );
+
+      const { rebuilding, rebuildDigest } = useDashboard();
+      expect(rebuilding.value).toBe(false);
+
+      const promise = rebuildDigest();
+      expect(rebuilding.value).toBe(true);
+
+      resolvePromise!({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve("Generated digest with 5 items"),
+      });
+      await promise;
+
+      expect(rebuilding.value).toBe(false);
+    });
+
+    it("sets rebuildResult on success", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve("Generated digest with 12 items"),
+        })
+      );
+
+      const { rebuildResult, rebuildSuccess, rebuildDigest } = useDashboard();
+      await rebuildDigest();
+
+      expect(rebuildResult.value).toBe("Generated digest with 12 items");
+      expect(rebuildSuccess.value).toBe(true);
+    });
+
+    it("sets rebuildResult to error message on failure", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 500,
+          text: () => Promise.resolve("No items fetched"),
+        })
+      );
+
+      const { rebuildResult, rebuildSuccess, rebuildDigest } = useDashboard();
+      await rebuildDigest();
+
+      expect(rebuildResult.value).toBe("No items fetched");
+      expect(rebuildSuccess.value).toBe(false);
+    });
+
+    it("clears auth on 401 during rebuild", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 401,
+          text: () => Promise.resolve("Unauthorized"),
+        })
+      );
+
+      const { needsAuth, rebuildDigest } = useDashboard();
+      await rebuildDigest();
+
+      expect(needsAuth.value).toBe(true);
+      expect(sessionStorage.getItem("admin_key")).toBeNull();
+    });
+
+    it("requires auth when no admin key is set", async () => {
+      sessionStorage.clear();
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const { needsAuth, rebuildDigest } = useDashboard();
+      await rebuildDigest();
+
+      expect(needsAuth.value).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -70,6 +70,52 @@ export function useDashboard() {
     needsAuth.value = true;
   }
 
+  function handleUnauthorized(res: Response) {
+    if (res.status === 401) {
+      clearAdminKey();
+      throw new Error("Invalid admin key");
+    }
+  }
+
+  const rebuilding = ref(false);
+  const rebuildResult = ref<string | null>(null);
+  const rebuildSuccess = ref(false);
+
+  async function rebuildDigest() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    rebuilding.value = true;
+    rebuildResult.value = null;
+    rebuildSuccess.value = false;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/rebuild`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      handleUnauthorized(res);
+
+      const text = await res.text();
+      if (!res.ok) {
+        throw new Error(text || "Rebuild failed");
+      }
+
+      rebuildResult.value = text;
+      rebuildSuccess.value = true;
+      await fetchDashboard();
+    } catch (err) {
+      rebuildResult.value =
+        err instanceof Error ? err.message : "Rebuild failed";
+      rebuildSuccess.value = false;
+    } finally {
+      rebuilding.value = false;
+    }
+  }
+
   async function fetchDashboard() {
     if (!adminKey.value) {
       needsAuth.value = true;
@@ -84,10 +130,7 @@ export function useDashboard() {
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
 
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
+      handleUnauthorized(res);
 
       if (!res.ok) {
         throw new Error("Failed to load dashboard");
@@ -107,7 +150,11 @@ export function useDashboard() {
     error,
     needsAuth,
     adminKey,
+    rebuilding,
+    rebuildResult,
+    rebuildSuccess,
     setAdminKey,
     fetchDashboard,
+    rebuildDigest,
   };
 }

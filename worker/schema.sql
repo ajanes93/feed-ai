@@ -33,7 +33,7 @@ CREATE TABLE items (
   FOREIGN KEY (digest_id) REFERENCES digests(id)
 );
 
--- Raw fetched items (for debugging/reprocessing)
+-- Raw fetched items (accumulated throughout the day)
 CREATE TABLE raw_items (
   id TEXT PRIMARY KEY,
   source_id TEXT NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE raw_items (
   content TEXT,
   published_at INTEGER,
   fetched_at INTEGER DEFAULT (unixepoch()),
-  FOREIGN KEY (source_id) REFERENCES sources(id)
+  date TEXT
 );
 
 -- Source health tracking
@@ -91,3 +91,5 @@ CREATE INDEX idx_digests_date ON digests(date);
 CREATE INDEX idx_items_digest ON items(digest_id);
 CREATE INDEX idx_items_position ON items(position);
 CREATE INDEX idx_raw_items_fetched ON raw_items(fetched_at);
+CREATE INDEX idx_raw_items_date ON raw_items(date);
+CREATE UNIQUE INDEX idx_raw_items_source_link ON raw_items(source_id, link);

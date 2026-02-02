@@ -6,8 +6,18 @@ import { timeAgo, formatTokens } from "../utils/formatting";
 import DataTable from "../components/DataTable.vue";
 import StatCard from "../components/StatCard.vue";
 
-const { data, loading, error, needsAuth, setAdminKey, fetchDashboard } =
-  useDashboard();
+const {
+  data,
+  loading,
+  error,
+  needsAuth,
+  rebuilding,
+  rebuildResult,
+  rebuildSuccess,
+  setAdminKey,
+  fetchDashboard,
+  rebuildDigest,
+} = useDashboard();
 
 const keyInput = ref("");
 
@@ -28,12 +38,35 @@ onMounted(fetchDashboard);
       <!-- Header -->
       <div class="mb-6 flex items-center justify-between">
         <h1 class="text-xl font-semibold text-white">Dashboard</h1>
-        <router-link
-          to="/"
-          class="text-sm text-gray-400 hover:text-white"
-        >
-          Back to Feed
-        </router-link>
+        <div class="flex items-center gap-3">
+          <button
+            v-if="data && !needsAuth"
+            :disabled="rebuilding"
+            class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            @click="rebuildDigest"
+          >
+            {{ rebuilding ? "Rebuilding..." : "Refresh Digest" }}
+          </button>
+          <router-link
+            to="/"
+            class="text-sm text-gray-400 hover:text-white"
+          >
+            Back to Feed
+          </router-link>
+        </div>
+      </div>
+
+      <!-- Rebuild result -->
+      <div
+        v-if="rebuildResult"
+        class="mb-4 rounded-lg border px-4 py-2 text-sm"
+        :class="
+          rebuildSuccess
+            ? 'border-green-800 bg-green-950 text-green-300'
+            : 'border-amber-800 bg-amber-950 text-amber-300'
+        "
+      >
+        {{ rebuildResult }}
       </div>
 
       <!-- Auth prompt -->

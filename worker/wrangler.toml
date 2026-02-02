@@ -4,7 +4,7 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 [triggers]
-crons = ["0 18 * * *"]  # 6pm UTC (6pm GMT / 7pm BST)
+crons = ["0 6 * * *", "0 12 * * *", "0 18 * * *"]  # 6am/12pm fetch-only, 6pm full digest
 
 [[d1_databases]]
 binding = "DB"

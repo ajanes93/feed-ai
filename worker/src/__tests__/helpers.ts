@@ -109,6 +109,37 @@ export async function seedDigest(
   ]);
 }
 
+export async function seedRawItems(
+  db: D1Database,
+  items: Array<{
+    sourceId: string;
+    title: string;
+    link: string;
+    content?: string;
+    publishedAt?: number;
+    date: string;
+  }>
+) {
+  if (items.length === 0) return;
+  await db.batch(
+    items.map((item) =>
+      db
+        .prepare(
+          "INSERT OR IGNORE INTO raw_items (id, source_id, title, link, content, published_at, date) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(
+          crypto.randomUUID(),
+          item.sourceId,
+          item.title,
+          item.link,
+          item.content ?? null,
+          item.publishedAt ?? null,
+          item.date
+        )
+    )
+  );
+}
+
 // -- Feed XML fixtures --
 
 export const RSS_FEED = `<?xml version="1.0"?>
