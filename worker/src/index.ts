@@ -357,8 +357,8 @@ async function storeRawItems(
   db: D1Database,
   items: RawItem[],
   date: string
-): Promise<number> {
-  if (items.length === 0) return 0;
+): Promise<void> {
+  if (items.length === 0) return;
 
   // INSERT OR IGNORE — duplicates (same source_id + link) are silently skipped
   const statements = items.map((item) =>
@@ -381,8 +381,6 @@ async function storeRawItems(
   for (let i = 0; i < statements.length; i += 100) {
     await db.batch(statements.slice(i, i + 100));
   }
-
-  return items.length;
 }
 
 // --- Fetch-only: accumulate articles without summarizing ---
@@ -401,7 +399,9 @@ export async function fetchAndStoreArticles(env: Env): Promise<Response> {
   const { items: allRawItems, health } = await fetchAllSources(sources);
   await recordSourceHealth(env, health);
 
+  const successSources = health.filter((h) => h.success);
   const failedSources = health.filter((h) => !h.success);
+
   if (failedSources.length > 0) {
     await logEvent(env.DB, {
       level: "warn",
@@ -427,17 +427,15 @@ export async function fetchAndStoreArticles(env: Env): Promise<Response> {
     return new Response("Failed to store items", { status: 500 });
   }
 
-  const durationMs = Date.now() - start;
-
   await logEvent(env.DB, {
     level: "info",
     category: "fetch",
     message: `Fetch-and-store complete: ${allRawItems.length} items stored for ${today}`,
     details: {
       fetched: allRawItems.length,
-      successSources: health.filter((h) => h.success).length,
+      successSources: successSources.length,
       failedSources: failedSources.length,
-      durationMs,
+      durationMs: Date.now() - start,
     },
   });
 

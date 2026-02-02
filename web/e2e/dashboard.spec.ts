@@ -90,9 +90,7 @@ test.describe("Dashboard", () => {
   test("shows Rebuilding state when refresh digest is clicked", async ({
     dashboardPage,
   }) => {
-    // Mock rebuild to hang
     await dashboardPage.route("**/api/rebuild", (route) =>
-      // Never fulfill — simulates slow request
       route.fulfill({
         status: 200,
         contentType: "text/plain",
@@ -104,8 +102,6 @@ test.describe("Dashboard", () => {
       .getByRole("button", { name: "Refresh Digest" })
       .click();
 
-    // Brief moment of "Rebuilding..." before the mock resolves
-    // Since mock resolves immediately, check for result message
     await expect(
       dashboardPage.getByText("Generated digest with 15 items"),
     ).toBeVisible();
