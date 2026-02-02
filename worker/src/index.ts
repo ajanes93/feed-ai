@@ -292,8 +292,28 @@ const authMiddleware = async (c: Context<{ Bindings: Env }>, next: Next) => {
   await next();
 };
 app.use("/api/admin/*", authMiddleware);
+app.use("/api/fetch", authMiddleware);
 app.use("/api/generate", authMiddleware);
 app.use("/api/rebuild", authMiddleware);
+
+app.post("/api/fetch", async (c) => {
+  const { items, health } = await fetchAllSources(sources);
+  await recordSourceHealth(c.env, health);
+
+  const perSource = health.map((h) => ({
+    sourceId: h.sourceId,
+    items: h.itemCount,
+    error: h.error ?? null,
+  }));
+
+  return c.json({
+    totalItems: items.length,
+    sourcesOk: health.filter((h) => h.success).length,
+    sourcesTotal: health.length,
+    zeroItems: perSource.filter((s) => s.items === 0 && !s.error),
+    errors: perSource.filter((s) => s.error),
+  });
+});
 
 app.post("/api/generate", async (c) => {
   return generateDailyDigest(c.env);
