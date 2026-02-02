@@ -2,10 +2,6 @@ import { Source } from "../sources";
 import { RawItem } from "../types";
 import { ITEM_LIMIT, USER_AGENT } from "./constants";
 
-// Matches <a href="/path">...<h3>Title</h3>...</a> patterns in HTML
-const ARTICLE_LINK_PATTERN =
-  /<a[^>]+href="(\/[^"]+)"[^>]*>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>/g;
-
 // Paths to exclude from scrape results (navigation, non-article links)
 const EXCLUDED_PATHS = new Set([
   "/newsletter",
@@ -20,20 +16,22 @@ const EXCLUDED_PATHS = new Set([
 interface ScrapeConfig {
   /** Base URL for resolving relative links */
   baseUrl: string;
+  /** CSS selector for article link elements */
+  linkSelector: string;
+  /** CSS selector for title elements within each link */
+  titleSelector: string;
 }
 
 const SCRAPE_CONFIGS: Record<string, ScrapeConfig> = {
   "every-to": {
     baseUrl: "https://every.to",
+    linkSelector: "a[href]",
+    titleSelector: "h3",
   },
 };
 
 function isArticlePath(path: string): boolean {
   return !EXCLUDED_PATHS.has(path) && path.split("/").length > 2;
-}
-
-function stripHtmlTags(html: string): string {
-  return html.replace(/<[^>]+>/g, "").trim();
 }
 
 export async function fetchScrapeSource(source: Source): Promise<RawItem[]> {
@@ -52,30 +50,55 @@ export async function fetchScrapeSource(source: Source): Promise<RawItem[]> {
     return [];
   }
 
-  const html = await response.text();
-
   const seen = new Set<string>();
   const items: RawItem[] = [];
+  let currentHref: string | null = null;
+  let capturingTitle = false;
+  let titleText = "";
 
-  let match;
-  while ((match = ARTICLE_LINK_PATTERN.exec(html)) !== null) {
-    const [, path, rawTitle] = match;
-    if (!isArticlePath(path) || seen.has(path)) continue;
-    seen.add(path);
+  const rewriter = new HTMLRewriter()
+    .on(config.linkSelector, {
+      element(el) {
+        currentHref = el.getAttribute("href");
+      },
+    })
+    .on(config.titleSelector, {
+      element(el) {
+        if (currentHref) {
+          capturingTitle = true;
+          titleText = "";
+        }
 
-    const title = stripHtmlTags(rawTitle);
-    if (!title) continue;
+        el.onEndTag(() => {
+          if (!capturingTitle || !currentHref) return;
+          capturingTitle = false;
 
-    items.push({
-      id: crypto.randomUUID(),
-      sourceId: source.id,
-      title,
-      link: `${config.baseUrl}${path}`,
-      publishedAt: undefined,
+          const title = titleText.trim();
+          const href = currentHref;
+          currentHref = null;
+
+          if (!title || !isArticlePath(href) || seen.has(href)) return;
+          if (items.length >= ITEM_LIMIT) return;
+          seen.add(href);
+
+          items.push({
+            id: crypto.randomUUID(),
+            sourceId: source.id,
+            title,
+            link: `${config.baseUrl}${href}`,
+            publishedAt: undefined,
+          });
+        });
+      },
+      text(chunk) {
+        if (capturingTitle) {
+          titleText += chunk.text;
+        }
+      },
     });
 
-    if (items.length >= ITEM_LIMIT) break;
-  }
+  // Consume the response to trigger HTMLRewriter handlers
+  await rewriter.transform(response).text();
 
   return items;
 }
