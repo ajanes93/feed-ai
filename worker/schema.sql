@@ -42,8 +42,7 @@ CREATE TABLE raw_items (
   content TEXT,
   published_at INTEGER,
   fetched_at INTEGER DEFAULT (unixepoch()),
-  date TEXT,
-  FOREIGN KEY (source_id) REFERENCES sources(id)
+  date TEXT
 );
 
 -- Source health tracking

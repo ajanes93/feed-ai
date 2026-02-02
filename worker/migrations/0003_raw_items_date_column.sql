@@ -1,8 +1,23 @@
--- Add date column to raw_items for daily grouping
-ALTER TABLE raw_items ADD COLUMN date TEXT;
+-- Recreate raw_items without FK constraint (sources table is not populated;
+-- source config lives in code) and add date column + unique index.
 
--- Index for querying today's raw items
-CREATE INDEX IF NOT EXISTS idx_raw_items_date ON raw_items(date);
+DROP INDEX IF EXISTS idx_raw_items_fetched;
 
--- Unique constraint to avoid storing duplicate articles
-CREATE UNIQUE INDEX IF NOT EXISTS idx_raw_items_source_link ON raw_items(source_id, link);
+CREATE TABLE raw_items_new (
+  id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL,
+  title TEXT,
+  link TEXT,
+  content TEXT,
+  published_at INTEGER,
+  fetched_at INTEGER DEFAULT (unixepoch()),
+  date TEXT
+);
+
+INSERT INTO raw_items_new SELECT id, source_id, title, link, content, published_at, fetched_at, NULL FROM raw_items;
+DROP TABLE raw_items;
+ALTER TABLE raw_items_new RENAME TO raw_items;
+
+CREATE INDEX idx_raw_items_fetched ON raw_items(fetched_at);
+CREATE INDEX idx_raw_items_date ON raw_items(date);
+CREATE UNIQUE INDEX idx_raw_items_source_link ON raw_items(source_id, link);

@@ -418,13 +418,15 @@ async function fetchAndStoreArticles(env: Env): Promise<Response> {
 
 // --- Load accumulated raw items from DB ---
 
-async function loadRawItemsForDate(
+async function loadRecentRawItems(
   db: D1Database,
   date: string
 ): Promise<RawItem[]> {
+  // Include articles from the last 24 hours so nothing falls through the cracks
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
   const result = await db
-    .prepare("SELECT * FROM raw_items WHERE date = ?")
-    .bind(date)
+    .prepare("SELECT * FROM raw_items WHERE date >= ?")
+    .bind(yesterday)
     .all();
 
   return result.results.map((row) => ({
@@ -527,7 +529,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   await storeRawItems(env.DB, freshItems, date);
 
   // Load all accumulated items for today (includes earlier fetches + fresh)
-  const storedItems = await loadRawItemsForDate(env.DB, date);
+  const storedItems = await loadRecentRawItems(env.DB, date);
 
   // Merge: use stored items as base, add any fresh items not already stored (by link)
   const storedLinks = new Set(storedItems.map((i) => i.link));
