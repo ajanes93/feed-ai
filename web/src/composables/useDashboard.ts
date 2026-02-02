@@ -70,6 +70,45 @@ export function useDashboard() {
     needsAuth.value = true;
   }
 
+  const rebuilding = ref(false);
+  const rebuildResult = ref<string | null>(null);
+
+  async function rebuildDigest() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    rebuilding.value = true;
+    rebuildResult.value = null;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/rebuild`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
+
+      const text = await res.text();
+      if (!res.ok) {
+        throw new Error(text || "Rebuild failed");
+      }
+
+      rebuildResult.value = text;
+      // Refresh dashboard data after rebuild
+      await fetchDashboard();
+    } catch (err) {
+      rebuildResult.value =
+        err instanceof Error ? err.message : "Rebuild failed";
+    } finally {
+      rebuilding.value = false;
+    }
+  }
+
   async function fetchDashboard() {
     if (!adminKey.value) {
       needsAuth.value = true;
@@ -107,7 +146,10 @@ export function useDashboard() {
     error,
     needsAuth,
     adminKey,
+    rebuilding,
+    rebuildResult,
     setAdminKey,
     fetchDashboard,
+    rebuildDigest,
   };
 }

@@ -351,6 +351,92 @@ async function rebuildDigest(env: Env, date: string): Promise<Response> {
 const sourceCategoryMap = new Map(sources.map((s) => [s.id, s.category]));
 const activeSourceIds = new Set(sources.map((s) => s.id));
 
+// --- Store raw items in DB for accumulation throughout the day ---
+
+async function storeRawItems(
+  db: D1Database,
+  items: RawItem[],
+  date: string
+): Promise<number> {
+  if (items.length === 0) return 0;
+
+  // INSERT OR IGNORE — duplicates (same source_id + link) are silently skipped
+  const statements = items.map((item) =>
+    db
+      .prepare(
+        "INSERT OR IGNORE INTO raw_items (id, source_id, title, link, content, published_at, date) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        crypto.randomUUID(),
+        item.sourceId,
+        item.title,
+        item.link,
+        item.content?.slice(0, 500) ?? null,
+        item.publishedAt ?? null,
+        date
+      )
+  );
+
+  // D1 batch limit is 100 statements — chunk if needed
+  for (let i = 0; i < statements.length; i += 100) {
+    await db.batch(statements.slice(i, i + 100));
+  }
+
+  return items.length;
+}
+
+// --- Fetch-only: accumulate articles without summarizing ---
+
+async function fetchAndStoreArticles(env: Env): Promise<Response> {
+  const today = todayDate();
+
+  await logEvent(env.DB, {
+    level: "info",
+    category: "fetch",
+    message: "Starting scheduled fetch-and-store",
+    details: { date: today, sourceCount: sources.length },
+  });
+
+  const { items: allRawItems, health } = await fetchAllSources(sources);
+  await recordSourceHealth(env, health);
+
+  const stored = await storeRawItems(env.DB, allRawItems, today);
+
+  await logEvent(env.DB, {
+    level: "info",
+    category: "fetch",
+    message: `Fetch-and-store complete: ${stored} items fetched, stored for ${today}`,
+    details: {
+      fetched: allRawItems.length,
+      successSources: health.filter((h) => h.success).length,
+      failedSources: health.filter((h) => !h.success).length,
+    },
+  });
+
+  return new Response(`Stored ${stored} items for ${today}`, { status: 200 });
+}
+
+// --- Load accumulated raw items from DB ---
+
+async function loadRawItemsForDate(
+  db: D1Database,
+  date: string
+): Promise<RawItem[]> {
+  const result = await db
+    .prepare("SELECT * FROM raw_items WHERE date = ?")
+    .bind(date)
+    .all();
+
+  return result.results.map((row) => ({
+    id: row.id as string,
+    sourceId: row.source_id as string,
+    title: (row.title as string) || "",
+    link: (row.link as string) || "",
+    content: (row.content as string) || undefined,
+    publishedAt: (row.published_at as number) || undefined,
+  }));
+}
+
 export async function deduplicateItems(
   items: RawItem[],
   db: D1Database
@@ -409,9 +495,9 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     digestId,
   });
 
-  // --- Fetch ---
+  // --- Fetch fresh + merge with accumulated raw_items ---
   const fetchStart = Date.now();
-  const { items: allRawItems, health } = await fetchAllSources(sources);
+  const { items: freshItems, health } = await fetchAllSources(sources);
   const fetchMs = Date.now() - fetchStart;
 
   const successSources = health.filter((h) => h.success);
@@ -420,7 +506,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   await logEvent(env.DB, {
     level: "info",
     category: "fetch",
-    message: `Fetched ${allRawItems.length} items from ${successSources.length}/${health.length} sources`,
+    message: `Fetched ${freshItems.length} fresh items from ${successSources.length}/${health.length} sources`,
     details: {
       fetchMs,
       successSources: successSources.map((s) => ({
@@ -437,11 +523,29 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
 
   await recordSourceHealth(env, health);
 
+  // Store fresh items for future rebuilds
+  await storeRawItems(env.DB, freshItems, date);
+
+  // Load all accumulated items for today (includes earlier fetches + fresh)
+  const storedItems = await loadRawItemsForDate(env.DB, date);
+
+  // Merge: use stored items as base, add any fresh items not already stored (by link)
+  const storedLinks = new Set(storedItems.map((i) => i.link));
+  const extraFresh = freshItems.filter((i) => !storedLinks.has(i.link));
+  const allRawItems = [...storedItems, ...extraFresh];
+
+  await logEvent(env.DB, {
+    level: "info",
+    category: "digest",
+    message: `Merged items: ${storedItems.length} stored + ${extraFresh.length} new fresh = ${allRawItems.length} total`,
+    digestId,
+  });
+
   if (allRawItems.length === 0) {
     await logEvent(env.DB, {
       level: "error",
       category: "fetch",
-      message: "No items fetched from any source — aborting digest",
+      message: "No items available from any source — aborting digest",
       details: {
         failedSources: failedSources.map((s) => ({
           id: s.sourceId,
@@ -453,7 +557,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     return new Response("No items fetched", { status: 500 });
   }
 
-  // --- Dedup ---
+  // --- Dedup against previous digests ---
   const dedupedItems = await deduplicateItems(allRawItems, env.DB);
 
   await logEvent(env.DB, {
@@ -470,44 +574,32 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     await logEvent(env.DB, {
       level: "warn",
       category: "digest",
-      message: "All fetched items were duplicates of recent digests",
-      details: { fetchedCount: allRawItems.length },
+      message: "All items were duplicates of recent digests",
+      details: { totalCount: allRawItems.length },
       digestId,
     });
-    return new Response("All fetched items were duplicates of recent digests", {
+    return new Response("All items were duplicates of recent digests", {
       status: 200,
     });
   }
 
-  // --- Cap per source ---
-  const rawItems = capPerSource(dedupedItems, 3);
+  // --- Split jobs/news (no per-source cap — let AI see everything) ---
+  const { jobItems, newsItems } = splitJobsAndNews(dedupedItems);
 
   await logEvent(env.DB, {
     level: "info",
     category: "digest",
-    message: `Cap per-source: ${dedupedItems.length} → ${rawItems.length} items`,
+    message: `Split ${dedupedItems.length} items: ${newsItems.length} news, ${jobItems.length} jobs (no per-source cap)`,
     details: {
-      sourceBreakdown: rawItems.reduce(
+      newsSources: [...new Set(newsItems.map((i) => i.sourceId))],
+      jobSources: [...new Set(jobItems.map((i) => i.sourceId))],
+      sourceBreakdown: dedupedItems.reduce(
         (acc, item) => {
           acc[item.sourceId] = (acc[item.sourceId] || 0) + 1;
           return acc;
         },
         {} as Record<string, number>
       ),
-    },
-    digestId,
-  });
-
-  // --- Split jobs/news ---
-  const { jobItems, newsItems } = splitJobsAndNews(rawItems);
-
-  await logEvent(env.DB, {
-    level: "info",
-    category: "digest",
-    message: `Split: ${newsItems.length} news items, ${jobItems.length} job items`,
-    details: {
-      newsSources: [...new Set(newsItems.map((i) => i.sourceId))],
-      jobSources: [...new Set(jobItems.map((i) => i.sourceId))],
     },
     digestId,
   });
@@ -731,6 +823,13 @@ export default {
   fetch: app.fetch,
 
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(generateDailyDigest(env));
+    // 6am and 12pm UTC: fetch-only (accumulate articles)
+    // 6pm UTC: full digest generation (fetch + summarize)
+    const hour = new Date(event.scheduledTime).getUTCHours();
+    if (hour === 18) {
+      ctx.waitUntil(generateDailyDigest(env));
+    } else {
+      ctx.waitUntil(fetchAndStoreArticles(env));
+    }
   },
 };

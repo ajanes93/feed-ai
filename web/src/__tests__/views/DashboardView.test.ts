@@ -145,7 +145,9 @@ describe("DashboardView", () => {
           totalDigests: 99,
         } as Partial<DashboardData>)
       );
-      await wrapper.find("button").trigger("click");
+      // Click the dashboard refresh button (last button), not the rebuild digest button
+      const buttons = wrapper.findAll("button");
+      await buttons[buttons.length - 1].trigger("click");
       await flushPromises();
 
       expect(wrapper.text()).toContain("99");
