@@ -300,6 +300,9 @@ app.post("/api/fetch", async (c) => {
   const { items, health } = await fetchAllSources(sources);
   await recordSourceHealth(c.env, health);
 
+  const today = new Date().toISOString().split("T")[0];
+  await storeRawItems(c.env.DB, items, today);
+
   const perSource = health.map((h) => ({
     sourceId: h.sourceId,
     items: h.itemCount,
