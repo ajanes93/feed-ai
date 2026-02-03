@@ -297,6 +297,8 @@ onMounted(async () => {
           :long-swipes-ratio="0.25"
           :no-swiping="true"
           no-swiping-selector=".no-swiper"
+          :edge-swipe-detection="true"
+          :edge-swipe-threshold="20"
           class="h-full"
           @slide-change="onOuterSlideChange"
         >
@@ -351,6 +353,7 @@ onMounted(async () => {
                   :long-swipes-ratio="0.25"
                   :nested="true"
                   :touch-release-on-edges="true"
+                  :resistance-ratio="0"
                   class="w-full flex-1"
                   @swiper="onInnerInit"
                   @slide-change="onInnerSlideChange"
