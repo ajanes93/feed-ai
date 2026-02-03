@@ -45,7 +45,7 @@ onMounted(fetchDashboard);
             class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             @click="rebuildDigest"
           >
-            {{ rebuilding ? "Rebuilding..." : "Refresh Digest" }}
+            {{ rebuilding ? "Rebuilding..." : "Rebuild Today" }}
           </button>
           <router-link
             to="/"
