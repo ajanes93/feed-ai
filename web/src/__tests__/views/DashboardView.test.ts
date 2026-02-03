@@ -162,19 +162,19 @@ describe("DashboardView", () => {
     });
   });
 
-  describe("rebuild today button", () => {
-    it("renders Rebuild Today button when dashboard is loaded", async () => {
+  describe("refresh digest button", () => {
+    it("renders Refresh Digest button when dashboard is loaded", async () => {
       const { wrapper } = await render();
-      expect(wrapper.text()).toContain("Rebuild Today");
+      expect(wrapper.text()).toContain("Refresh Digest");
     });
 
-    it("does not render Rebuild Today button before auth", async () => {
+    it("does not render Refresh Digest button before auth", async () => {
       sessionStorage.clear();
       stubFetchJson(DASHBOARD_DATA);
       const wrapper = mount(DashboardView);
       await flushPromises();
 
-      expect(wrapper.text()).not.toContain("Rebuild Today");
+      expect(wrapper.text()).not.toContain("Refresh Digest");
     });
 
     it("shows Rebuilding... text while rebuild is in progress", async () => {
@@ -185,7 +185,7 @@ describe("DashboardView", () => {
 
       const rebuildBtn = wrapper
         .findAll("button")
-        .find((b) => b.text().includes("Rebuild Today"));
+        .find((b) => b.text().includes("Refresh Digest"));
       expect(rebuildBtn).toBeDefined();
       await rebuildBtn!.trigger("click");
       await nextTick();
@@ -219,7 +219,7 @@ describe("DashboardView", () => {
 
       const rebuildBtn = wrapper
         .findAll("button")
-        .find((b) => b.text().includes("Rebuild Today"));
+        .find((b) => b.text().includes("Refresh Digest"));
       await rebuildBtn!.trigger("click");
       await flushPromises();
 
@@ -240,7 +240,7 @@ describe("DashboardView", () => {
 
       const rebuildBtn = wrapper
         .findAll("button")
-        .find((b) => b.text().includes("Rebuild Today"));
+        .find((b) => b.text().includes("Refresh Digest"));
       await rebuildBtn!.trigger("click");
       await flushPromises();
 
@@ -254,7 +254,7 @@ describe("DashboardView", () => {
 
       const rebuildBtn = wrapper
         .findAll("button")
-        .find((b) => b.text().includes("Rebuild Today"));
+        .find((b) => b.text().includes("Refresh Digest"));
       await rebuildBtn!.trigger("click");
       await nextTick();
 
