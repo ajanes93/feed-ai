@@ -14,7 +14,7 @@ const TEST_ITEMS = [
 
 const TEST_PROPS = {
   items: TEST_ITEMS,
-  activeCategory: "all",
+  activeCategory: "ai",
 };
 
 const render = (options: RenderOptions<typeof CategoryFilter> = {}) => {
@@ -36,7 +36,6 @@ describe("CategoryFilter", () => {
     it("renders all category buttons", () => {
       const { getButtons } = render();
       const labels = getButtons().map((b) => b.text());
-      expect(labels.join(" ")).toContain("All");
       expect(labels.join(" ")).toContain("AI");
       expect(labels.join(" ")).toContain("Dev");
       expect(labels.join(" ")).toContain("Jobs");
@@ -51,11 +50,6 @@ describe("CategoryFilter", () => {
   });
 
   describe("counts", () => {
-    it("shows total count for All", () => {
-      const { getButtonByLabel } = render();
-      expect(getButtonByLabel("All")!.text()).toContain("5");
-    });
-
     it("shows per-category counts", () => {
       const { getButtonByLabel } = render();
       expect(getButtonByLabel("AI")!.text()).toContain("2");
@@ -104,10 +98,11 @@ describe("CategoryFilter", () => {
   });
 
   describe("with empty items", () => {
-    it("shows zero for All count", () => {
+    it("shows no counts when items are empty", () => {
       const { getButtonByLabel } = render({ props: { items: [] } });
-      // "All" should show no count span since count is 0
-      expect(getButtonByLabel("All")!.text().trim()).toBe("All");
+      // All categories should show no count span
+      expect(getButtonByLabel("AI")!.text().trim()).toBe("AI");
+      expect(getButtonByLabel("Dev")!.text().trim()).toBe("Dev");
     });
   });
 
@@ -164,7 +159,7 @@ describe("CategoryFilter", () => {
         props: { swipeProgress: -1 },
       });
       // Should render normally without errors
-      expect(wrapper.findAll("button")).toHaveLength(5);
+      expect(wrapper.findAll("button")).toHaveLength(4);
     });
   });
 });
