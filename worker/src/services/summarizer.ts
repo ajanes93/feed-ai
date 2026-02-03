@@ -52,9 +52,10 @@ function groupBySource(items: RawItem[]): string {
 
 function buildNewsPrompt(items: RawItem[]): string {
   const grouped = groupBySource(items);
-  const maxItems = CATEGORY_LIMITS.ai + CATEGORY_LIMITS.dev;
+  const maxItems =
+    CATEGORY_LIMITS.ai + CATEGORY_LIMITS.dev + CATEGORY_LIMITS.sport;
 
-  return `You are curating a daily tech digest for a senior software engineer interested in AI, Vue.js, frontend, and web development.
+  return `You are curating a daily tech digest for a senior software engineer interested in AI, Vue.js, frontend, web development, and Lincoln City FC football.
 
 Today's date is ${todayDate()}.
 
@@ -62,12 +63,13 @@ Items are grouped by source. Select the most important items, ensuring coverage 
 
 ${grouped}
 
-You MUST return at least 8 items — aim for 10-15. Return at least 3 AI items AND at least 4 Dev items. Always pick the best available even if nothing seems groundbreaking — more coverage is better than fewer items.
+You MUST return at least 8 items — aim for 15-20. Return at least 3 AI items, at least 4 Dev items, and include Sport items when available from sources like weareimps, stacey-west, or lincoln-city-bluesky. Always pick the best available even if nothing seems groundbreaking — more coverage is better than fewer items.
 
-Select ${maxItems} items total (${CATEGORY_LIMITS.ai} AI, ${CATEGORY_LIMITS.dev} Dev). Prefer items published today or yesterday. Prioritize:
+Select up to ${maxItems} items total (${CATEGORY_LIMITS.ai} AI, ${CATEGORY_LIMITS.dev} Dev, ${CATEGORY_LIMITS.sport} Sport). Prefer items published today or yesterday. Prioritize:
 - Major AI announcements or breakthroughs
 - Significant open source releases
 - Industry news that affects developers
+- Lincoln City FC match reports, team news, and transfer updates
 - Ensure diversity across sources — don't pick all items from one source
 - If the same story appears from multiple sources, pick only ONE (prefer the most detailed)
 
@@ -75,8 +77,8 @@ For each selected item, provide:
 - item_index: The [number] shown before the item above
 - title: A clear, concise title (rewrite if needed)
 - summary: 2-3 sentence summary of why this matters
-- why_it_matters: 1 sentence on personal relevance to a senior full-stack developer
-- category: One of "ai", "dev"
+- why_it_matters: 1 sentence on personal relevance to a senior full-stack developer (for tech) or Lincoln City fan (for sport)
+- category: One of "ai", "dev", "sport"
 - source_name: Original source name
 
 Return ONLY a JSON array, no other text:

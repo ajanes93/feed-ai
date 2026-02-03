@@ -8,8 +8,9 @@ export interface JinaScraperConfig {
   linkPattern?: RegExp;
 }
 
-// Matches: ### [Title](URL) or [### Title](URL)
-const DEFAULT_LINK_PATTERN = /###?\s*\[([^\]]+)\]\(([^)]+)\)/g;
+// Matches: ### [Title](URL) or ## [Title](URL) or [### Title](URL)
+const DEFAULT_LINK_PATTERN =
+  /(?:###?\s*\[([^\]]+)\]|\[###?\s*([^\]]+)\])\(([^)]+)\)/g;
 
 /**
  * Scrape a URL using Jina Reader and parse markdown links
@@ -50,8 +51,11 @@ export async function fetchJinaScrape(
   while ((match = pattern.exec(markdown)) !== null) {
     if (items.length >= ITEM_LIMIT) break;
 
-    const title = match[1].trim();
-    const link = match[2].trim();
+    // Group 1: title from ### [Title] format
+    // Group 2: title from [### Title] format
+    // Group 3: URL in both cases
+    const title = (match[1] || match[2]).trim();
+    const link = match[3].trim();
 
     // Skip empty or invalid
     if (!title || !link) continue;
