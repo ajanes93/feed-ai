@@ -17,6 +17,7 @@ const categories = [
   { key: "ai", label: "AI" },
   { key: "dev", label: "Dev" },
   { key: "jobs", label: "Jobs" },
+  { key: "sport", label: "Sport" },
 ];
 
 const counts = computed(() => {

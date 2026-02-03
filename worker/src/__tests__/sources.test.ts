@@ -30,13 +30,13 @@ describe("sources", () => {
         "api",
         "scrape",
       ]).toContain(source.type);
-      expect(["ai", "dev", "jobs"]).toContain(source.category);
+      expect(["ai", "dev", "jobs", "sport"]).toContain(source.category);
     }
   });
 
   it("has sources in all categories", () => {
     const categories = new Set(sources.map((s) => s.category));
-    expect(categories).toEqual(new Set(["ai", "dev", "jobs"]));
+    expect(categories).toEqual(new Set(["ai", "dev", "jobs", "sport"]));
   });
 
   it("CATEGORY_LIMITS covers all categories", () => {

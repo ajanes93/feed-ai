@@ -9,6 +9,7 @@ const TEST_ITEMS = [
   digestItemFactory.build({ category: "ai" }),
   digestItemFactory.build({ category: "dev" }),
   digestItemFactory.build({ category: "jobs" }),
+  digestItemFactory.build({ category: "sport" }),
 ];
 
 const TEST_PROPS = {
@@ -39,6 +40,7 @@ describe("CategoryFilter", () => {
       expect(labels.join(" ")).toContain("AI");
       expect(labels.join(" ")).toContain("Dev");
       expect(labels.join(" ")).toContain("Jobs");
+      expect(labels.join(" ")).toContain("Sport");
     });
 
     it("renders the sliding indicator", () => {
@@ -51,7 +53,7 @@ describe("CategoryFilter", () => {
   describe("counts", () => {
     it("shows total count for All", () => {
       const { getButtonByLabel } = render();
-      expect(getButtonByLabel("All")!.text()).toContain("4");
+      expect(getButtonByLabel("All")!.text()).toContain("5");
     });
 
     it("shows per-category counts", () => {
@@ -59,6 +61,7 @@ describe("CategoryFilter", () => {
       expect(getButtonByLabel("AI")!.text()).toContain("2");
       expect(getButtonByLabel("Dev")!.text()).toContain("1");
       expect(getButtonByLabel("Jobs")!.text()).toContain("1");
+      expect(getButtonByLabel("Sport")!.text()).toContain("1");
     });
 
     it("hides count when category has no items", () => {
@@ -161,7 +164,7 @@ describe("CategoryFilter", () => {
         props: { swipeProgress: -1 },
       });
       // Should render normally without errors
-      expect(wrapper.findAll("button")).toHaveLength(4);
+      expect(wrapper.findAll("button")).toHaveLength(5);
     });
   });
 });

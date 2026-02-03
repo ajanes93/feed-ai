@@ -55,10 +55,18 @@ function blueskyFeedResponse(sourceId: string) {
   });
 }
 
-function scrapeHtml(sourceId: string) {
-  return `<!DOCTYPE html><html><body>
-  <a href="/source-code/${sourceId}-article"><h3>${sourceId} Article</h3></a>
-</body></html>`;
+/**
+ * Generate Jina Reader markdown output format for scrape sources
+ */
+function jinaMarkdown(sourceId: string, baseUrl: string) {
+  return `Title: ${sourceId}
+
+URL Source: ${baseUrl}
+
+Markdown Content:
+### [${sourceId} Article](${baseUrl}/article/${sourceId}-1)
+### [${sourceId} News](${baseUrl}/news/${sourceId}-2)
+`;
 }
 
 function hnHiringSearchResponse() {
@@ -142,25 +150,27 @@ function mockAllSources() {
         });
     }
 
-    const feedMock = fetchMock.get("https://public.api.bsky.app");
-    for (const handle of blueskyHandles) {
-      feedMock
-        .intercept({
-          method: "GET",
-          path: /\/xrpc\/app\.bsky\.feed\.getAuthorFeed/,
-        })
-        .reply(200, blueskyFeedResponse(handle), {
-          headers: { "content-type": "application/json" },
-        });
-    }
+    fetchMock
+      .get("https://public.api.bsky.app")
+      .intercept({
+        method: "GET",
+        path: /\/xrpc\/app\.bsky\.feed\.getAuthorFeed/,
+      })
+      .reply(200, blueskyFeedResponse("test"), {
+        headers: { "content-type": "application/json" },
+      })
+      .persist();
   }
 
-  // Mock scrape sources (direct HTML fetch)
+  // Mock scrape sources via Jina Reader
   if (hasScrape) {
-    const everyMock = fetchMock.get("https://every.to");
-    everyMock
-      .intercept({ method: "GET", path: "/newsletter" })
-      .reply(200, scrapeHtml("every-to"));
+    const jinaMock = fetchMock.get("https://r.jina.ai");
+    jinaMock
+      .intercept({ method: "GET", path: "/https://every.to/newsletter" })
+      .reply(200, jinaMarkdown("every-to", "https://every.to"));
+    jinaMock
+      .intercept({ method: "GET", path: "/https://www.weareimps.com/news" })
+      .reply(200, jinaMarkdown("weareimps", "https://www.weareimps.com"));
   }
 
   // Mock HN Who's Hiring
@@ -354,9 +364,9 @@ describe("POST /api/generate (end-to-end)", () => {
       .intercept({ method: "GET", path: /.*/ })
       .reply(500, "Server Error")
       .persist();
-    // Mock scrape source to fail
+    // Mock Jina Reader (scrape sources) to fail
     fetchMock
-      .get("https://every.to")
+      .get("https://r.jina.ai")
       .intercept({ method: "GET", path: /.*/ })
       .reply(500, "Server Error");
     // Mock HN Algolia to fail

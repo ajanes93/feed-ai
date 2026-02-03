@@ -3,13 +3,14 @@ export interface Source {
   name: string;
   type: "rss" | "reddit" | "hn" | "github" | "bluesky" | "api" | "scrape";
   url: string;
-  category: "ai" | "dev" | "jobs";
+  category: "ai" | "dev" | "jobs" | "sport";
 }
 
 export const CATEGORY_LIMITS: Record<Source["category"], number> = {
   ai: 10,
   dev: 15,
   jobs: 10,
+  sport: 5,
 };
 
 // Staleness threshold in days — sources with no items beyond this are flagged
@@ -17,6 +18,7 @@ export const FRESHNESS_THRESHOLDS: Record<Source["category"], number> = {
   ai: 1, // AI news: stale after 24h
   dev: 7, // Dev/industry: stale after 7 days
   jobs: 7, // Jobs: stale after 7 days
+  sport: 2, // Sport: stale after 2 days (match relevance)
 };
 
 export const sources: Source[] = [
@@ -282,5 +284,28 @@ export const sources: Source[] = [
     type: "api",
     url: "https://jobicy.com/api/v2/remote-jobs?tag=frontend&geo=uk",
     category: "jobs",
+  },
+
+  // === Sport — Lincoln City FC (3 sources) ===
+  {
+    id: "stacey-west",
+    name: "The Stacey West",
+    type: "rss",
+    url: "https://staceywest.net/feed/",
+    category: "sport",
+  },
+  {
+    id: "lincoln-city-bluesky",
+    name: "Lincoln City FC",
+    type: "bluesky",
+    url: "lincolncityfc.bsky.social",
+    category: "sport",
+  },
+  {
+    id: "weareimps",
+    name: "WeAreImps",
+    type: "scrape",
+    url: "https://www.weareimps.com/news",
+    category: "sport",
   },
 ];
