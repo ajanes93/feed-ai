@@ -13,8 +13,8 @@ import CategoryFilter from "../components/CategoryFilter.vue";
 const route = useRoute();
 const router = useRouter();
 
-const CATEGORIES = ["all", "ai", "dev", "jobs"];
-const activeCategory = ref((route.query.category as string) || "all");
+const CATEGORIES = ["ai", "dev", "jobs", "sport"];
+const activeCategory = ref((route.query.category as string) || "ai");
 
 // Outer Swiper: [prev-boundary, current-digest, next-boundary]
 const DIGEST_SLIDE = 1;
@@ -43,7 +43,6 @@ const {
 
 function itemsForCategory(cat: string) {
   if (!digest.value) return [];
-  if (cat === "all") return digest.value.items;
   return digest.value.items.filter((i) => i.category === cat);
 }
 
@@ -105,12 +104,12 @@ function setCategory(cat: string) {
   innerSwiper?.slideTo(CATEGORIES.indexOf(cat), 250);
 }
 
-// Header arrow navigation — always land on "all" category
+// Header arrow navigation — always land on first category (AI)
 async function navigateDigest(direction: "prev" | "next") {
   transitioning.value = true;
   try {
     await (direction === "prev" ? goToPrevious() : goToNext());
-    activeCategory.value = "all";
+    activeCategory.value = "ai";
     innerSwiper?.slideTo(0, 0);
   } finally {
     transitioning.value = false;
@@ -127,7 +126,7 @@ watch(
         name: "digest",
         params: { date },
         query:
-          activeCategory.value !== "all"
+          activeCategory.value !== "ai"
             ? { category: activeCategory.value }
             : {},
       });
@@ -141,7 +140,7 @@ watch(activeCategory, (cat) => {
   router.replace({
     name: "digest",
     params: { date },
-    query: cat !== "all" ? { category: cat } : {},
+    query: cat !== "ai" ? { category: cat } : {},
   });
 });
 

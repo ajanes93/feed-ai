@@ -13,7 +13,6 @@ const emit = defineEmits<{
 }>();
 
 const categories = [
-  { key: "all", label: "All" },
   { key: "ai", label: "AI" },
   { key: "dev", label: "Dev" },
   { key: "jobs", label: "Jobs" },
@@ -21,7 +20,7 @@ const categories = [
 ];
 
 const counts = computed(() => {
-  const map: Record<string, number> = { all: props.items.length };
+  const map: Record<string, number> = {};
   for (const item of props.items) {
     map[item.category] = (map[item.category] || 0) + 1;
   }

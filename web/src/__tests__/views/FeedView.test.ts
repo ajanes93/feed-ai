@@ -137,20 +137,20 @@ describe("FeedView", () => {
     it("renders a DigestFeed for each category", async () => {
       const { wrapper } = await render();
       const feeds = wrapper.findAllComponents(DigestFeed);
-      expect(feeds.length).toBe(4); // all, ai, dev, jobs
+      expect(feeds.length).toBe(4); // ai, dev, jobs, sport
     });
 
     it("filters items per category in each feed slide", async () => {
       const { wrapper } = await render();
       const feeds = wrapper.findAllComponents(DigestFeed);
-      // "all" slide has all 3 items
-      expect(feeds[0].props("items")).toHaveLength(3);
       // "ai" slide has 1 item
-      expect(feeds[1].props("items")).toHaveLength(1);
+      expect(feeds[0].props("items")).toHaveLength(1);
       // "dev" slide has 1 item
-      expect(feeds[2].props("items")).toHaveLength(1);
+      expect(feeds[1].props("items")).toHaveLength(1);
       // "jobs" slide has 1 item
-      expect(feeds[3].props("items")).toHaveLength(1);
+      expect(feeds[2].props("items")).toHaveLength(1);
+      // "sport" slide has 0 items (no sport items in test data)
+      expect(feeds[3].props("items")).toHaveLength(0);
     });
   });
 
@@ -195,7 +195,7 @@ describe("FeedView", () => {
       expect(wrapper.text()).toContain("January");
     });
 
-    it("arrow navigation resets to 'all' category and updates URL to new date", async () => {
+    it("arrow navigation resets to 'ai' category and updates URL to new date", async () => {
       const YESTERDAY_DIGEST = digestFactory.build({
         date: "2025-01-27",
         items: [
@@ -216,7 +216,7 @@ describe("FeedView", () => {
         .trigger("click");
       await flushPromises();
 
-      // URL should use yesterday's date with no category query (defaults to "all")
+      // URL should use yesterday's date with no category query (defaults to "ai")
       const calls = mockRouter.replace.mock.calls;
       const lastCall = calls[calls.length - 1][0];
       expect(lastCall.params.date).toBe("2025-01-27");
