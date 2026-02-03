@@ -134,6 +134,7 @@ app.use(
       "https://feed-ai.andresjanes.com",
       "http://localhost:5173",
     ],
+    allowHeaders: ["Content-Type", "Authorization"],
   })
 );
 
