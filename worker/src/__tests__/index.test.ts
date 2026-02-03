@@ -298,3 +298,24 @@ describe("API routes", () => {
     expect(res.status).not.toBe(401);
   });
 });
+
+describe("CORS", () => {
+  it("preflight allows Authorization header for POST endpoints", async () => {
+    const res = await app.request(
+      "/api/rebuild",
+      {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://feed-ai.pages.dev",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "Authorization",
+        },
+      },
+      env
+    );
+
+    expect(res.status).toBe(204);
+    const allowHeaders = res.headers.get("Access-Control-Allow-Headers");
+    expect(allowHeaders).toContain("Authorization");
+  });
+});
