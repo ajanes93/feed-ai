@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { fetchMock } from "cloudflare:test";
 import { fetchScrapeSource } from "../services/scrape";
 import { sourceFactory } from "./factories";
+import { mockFetchResponse } from "./helpers";
 
 const EVERY_TO_SOURCE = sourceFactory.build({
   id: "every-to",
@@ -11,20 +12,29 @@ const EVERY_TO_SOURCE = sourceFactory.build({
   category: "ai",
 });
 
-const JINA_MARKDOWN = `# Every Newsletter
+function everyToHtml(articles: Array<{ href: string; title: string }>) {
+  const cards = articles
+    .map(
+      (a) => `
+    <a href="${a.href}">
+      <img src="https://cdn.every.to/thumb.jpg" />
+      <h3>${a.title}</h3>
+    </a>`
+    )
+    .join("\n");
 
-[Give Yourself a Promotion](https://every.to/context-window/give-yourself-a-promotion)
-
-[Compound Engineering](https://every.to/source-code/compound-engineering-how-every-codes)
-
-[Teach Your AI](https://every.to/source-code/teach-your-ai-to-think)
-
-[Newsletter](https://every.to/newsletter)
-
-[Podcast](https://every.to/podcast)
-
-[Store](https://every.to/store)
-`;
+  return `<!DOCTYPE html>
+<html>
+<body>
+  <nav>
+    <a href="/newsletter">Newsletter</a>
+    <a href="/podcast">Podcast</a>
+    <a href="/store">Store</a>
+  </nav>
+  ${cards}
+</body>
+</html>`;
+}
 
 beforeAll(() => {
   fetchMock.activate();
@@ -36,14 +46,23 @@ afterEach(() => {
 });
 
 describe("fetchScrapeSource", () => {
-  it("extracts article links from Jina markdown", async () => {
-    fetchMock
-      .get("https://r.jina.ai")
-      .intercept({
-        method: "GET",
-        path: "/https://every.to/newsletter",
-      })
-      .reply(200, JINA_MARKDOWN);
+  it("extracts article links from HTML", async () => {
+    const html = everyToHtml([
+      {
+        href: "/context-window/give-yourself-a-promotion",
+        title: "Give Yourself a Promotion",
+      },
+      {
+        href: "/source-code/compound-engineering",
+        title: "Compound Engineering",
+      },
+      {
+        href: "/source-code/teach-your-ai-to-think",
+        title: "Teach Your AI",
+      },
+    ]);
+
+    mockFetchResponse("https://every.to", "/newsletter", html);
 
     const items = await fetchScrapeSource(EVERY_TO_SOURCE);
 
@@ -55,22 +74,19 @@ describe("fetchScrapeSource", () => {
     expect(items[0].sourceId).toBe("every-to");
   });
 
-  it("excludes navigation links", async () => {
-    const navOnly = `
-[Newsletter](https://every.to/newsletter)
-[Podcast](https://every.to/podcast)
-[Store](https://every.to/store)
-[Courses](https://every.to/courses)
-[Consulting](https://every.to/consulting)
-`;
+  it("excludes navigation links (single-segment paths)", async () => {
+    const html = `<!DOCTYPE html>
+<html><body>
+  <a href="/newsletter"><h3>Newsletter</h3></a>
+  <a href="/podcast"><h3>Podcast</h3></a>
+  <a href="/store"><h3>Store</h3></a>
+  <a href="/courses"><h3>Courses</h3></a>
+  <a href="/consulting"><h3>Consulting</h3></a>
+  <a href="/columnists"><h3>Columnists</h3></a>
+  <a href="/products"><h3>Products</h3></a>
+</body></html>`;
 
-    fetchMock
-      .get("https://r.jina.ai")
-      .intercept({
-        method: "GET",
-        path: "/https://every.to/newsletter",
-      })
-      .reply(200, navOnly);
+    mockFetchResponse("https://every.to", "/newsletter", html);
 
     const items = await fetchScrapeSource(EVERY_TO_SOURCE);
 
@@ -78,19 +94,13 @@ describe("fetchScrapeSource", () => {
   });
 
   it("deduplicates URLs", async () => {
-    const dupes = `
-[Article One](https://every.to/source-code/article-one)
-[Article One Again](https://every.to/source-code/article-one)
-[Article Two](https://every.to/source-code/article-two)
-`;
+    const html = everyToHtml([
+      { href: "/source-code/article-one", title: "Article One" },
+      { href: "/source-code/article-one", title: "Article One Again" },
+      { href: "/source-code/article-two", title: "Article Two" },
+    ]);
 
-    fetchMock
-      .get("https://r.jina.ai")
-      .intercept({
-        method: "GET",
-        path: "/https://every.to/newsletter",
-      })
-      .reply(200, dupes);
+    mockFetchResponse("https://every.to", "/newsletter", html);
 
     const items = await fetchScrapeSource(EVERY_TO_SOURCE);
 
@@ -111,56 +121,57 @@ describe("fetchScrapeSource", () => {
     expect(items).toEqual([]);
   });
 
-  it("returns empty array on Jina HTTP error", async () => {
-    fetchMock
-      .get("https://r.jina.ai")
-      .intercept({
-        method: "GET",
-        path: "/https://every.to/newsletter",
-      })
-      .reply(503, "Service unavailable");
+  it("returns empty array on HTTP error", async () => {
+    mockFetchResponse(
+      "https://every.to",
+      "/newsletter",
+      "Service unavailable",
+      503
+    );
 
     const items = await fetchScrapeSource(EVERY_TO_SOURCE);
 
     expect(items).toEqual([]);
   });
 
-  it("excludes non-matching domain links", async () => {
-    const mixed = `
-[Article](https://every.to/source-code/good-article)
-[External](https://other-site.com/some-page)
-[Another](https://every.to/context-window/another-article)
-`;
+  it("ignores links without h3 titles", async () => {
+    const html = `<!DOCTYPE html>
+<html><body>
+  <a href="/source-code/no-title"><span>Not a title</span></a>
+  <a href="/source-code/has-title"><h3>Has Title</h3></a>
+</body></html>`;
 
-    fetchMock
-      .get("https://r.jina.ai")
-      .intercept({
-        method: "GET",
-        path: "/https://every.to/newsletter",
-      })
-      .reply(200, mixed);
+    mockFetchResponse("https://every.to", "/newsletter", html);
 
     const items = await fetchScrapeSource(EVERY_TO_SOURCE);
 
-    expect(items).toHaveLength(2);
-    expect(items.every((i) => i.link.startsWith("https://every.to/"))).toBe(
-      true
-    );
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toBe("Has Title");
+  });
+
+  it("strips nested HTML tags from titles", async () => {
+    const html = `<!DOCTYPE html>
+<html><body>
+  <a href="/source-code/nested-tags">
+    <h3>Title with <em>emphasis</em> and <strong>bold</strong></h3>
+  </a>
+</body></html>`;
+
+    mockFetchResponse("https://every.to", "/newsletter", html);
+
+    const items = await fetchScrapeSource(EVERY_TO_SOURCE);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toBe("Title with emphasis and bold");
   });
 
   it("limits results to 20 items", async () => {
-    const manyLinks = Array.from(
-      { length: 30 },
-      (_, i) => `[Article ${i}](https://every.to/source-code/article-${i})`
-    ).join("\n");
+    const articles = Array.from({ length: 30 }, (_, i) => ({
+      href: `/source-code/article-${i}`,
+      title: `Article ${i}`,
+    }));
 
-    fetchMock
-      .get("https://r.jina.ai")
-      .intercept({
-        method: "GET",
-        path: "/https://every.to/newsletter",
-      })
-      .reply(200, manyLinks);
+    mockFetchResponse("https://every.to", "/newsletter", everyToHtml(articles));
 
     const items = await fetchScrapeSource(EVERY_TO_SOURCE);
 

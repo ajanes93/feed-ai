@@ -278,8 +278,20 @@ onMounted(fetchDashboard);
                 </span>
               </td>
               <td class="px-3 py-2">
-                <span :class="source.stale ? 'text-red-400' : 'text-green-400'">
-                  {{ source.stale ? "Stale" : "OK" }}
+                <span
+                  :class="{
+                    'text-red-400': source.stale,
+                    'text-yellow-400': !source.stale && source.itemCount === 0,
+                    'text-green-400': !source.stale && source.itemCount > 0,
+                  }"
+                >
+                  {{
+                    source.stale
+                      ? "Stale"
+                      : source.itemCount === 0
+                        ? "Check"
+                        : "OK"
+                  }}
                 </span>
               </td>
             </tr>

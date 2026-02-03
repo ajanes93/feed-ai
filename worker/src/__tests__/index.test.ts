@@ -1,7 +1,16 @@
-import { describe, it, expect } from "vitest";
-import { env } from "cloudflare:test";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { env, fetchMock } from "cloudflare:test";
 import { app } from "../index";
-import { seedDigest } from "./helpers";
+import { seedDigest, seedLog, seedLogs } from "./helpers";
+
+beforeEach(() => {
+  fetchMock.activate();
+  fetchMock.disableNetConnect();
+});
+
+afterEach(() => {
+  fetchMock.deactivate();
+});
 
 describe("API routes", () => {
   it("GET /api/today redirects to today's digest", async () => {
@@ -116,6 +125,22 @@ describe("API routes", () => {
     expect(res.status).toBe(401);
   });
 
+  it("POST /api/fetch requires auth", async () => {
+    const res = await app.request("/api/fetch", { method: "POST" }, env);
+
+    expect(res.status).toBe(401);
+  });
+
+  it("POST /api/fetch rejects wrong token", async () => {
+    const res = await app.request(
+      "/api/fetch",
+      { method: "POST", headers: { Authorization: "Bearer wrong-key" } },
+      env
+    );
+
+    expect(res.status).toBe(401);
+  });
+
   it("GET /api/health returns source health", async () => {
     const res = await app.request("/api/health", {}, env);
 
@@ -133,5 +158,143 @@ describe("API routes", () => {
     expect(body).toHaveProperty("sources");
     expect(body).toHaveProperty("errors");
     expect(body.totalDigests).toBe(0);
+  });
+
+  it("GET /api/admin/dashboard includes seeded digest count", async () => {
+    await seedDigest(
+      env.DB,
+      { id: "d-dash", date: "2025-01-20", itemCount: 1 },
+      [
+        {
+          id: "i-dash",
+          category: "ai",
+          title: "T",
+          summary: "S",
+          sourceName: "N",
+          sourceUrl: "https://x.com",
+          position: 0,
+        },
+      ]
+    );
+
+    const res = await app.request("/api/admin/dashboard", {}, env);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { totalDigests: number };
+    expect(body.totalDigests).toBeGreaterThan(0);
+  });
+
+  it("GET /api/admin/logs returns empty logs", async () => {
+    const res = await app.request("/api/admin/logs", {}, env);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { count: number; logs: unknown[] };
+    expect(body.count).toBe(0);
+    expect(body.logs).toEqual([]);
+  });
+
+  it("GET /api/admin/logs returns seeded logs", async () => {
+    await seedLog(env.DB, {
+      id: "log-1",
+      level: "error",
+      category: "fetch",
+      message: "Test error",
+    });
+
+    const res = await app.request("/api/admin/logs", {}, env);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      count: number;
+      logs: { message: string }[];
+    };
+    expect(body.count).toBe(1);
+    expect(body.logs[0].message).toBe("Test error");
+  });
+
+  it("GET /api/admin/logs filters by level", async () => {
+    await seedLogs(env.DB, [
+      { id: "log-info", level: "info", category: "fetch", message: "Info msg" },
+      {
+        id: "log-err",
+        level: "error",
+        category: "fetch",
+        message: "Error msg",
+      },
+    ]);
+
+    const res = await app.request("/api/admin/logs?level=error", {}, env);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      count: number;
+      logs: { level: string }[];
+    };
+    expect(body.logs.every((l) => l.level === "error")).toBe(true);
+  });
+
+  it("POST /api/generate accepts valid auth", async () => {
+    // Seed existing digest so generate returns early without needing fetch mocks
+    const today = new Date().toISOString().split("T")[0];
+    await seedDigest(
+      env.DB,
+      { id: `digest-${today}`, date: today, itemCount: 1 },
+      [
+        {
+          id: "i-existing",
+          category: "ai",
+          title: "T",
+          summary: "S",
+          sourceName: "N",
+          sourceUrl: "https://x.com",
+          position: 0,
+        },
+      ]
+    );
+
+    const res = await app.request(
+      "/api/generate",
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer test-admin-key" },
+      },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain("already exists");
+  });
+
+  it("POST /api/rebuild accepts valid auth", async () => {
+    // Seed existing digest so rebuild deletes it; will fail at fetch but auth passes
+    const today = new Date().toISOString().split("T")[0];
+    await seedDigest(
+      env.DB,
+      { id: `digest-${today}`, date: today, itemCount: 1 },
+      [
+        {
+          id: "i-rebuild",
+          category: "ai",
+          title: "T",
+          summary: "S",
+          sourceName: "N",
+          sourceUrl: "https://x.com",
+          position: 0,
+        },
+      ]
+    );
+
+    const res = await app.request(
+      "/api/rebuild",
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer test-admin-key" },
+      },
+      env
+    );
+
+    // Auth passed — gets past 401. May be 500 (no fetch mocks) but not 401.
+    expect(res.status).not.toBe(401);
   });
 });

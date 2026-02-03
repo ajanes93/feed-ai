@@ -55,8 +55,10 @@ function blueskyFeedResponse(sourceId: string) {
   });
 }
 
-function jinaMarkdown(sourceId: string) {
-  return `[${sourceId} Article](https://every.to/source-code/${sourceId}-article)`;
+function scrapeHtml(sourceId: string) {
+  return `<!DOCTYPE html><html><body>
+  <a href="/source-code/${sourceId}-article"><h3>${sourceId} Article</h3></a>
+</body></html>`;
 }
 
 function hnHiringSearchResponse() {
@@ -153,12 +155,12 @@ function mockAllSources() {
     }
   }
 
-  // Mock Jina scrape
+  // Mock scrape sources (direct HTML fetch)
   if (hasScrape) {
-    const jinaMock = fetchMock.get("https://r.jina.ai");
-    jinaMock
-      .intercept({ method: "GET", path: /.*/ })
-      .reply(200, jinaMarkdown("every-to"));
+    const everyMock = fetchMock.get("https://every.to");
+    everyMock
+      .intercept({ method: "GET", path: "/newsletter" })
+      .reply(200, scrapeHtml("every-to"));
   }
 
   // Mock HN Who's Hiring
@@ -352,9 +354,9 @@ describe("POST /api/generate (end-to-end)", () => {
       .intercept({ method: "GET", path: /.*/ })
       .reply(500, "Server Error")
       .persist();
-    // Mock Jina to fail
+    // Mock scrape source to fail
     fetchMock
-      .get("https://r.jina.ai")
+      .get("https://every.to")
       .intercept({ method: "GET", path: /.*/ })
       .reply(500, "Server Error");
     // Mock HN Algolia to fail
@@ -378,6 +380,43 @@ describe("POST /api/generate (end-to-end)", () => {
       "SELECT * FROM error_logs WHERE category = 'fetch'"
     ).all();
     expect(logs.results.length).toBeGreaterThan(0);
+  });
+});
+
+describe("POST /api/fetch (end-to-end)", () => {
+  beforeEach(() => {
+    fetchMock.activate();
+    fetchMock.disableNetConnect();
+  });
+
+  it("fetches all sources and returns health summary", async () => {
+    mockAllSources();
+
+    const res = await app.request(
+      "/api/fetch",
+      { method: "POST", headers: AUTH_HEADERS },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      totalItems: number;
+      sourcesOk: number;
+      sourcesTotal: number;
+      zeroItems: { sourceId: string }[];
+      errors: { sourceId: string; error: string }[];
+    };
+
+    expect(body.sourcesTotal).toBe(sources.length);
+    expect(body.sourcesOk).toBe(sources.length);
+    expect(body.totalItems).toBeGreaterThan(0);
+    expect(body.errors).toHaveLength(0);
+
+    // Verify source health was recorded in DB
+    const health = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM source_health"
+    ).first();
+    expect((health as Record<string, unknown>).count).toBeGreaterThan(0);
   });
 });
 
