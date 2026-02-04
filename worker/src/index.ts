@@ -204,6 +204,15 @@ app.get("/api/health", async (c) => {
   );
 });
 
+// Auth middleware for admin endpoints
+const authMiddleware = async (c: Context<{ Bindings: Env }>, next: Next) => {
+  if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  await next();
+};
+app.use("/api/admin/*", authMiddleware);
+
 // --- Dashboard summary (single endpoint for all dashboard data) ---
 app.get("/api/admin/dashboard", async (c) => {
   const [aiUsage, recentErrors, sourceHealth, digestCount] = await Promise.all([
@@ -286,13 +295,6 @@ app.get("/api/admin/logs", async (c) => {
 });
 
 // Auth middleware for write endpoints
-const authMiddleware = async (c: Context<{ Bindings: Env }>, next: Next) => {
-  if (!isAuthorized(c.req.header("Authorization") ?? "", c.env.ADMIN_KEY)) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
-  await next();
-};
-app.use("/api/admin/*", authMiddleware);
 app.use("/api/fetch", authMiddleware);
 app.use("/api/generate", authMiddleware);
 app.use("/api/rebuild", authMiddleware);
