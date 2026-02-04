@@ -63,9 +63,14 @@ test.describe("Feed content", () => {
   test("renders card titles from digest data", async ({ mockPage }) => {
     await mockPage.goto("/");
 
-    const slide = feedSlide(mockPage);
-    await expect(slide.getByText("AI Breakthrough")).toBeVisible();
-    await expect(slide.getByText("Rust 2.0 Released")).toBeVisible();
+    // AI category (default) shows AI items
+    const aiSlide = feedSlide(mockPage, "ai");
+    await expect(aiSlide.getByText("AI Breakthrough")).toBeVisible();
+    await expect(aiSlide.getByText("Machine Learning Update")).toBeVisible();
+
+    // Dev category shows dev items
+    const devSlide = feedSlide(mockPage, "dev");
+    await expect(devSlide.getByText("Rust 2.0 Released")).toBeVisible();
   });
 
   test("renders card summaries", async ({ mockPage }) => {

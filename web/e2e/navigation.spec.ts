@@ -16,7 +16,8 @@ test.describe("Date navigation", () => {
   test("shows story count in header", async ({ mockPage }) => {
     await mockPage.goto("/");
 
-    await expect(mockPage.getByText("5 stories")).toBeVisible();
+    // Shows count for active category (AI has 2 items)
+    await expect(mockPage.getByText("2 stories")).toBeVisible();
   });
 
   test("previous button navigates to older digest", async ({ mockPage }) => {
@@ -101,26 +102,27 @@ test.describe("Category filter", () => {
   test("renders all category buttons", async ({ mockPage }) => {
     await mockPage.goto("/");
 
-    await expect(mockPage.getByRole("button", { name: /All/ })).toBeVisible();
     await expect(mockPage.getByRole("button", { name: /AI/ })).toBeVisible();
     await expect(mockPage.getByRole("button", { name: /Dev/ })).toBeVisible();
     await expect(mockPage.getByRole("button", { name: /Jobs/ })).toBeVisible();
+    await expect(mockPage.getByRole("button", { name: /Sport/ })).toBeVisible();
   });
 
   test("shows correct counts per category", async ({ mockPage }) => {
     await mockPage.goto("/");
 
-    const allBtn = mockPage.getByRole("button", { name: /All/ });
-    await expect(allBtn).toContainText("5");
-
     const aiBtn = mockPage.getByRole("button", { name: /AI/ });
     await expect(aiBtn).toContainText("2");
+
+    const devBtn = mockPage.getByRole("button", { name: /Dev/ });
+    await expect(devBtn).toContainText("2");
   });
 
   test("category filter highlights active category", async ({ mockPage }) => {
     await mockPage.goto("/");
 
-    const allBtn = mockPage.getByRole("button", { name: /All/ });
-    await expect(allBtn).toHaveClass(/text-gray-950/);
+    // AI is the default active category
+    const aiBtn = mockPage.getByRole("button", { name: /AI/ });
+    await expect(aiBtn).toHaveClass(/text-gray-950/);
   });
 });

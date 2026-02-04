@@ -115,7 +115,7 @@ export const test = base.extend<{ mockPage: Page }>({
  * Swiper renders all category slides simultaneously, so card text
  * appears multiple times in the DOM. This avoids strict mode violations.
  */
-function feedSlide(page: Page, category = "all") {
+function feedSlide(page: Page, category = "ai") {
   return page.getByTestId(`feed-${category}`);
 }
 

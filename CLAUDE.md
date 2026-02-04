@@ -149,6 +149,28 @@ Shared config at root level:
 - **Prettier**: Handles code formatting (`npm run format` / `npm run format:check`)
 - Both run from root across all workspaces
 
+## E2E Tests (Claude Code)
+
+The web package includes Playwright e2e tests. In Claude Code (web/mobile), browser downloads are blocked, so you must symlink an existing Playwright browser installation.
+
+**Setup (run once per session):**
+
+```bash
+# Check existing browser version
+ls ~/.cache/ms-playwright/
+
+# Create symlinks from existing version (e.g., 1194) to required version (e.g., 1208)
+mkdir -p ~/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64
+ln -s ~/.cache/ms-playwright/chromium_headless_shell-1194/chrome-linux/headless_shell \
+      ~/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell
+```
+
+**Run tests:**
+
+```bash
+cd web && npm run test:e2e
+```
+
 ## Agents & Commands
 
 ### Agents (in `.claude/agents/`)

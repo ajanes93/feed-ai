@@ -150,7 +150,11 @@ describe("API routes", () => {
   });
 
   it("GET /api/admin/dashboard returns dashboard data", async () => {
-    const res = await app.request("/api/admin/dashboard", {}, env);
+    const res = await app.request(
+      "/api/admin/dashboard",
+      { headers: { Authorization: "Bearer test-admin-key" } },
+      env
+    );
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
@@ -177,7 +181,11 @@ describe("API routes", () => {
       ]
     );
 
-    const res = await app.request("/api/admin/dashboard", {}, env);
+    const res = await app.request(
+      "/api/admin/dashboard",
+      { headers: { Authorization: "Bearer test-admin-key" } },
+      env
+    );
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { totalDigests: number };
@@ -185,7 +193,11 @@ describe("API routes", () => {
   });
 
   it("GET /api/admin/logs returns empty logs", async () => {
-    const res = await app.request("/api/admin/logs", {}, env);
+    const res = await app.request(
+      "/api/admin/logs",
+      { headers: { Authorization: "Bearer test-admin-key" } },
+      env
+    );
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { count: number; logs: unknown[] };
@@ -201,7 +213,11 @@ describe("API routes", () => {
       message: "Test error",
     });
 
-    const res = await app.request("/api/admin/logs", {}, env);
+    const res = await app.request(
+      "/api/admin/logs",
+      { headers: { Authorization: "Bearer test-admin-key" } },
+      env
+    );
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -223,7 +239,11 @@ describe("API routes", () => {
       },
     ]);
 
-    const res = await app.request("/api/admin/logs?level=error", {}, env);
+    const res = await app.request(
+      "/api/admin/logs?level=error",
+      { headers: { Authorization: "Bearer test-admin-key" } },
+      env
+    );
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
