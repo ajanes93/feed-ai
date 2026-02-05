@@ -9,6 +9,10 @@ export interface DigestItem {
   sourceUrl: string;
   publishedAt?: string;
   position: number;
+  commentSummary?: string;
+  commentCount?: number;
+  commentScore?: number;
+  commentSummarySource?: "native" | "generated";
 }
 
 export interface Digest {

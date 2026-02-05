@@ -9,6 +9,7 @@ const props = defineProps<{
 }>();
 
 const showActions = ref(false);
+const showComments = ref(false);
 const cardRef = useTemplateRef("card");
 
 onLongPress(
@@ -148,6 +149,68 @@ function formatDate(iso: string): string {
         &mdash; {{ item.whyItMatters }}
       </p>
     </div>
+    <!-- Comment summary (collapsible) -->
+    <div
+      v-if="item.commentSummary"
+      class="mt-3"
+    >
+      <button
+        class="flex w-full items-center gap-2 text-xs text-gray-500 transition-colors hover:text-gray-300"
+        @click.stop="showComments = !showComments"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-3.5 w-3.5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+          />
+        </svg>
+        <span>
+          {{ item.commentCount }} comments
+          <template v-if="item.commentScore">
+            &middot; {{ item.commentScore }} points
+          </template>
+        </span>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="ml-auto h-3 w-3 transition-transform"
+          :class="{ 'rotate-180': showComments }"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M19 9l-7 7-7-7"
+          />
+        </svg>
+      </button>
+      <div
+        v-if="showComments"
+        class="mt-2 rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-3.5 py-2.5"
+      >
+        <p class="text-xs leading-relaxed text-gray-400">
+          <span class="font-medium text-indigo-400">Discussion</span>
+          &mdash; {{ item.commentSummary }}
+        </p>
+        <p
+          v-if="item.commentSummarySource === 'generated'"
+          class="mt-1 text-[10px] text-gray-600"
+        >
+          AI-generated summary
+        </p>
+      </div>
+    </div>
+
     <!-- Long-press actions popover -->
     <Teleport to="body">
       <AnimatePresence>

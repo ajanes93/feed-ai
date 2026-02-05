@@ -29,6 +29,10 @@ CREATE TABLE items (
   source_url TEXT NOT NULL,
   published_at TEXT,
   position INTEGER NOT NULL,
+  comment_summary TEXT,
+  comment_count INTEGER,
+  comment_score INTEGER,
+  comment_summary_source TEXT,
   created_at INTEGER DEFAULT (unixepoch()),
   FOREIGN KEY (digest_id) REFERENCES digests(id)
 );
