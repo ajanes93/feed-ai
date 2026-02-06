@@ -505,6 +505,14 @@ async function loadRecentRawItems(db: D1Database): Promise<RawItem[]> {
   }));
 }
 
+function normalizeTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function deduplicateItems(
   items: RawItem[],
   db: D1Database
@@ -517,12 +525,26 @@ export async function deduplicateItems(
     .all();
   const seenUrls = new Set(recent.results.map((r) => r.source_url as string));
   const seenTitles = new Set(
-    recent.results.map((r) => (r.title as string).toLowerCase())
+    recent.results.map((r) => normalizeTitle(r.title as string))
   );
-  const deduped = items.filter(
-    (item) =>
-      !seenUrls.has(item.link) && !seenTitles.has(item.title.toLowerCase())
-  );
+
+  // Filter against previous digests AND within this batch
+  const deduped: RawItem[] = [];
+  const batchTitles = new Set<string>();
+
+  for (const item of items) {
+    const normalized = normalizeTitle(item.title);
+
+    // Skip if URL or title seen in recent digests
+    if (seenUrls.has(item.link) || seenTitles.has(normalized)) continue;
+
+    // Skip if same normalized title already in this batch (cross-source dupe)
+    if (batchTitles.has(normalized)) continue;
+
+    batchTitles.add(normalized);
+    deduped.push(item);
+  }
+
   return deduped;
 }
 
