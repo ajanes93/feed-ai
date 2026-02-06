@@ -354,12 +354,87 @@ Return ONLY the summary text, no JSON or formatting.`;
   }
 }
 
-// --- Main enrichment function ---
+// --- Single-item enrichment for DB-based chaining ---
+
+export interface SingleItemEnrichment {
+  commentSummary: string;
+  commentCount: number;
+  commentScore: number;
+  aiUsage: AIUsageEntry;
+}
+
+/**
+ * Enrich a single item with comment data. Returns null if the item
+ * isn't eligible (not Reddit/HN, below thresholds, no comments).
+ */
+export async function enrichSingleItem(
+  title: string,
+  sourceUrl: string,
+  geminiKey: string,
+  logs: SummarizerLog[]
+): Promise<SingleItemEnrichment | null> {
+  const isReddit = isRedditUrl(sourceUrl);
+  const platform = isReddit ? "Reddit" : "HN";
+
+  const commentData = isReddit
+    ? await fetchRedditComments(sourceUrl, logs)
+    : await fetchHNComments(sourceUrl, logs);
+
+  if (!commentData) {
+    logs.push({
+      level: "info",
+      message: `No ${platform} data for "${title}"`,
+    });
+    return null;
+  }
+
+  if (
+    commentData.score < MIN_SCORE ||
+    commentData.commentCount < MIN_COMMENTS
+  ) {
+    logs.push({
+      level: "info",
+      message: `${platform} item below threshold: score=${commentData.score}, comments=${commentData.commentCount} — "${title}"`,
+    });
+    return null;
+  }
+
+  logs.push({
+    level: "info",
+    message: `Summarizing ${commentData.comments.length} ${platform} comments for "${title}" (score=${commentData.score}, comments=${commentData.commentCount})`,
+  });
+
+  const result = await summarizeComments(
+    title,
+    commentData.comments,
+    geminiKey,
+    logs
+  );
+
+  if (!result) return null;
+
+  return {
+    commentSummary: result.summary,
+    commentCount: commentData.commentCount,
+    commentScore: commentData.score,
+    aiUsage: result.usage,
+  };
+}
+
+// --- Batch enrichment function (used by tests and inline enrichment) ---
 
 interface CommentEnrichmentResult {
   items: DigestItem[];
   aiUsages: AIUsageEntry[];
   logs: SummarizerLog[];
+}
+
+function isEligibleSource(sourceUrl: string, sourceId: string): boolean {
+  return (
+    REDDIT_SOURCE_IDS.has(sourceId) ||
+    isRedditUrl(sourceUrl) ||
+    HN_SOURCE_IDS.has(sourceId)
+  );
 }
 
 export async function enrichWithCommentSummaries(
@@ -385,47 +460,12 @@ export async function enrichWithCommentSummaries(
     const item = enrichedItems[i];
     const sourceId = sourceIdMap.get(item.sourceUrl) ?? "";
 
-    // Determine if this item is from a Reddit or HN source
-    const isReddit =
-      REDDIT_SOURCE_IDS.has(sourceId) || isRedditUrl(item.sourceUrl);
-    const isHN = HN_SOURCE_IDS.has(sourceId);
-
-    if (!isReddit && !isHN) continue;
-
-    const platform = isReddit ? "Reddit" : "HN";
+    if (!isEligibleSource(item.sourceUrl, sourceId)) continue;
 
     try {
-      const commentData = isReddit
-        ? await fetchRedditComments(item.sourceUrl, logs)
-        : await fetchHNComments(item.sourceUrl, logs);
-
-      if (!commentData) {
-        logs.push({
-          level: "info",
-          message: `No ${platform} data for "${item.title}"`,
-        });
-        continue;
-      }
-
-      if (
-        commentData.score < MIN_SCORE ||
-        commentData.commentCount < MIN_COMMENTS
-      ) {
-        logs.push({
-          level: "info",
-          message: `${platform} item below threshold: score=${commentData.score}, comments=${commentData.commentCount} — "${item.title}"`,
-        });
-        continue;
-      }
-
-      logs.push({
-        level: "info",
-        message: `Summarizing ${commentData.comments.length} ${platform} comments for "${item.title}" (score=${commentData.score}, comments=${commentData.commentCount})`,
-      });
-
-      const result = await summarizeComments(
+      const result = await enrichSingleItem(
         item.title,
-        commentData.comments,
+        item.sourceUrl,
         apiKeys.gemini,
         logs
       );
@@ -433,12 +473,12 @@ export async function enrichWithCommentSummaries(
       if (result) {
         enrichedItems[i] = {
           ...item,
-          commentSummary: result.summary,
-          commentCount: commentData.commentCount,
-          commentScore: commentData.score,
+          commentSummary: result.commentSummary,
+          commentCount: result.commentCount,
+          commentScore: result.commentScore,
           commentSummarySource: "generated",
         };
-        aiUsages.push(result.usage);
+        aiUsages.push(result.aiUsage);
         enrichedCount++;
       }
     } catch (err) {
