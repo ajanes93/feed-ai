@@ -1,194 +1,76 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with this repository.
+Personal daily digest app — fetches RSS/news/jobs, uses AI to curate 8-10 items, displays in a scrollable feed.
 
-## Project Overview
+**Stack:** Cloudflare Workers + D1 + Pages | Vue 3 + TypeScript + Tailwind CSS 4 | npm workspaces
 
-feed-ai — a personal daily digest app that fetches news/jobs/updates from configured RSS sources, uses AI to curate and summarize into 8-10 important items, and displays them in a scrollable feed.
-
-**Stack:** Cloudflare Workers + D1 + Pages (Vue 3 + TypeScript + Tailwind CSS 4)
-
-## First-Time Setup
-
-After cloning the repo, run these commands to set up the development environment:
+## Commands
 
 ```bash
-npm install          # Install all workspace deps + lefthook commit hooks
+npm install                 # Install all deps + lefthook hooks (run first)
+npm run build               # TypeScript check + production build (all packages)
+npm run lint                # ESLint fix (all packages)
+npm run lint:check          # ESLint check only
+npm run format              # Prettier fix (all packages)
+npm run format:check        # Prettier check only
+npm test                    # Vitest (all packages)
+cd web && npm run test:e2e  # Playwright e2e tests
 ```
 
-The MCP server is deployed as a remote Cloudflare Worker. Add the worker URL to Claude.ai or Claude mobile MCP settings to access 7 tools for querying production data (digests, logs, sources, AI usage) and triggering digest rebuilds.
+## Packages
 
-## Quick Reference Commands
+| Package | Path | Purpose |
+|---------|------|---------|
+| shared | `shared/` | Types (`types.ts`), test factories (`factories.ts`), utilities |
+| worker | `worker/src/` | Cloudflare Worker — Hono router, D1 database, cron digest pipeline |
+| web | `web/src/` | Vue 3 SPA — Composition API, Vite, Swiper.js feed |
+| mcp | `mcp/src/` | MCP server — production data queries + digest rebuild |
 
-Commands can be run from the root (applies to all workspaces) or from individual packages.
+## Key Files
 
-| Task             | Root (all packages)    | Per-package            |
-| ---------------- | ---------------------- | ---------------------- |
-| Install deps     | `npm install`          | N/A (use root)         |
-| Build            | `npm run build`        | `npm run build`        |
-| Lint & fix       | `npm run lint`         | `npm run lint`         |
-| Lint (check)     | `npm run lint:check`   | `npm run lint:check`   |
-| Format           | `npm run format`       | `npm run format`       |
-| Format (check)   | `npm run format:check` | `npm run format:check` |
-| Test             | `npm test`             | `npm test`             |
-| Dev server       | N/A                    | `npm run dev` (worker/web) |
-| Deploy worker    | N/A                    | `npm run deploy` (worker)  |
+| File | What it does |
+|------|-------------|
+| `worker/src/index.ts` | Main router + digest build pipeline |
+| `worker/src/sources.ts` | RSS source configuration |
+| `worker/src/services/summarizer.ts` | AI integration (Gemini primary, Claude fallback) |
+| `worker/src/services/comments.ts` | Reddit + HN comment fetching + AI summarization |
+| `worker/src/services/fetcher.ts` | RSS/Reddit/GitHub/Bluesky fetching |
+| `worker/schema.sql` | D1 database schema |
+| `web/src/components/DigestCard.vue` | Individual digest item card |
+| `web/src/composables/useDigest.ts` | Digest fetch + state management |
+| `shared/types.ts` | Shared TypeScript interfaces (DigestItem, Digest) |
 
-## Directory Structure
+## Conventions
 
-```
-shared/                     # Shared types, factories, utilities
-  types.ts                 # TypeScript types shared across packages
-  factories.ts             # Test factories (fishery)
-  utils.ts                 # Shared utility functions
+**Worker:** D1 prepared statements with `.bind()` for all queries. `env.DB.batch()` for atomic writes. `crypto.randomUUID()` for IDs. Env bindings typed via `Env` in `types.ts`.
 
-worker/                     # Cloudflare Worker (API + Cron)
-  src/
-    index.ts               # Main worker entry (Hono router + cron)
-    types.ts               # Worker-specific types
-    sources.ts             # RSS source configuration
-    services/
-      fetcher.ts           # RSS/Reddit/GitHub/Bluesky fetching
-      summarizer.ts        # AI integration (Gemini + Claude fallback)
-      logger.ts            # Structured logging to D1
-      hn-hiring.ts         # HN hiring thread parser
-      bluesky.ts           # Bluesky feed fetcher
-      scrape.ts            # HTML scraping utilities
-      constants.ts         # Shared constants
-  schema.sql               # D1 database schema
-  wrangler.toml            # Cloudflare config
+**Vue:** `<script setup lang="ts">` exclusively. Props: `defineProps<T>()`. Emits: `defineEmits<T>()`. State: `ref()` / `reactive()`.
 
-mcp/                        # MCP server (Cloudflare Worker)
-  src/
-    index.ts               # Worker entrypoint (McpAgent + fetch handler)
-    tools.ts               # Tool definitions + API client
+**Styling:** Tailwind CSS 4 utilities. Dark theme default (gray-900). No JS config — uses `@import "tailwindcss"` in CSS.
 
-web/                        # Vue 3 frontend (Cloudflare Pages)
-  src/
-    App.vue                # Root component
-    main.ts                # App entry point
-    router.ts              # Vue Router config
-    style.css              # Global styles + Tailwind
-    types.ts               # Frontend TypeScript types
-    components/
-      DigestFeed.vue       # Snap-scroll container (Swiper.js)
-      DigestCard.vue       # Individual item card
-      DateHeader.vue       # Date + item count
-      EmptyState.vue       # No digest yet today
-      CategoryFilter.vue   # Category filtering
-      DataTable.vue        # Data table component
-      StatCard.vue         # Dashboard stat card
-    composables/
-      useDigest.ts         # Digest fetch + state management
-      useDashboard.ts      # Dashboard data fetching
-    views/                 # Route views
-    utils/                 # Frontend utilities
-```
-
-## Technology Stack
-
-- **Worker**: Cloudflare Workers, Hono (router), D1 (database), fast-xml-parser
-- **AI**: Gemini 2.0 Flash (primary) with Claude Haiku 4.5 fallback
-- **Frontend**: Vue 3 with Composition API (`<script setup>`), TypeScript (strict mode)
-- **Build**: Vite
-- **Styling**: Tailwind CSS 4 (via `@tailwindcss/vite` plugin)
-- **MCP**: `@modelcontextprotocol/sdk` + Cloudflare Agents SDK, zod v4 schemas
-- **Deployment**: GitHub Actions → Cloudflare Workers + Pages
-
-## Monorepo Structure
-
-npm workspaces with 4 packages: `shared`, `worker`, `web`, `mcp`.
-
-Shared config at root level:
-- `eslint.config.base.js` — shared ESLint rules, extended by each package
-- `.prettierrc` — shared Prettier config (web extends with tailwind plugin)
-- `lefthook.yml` — pre-commit hooks for all packages
-
-## Key Conventions
-
-### Vue Component Style
-
-- Use `<script setup lang="ts">` syntax
-- Type props with `defineProps<Props>()`
-- Type emits with `defineEmits<Emits>()`
-- Use Composition API exclusively
-- Reactive state uses `ref()` or `reactive()`
-
-### Worker Conventions
-
-- Use Hono for routing
-- Use D1 prepared statements with `.bind()` for all queries
-- Use `env.DB.batch()` for multi-statement writes (atomic)
-- Use `crypto.randomUUID()` for ID generation
-- All environment bindings typed via `Env` interface in `types.ts`
-
-### Styling
-
-- Tailwind CSS utility classes (v4 — uses `@import "tailwindcss"` in CSS, no JS config)
-- Dark theme by default (gray-900 background)
-
-## Environment Variables
-
-### Worker (Cloudflare secrets)
-
-- `ADMIN_KEY` — Bearer token for admin endpoints
-- `GEMINI_API_KEY` — Google Gemini API key (primary AI provider)
-- `ANTHROPIC_API_KEY` — Anthropic API key (fallback AI provider)
-
-### Frontend (build-time via Vite)
-
-- `VITE_API_BASE` — Worker API URL (set via GitHub Actions vars)
-
-### MCP Server (Cloudflare Worker)
-
-- `API_BASE` — Worker API URL (defaults to production in `wrangler.toml`, override via Cloudflare dashboard)
-
-## Code Formatting
-
-- **ESLint**: Handles linting and code quality (`npm run lint` / `npm run lint:check`)
-- **Prettier**: Handles code formatting (`npm run format` / `npm run format:check`)
-- Both run from root across all workspaces
+**Formatting:** Prettier handles all formatting. ESLint handles linting. Both run via lefthook pre-commit hooks. Never manually fix formatting — run `npm run lint && npm run format`.
 
 ## E2E Tests (Claude Code)
 
-The web package includes Playwright e2e tests. In Claude Code (web/mobile), browser downloads are blocked, so you must symlink an existing Playwright browser installation.
-
-**Setup (run once per session):**
+Playwright e2e tests are in `web/e2e/`. In Claude Code (web/mobile), browser downloads are blocked — symlink an existing installation:
 
 ```bash
-# Check existing browser version
-ls ~/.cache/ms-playwright/
-
-# Create symlinks from existing version (e.g., 1194) to required version (e.g., 1208)
+ls ~/.cache/ms-playwright/                        # Check existing browser version
+# Symlink from existing (e.g. 1194) to required (e.g. 1208):
 mkdir -p ~/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64
 ln -s ~/.cache/ms-playwright/chromium_headless_shell-1194/chrome-linux/headless_shell \
       ~/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell
 ```
 
-**Run tests:**
+## Environment Variables
 
-```bash
-cd web && npm run test:e2e
-```
+- `ADMIN_KEY` — Bearer token for admin endpoints (worker secret)
+- `GEMINI_API_KEY` — Gemini API key, primary AI provider (worker secret)
+- `ANTHROPIC_API_KEY` — Claude API key, fallback provider (worker secret)
+- `VITE_API_BASE` — Worker API URL (frontend build-time, via GitHub Actions)
 
-## Agents & Commands
+## Philosophy
 
-### Agents (in `.claude/agents/`)
+> Clear is better than clever. Every line of code is a liability.
 
-- **code-reviewer**: Reviews code for quality, security, and best practices
-- **code-simplifier**: Refactors code for clarity and maintainability
-
-### Commands (in `.claude/commands/`)
-
-- `/pr` — Create or update GitHub pull request
-- `/build` — Run TypeScript checking and production build
-
-## Coding Philosophy
-
-> Clear is better than clever.
-> Every line of code is a liability.
-> Make it work. Make it clear. Make it fast. (in that order)
-
-- Keep it simple — this is a personal daily digest tool
-- Prefer explicit code over clever abstractions
-- Worker and frontend share types but are independent packages
+Keep it simple — this is a personal tool. Prefer explicit code over abstractions. Make it work, make it clear, make it fast (in that order).

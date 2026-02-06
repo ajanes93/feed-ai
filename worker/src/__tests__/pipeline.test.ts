@@ -89,6 +89,52 @@ describe("deduplicateItems", () => {
 
     expect(deduped).toHaveLength(3);
   });
+
+  it("removes intra-batch duplicates with same title from different sources", async () => {
+    const items = [
+      rawItemFactory.build({
+        sourceId: "hn-ai",
+        link: "https://news.ycombinator.com/item?id=12345",
+        title: "New AI Framework Released",
+      }),
+      rawItemFactory.build({
+        sourceId: "r-localllama",
+        link: "https://reddit.com/r/LocalLLaMA/comments/abc",
+        title: "New AI Framework Released",
+      }),
+      rawItemFactory.build({
+        sourceId: "tech-blog",
+        link: "https://techblog.com/ai-framework",
+        title: "Completely Different Article",
+      }),
+    ];
+
+    const deduped = await deduplicateItems(items, env.DB);
+
+    expect(deduped).toHaveLength(2);
+    expect(deduped[0].sourceId).toBe("hn-ai");
+    expect(deduped[1].title).toBe("Completely Different Article");
+  });
+
+  it("normalizes punctuation and casing for intra-batch dedup", async () => {
+    const items = [
+      rawItemFactory.build({
+        sourceId: "src-a",
+        link: "https://a.com/1",
+        title: "Vue.js 4.0: What's New?",
+      }),
+      rawItemFactory.build({
+        sourceId: "src-b",
+        link: "https://b.com/1",
+        title: "vuejs 40 whats new",
+      }),
+    ];
+
+    const deduped = await deduplicateItems(items, env.DB);
+
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0].sourceId).toBe("src-a");
+  });
 });
 
 describe("capPerSource", () => {

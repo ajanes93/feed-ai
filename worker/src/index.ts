@@ -12,6 +12,7 @@ import {
   recordAIUsage,
   type AIUsageEntry,
 } from "./services/logger";
+import { enrichWithCommentSummaries } from "./services/comments";
 
 function timingSafeEqual(a: string, b: string): boolean {
   const encoder = new TextEncoder();
@@ -102,6 +103,10 @@ function mapDigestItem(row: Record<string, unknown>) {
     sourceUrl: row.source_url,
     publishedAt: row.published_at,
     position: row.position,
+    commentSummary: row.comment_summary ?? undefined,
+    commentCount: row.comment_count ?? undefined,
+    commentScore: row.comment_score ?? undefined,
+    commentSummarySource: row.comment_summary_source ?? undefined,
   };
 }
 
@@ -500,6 +505,14 @@ async function loadRecentRawItems(db: D1Database): Promise<RawItem[]> {
   }));
 }
 
+function normalizeTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function deduplicateItems(
   items: RawItem[],
   db: D1Database
@@ -512,12 +525,26 @@ export async function deduplicateItems(
     .all();
   const seenUrls = new Set(recent.results.map((r) => r.source_url as string));
   const seenTitles = new Set(
-    recent.results.map((r) => (r.title as string).toLowerCase())
+    recent.results.map((r) => normalizeTitle(r.title as string))
   );
-  const deduped = items.filter(
-    (item) =>
-      !seenUrls.has(item.link) && !seenTitles.has(item.title.toLowerCase())
-  );
+
+  // Filter against previous digests AND within this batch
+  const deduped: RawItem[] = [];
+  const batchTitles = new Set<string>();
+
+  for (const item of items) {
+    const normalized = normalizeTitle(item.title);
+
+    // Skip if URL or title seen in recent digests
+    if (seenUrls.has(item.link) || seenTitles.has(normalized)) continue;
+
+    // Skip if same normalized title already in this batch (cross-source dupe)
+    if (batchTitles.has(normalized)) continue;
+
+    batchTitles.add(normalized);
+    deduped.push(item);
+  }
+
   return deduped;
 }
 
@@ -770,6 +797,44 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     allDigestItems[i].position = i;
   }
 
+  // --- Enrich with comment summaries (Reddit + HN) ---
+  if (allDigestItems.length > 0 && apiKeys.gemini) {
+    const sourceIdMap = new Map(
+      dedupedItems.map((item) => [item.link, item.sourceId])
+    );
+
+    try {
+      const commentResult = await enrichWithCommentSummaries(
+        allDigestItems,
+        sourceIdMap,
+        { gemini: apiKeys.gemini }
+      );
+
+      // Replace items in-place with enriched versions
+      allDigestItems.length = 0;
+      allDigestItems.push(...commentResult.items);
+      allAiUsages.push(...commentResult.aiUsages);
+
+      await logEvents(
+        env.DB,
+        commentResult.logs.map((log) => ({
+          level: log.level,
+          category: "summarizer" as const,
+          message: `[comments] ${log.message}`,
+          details: log.details,
+          digestId,
+        }))
+      );
+    } catch (err) {
+      await logEvent(env.DB, {
+        level: "warn",
+        category: "summarizer",
+        message: `Comment enrichment failed: ${err instanceof Error ? err.message : String(err)}`,
+        digestId,
+      });
+    }
+  }
+
   await recordUsages();
 
   if (allDigestItems.length === 0) {
@@ -793,7 +858,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     ).bind(digestId, date, allDigestItems.length),
     ...allDigestItems.map((item) =>
       env.DB.prepare(
-        "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, published_at, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, published_at, position, comment_summary, comment_count, comment_score, comment_summary_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(
         item.id,
         item.digestId,
@@ -804,7 +869,11 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
         item.sourceName,
         item.sourceUrl ?? null,
         item.publishedAt ?? null,
-        item.position
+        item.position,
+        item.commentSummary ?? null,
+        item.commentCount ?? null,
+        item.commentScore ?? null,
+        item.commentSummarySource ?? null
       )
     ),
   ]);

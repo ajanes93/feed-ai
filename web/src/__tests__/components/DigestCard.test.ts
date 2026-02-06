@@ -119,6 +119,84 @@ describe("DigestCard", () => {
     });
   });
 
+  describe("comment summary", () => {
+    it("renders comment summary toggle when commentSummary is present", () => {
+      const item = digestItemFactory.build({
+        commentSummary: "The community was divided on this topic.",
+        commentCount: 42,
+        commentScore: 150,
+        commentSummarySource: "generated",
+      });
+      const { wrapper } = render({ props: { item } });
+      expect(wrapper.text()).toContain("42 comments");
+      expect(wrapper.text()).toContain("150 points");
+    });
+
+    it("hides comment summary when not present", () => {
+      const item = digestItemFactory.build({ commentSummary: undefined });
+      const { wrapper } = render({ props: { item } });
+      expect(wrapper.text()).not.toContain("comments");
+      expect(wrapper.text()).not.toContain("Discussion");
+    });
+
+    it("expands comment summary on click", async () => {
+      const item = digestItemFactory.build({
+        commentSummary: "Key takeaway from the discussion.",
+        commentCount: 30,
+        commentScore: 200,
+        commentSummarySource: "generated",
+      });
+      const { wrapper } = render({ props: { item } });
+
+      // Summary text should not be visible initially
+      expect(wrapper.text()).not.toContain("Key takeaway from the discussion.");
+
+      // Click the toggle button
+      const toggleButton = wrapper
+        .findAll("button")
+        .find((b) => b.text().includes("comments"));
+      await toggleButton!.trigger("click");
+
+      // Now summary text should be visible
+      expect(wrapper.text()).toContain("Discussion");
+      expect(wrapper.text()).toContain("Key takeaway from the discussion.");
+      expect(wrapper.text()).toContain("AI-generated summary");
+    });
+
+    it("collapses comment summary on second click", async () => {
+      const item = digestItemFactory.build({
+        commentSummary: "Discussion text here.",
+        commentCount: 20,
+        commentScore: 100,
+        commentSummarySource: "generated",
+      });
+      const { wrapper } = render({ props: { item } });
+
+      const toggleButton = wrapper
+        .findAll("button")
+        .find((b) => b.text().includes("comments"));
+
+      // Expand
+      await toggleButton!.trigger("click");
+      expect(wrapper.text()).toContain("Discussion text here.");
+
+      // Collapse
+      await toggleButton!.trigger("click");
+      expect(wrapper.text()).not.toContain("Discussion text here.");
+    });
+
+    it("shows comment count without score when score is absent", () => {
+      const item = digestItemFactory.build({
+        commentSummary: "Summary text.",
+        commentCount: 15,
+        commentSummarySource: "generated",
+      });
+      const { wrapper } = render({ props: { item } });
+      expect(wrapper.text()).toContain("15 comments");
+      expect(wrapper.text()).not.toContain("points");
+    });
+  });
+
   describe("favicon", () => {
     it("renders favicon image from source URL", () => {
       const { wrapper } = render();

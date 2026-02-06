@@ -1,46 +1,21 @@
 # Create or Update Pull Request
 
-Create a new PR or update an existing one with title and description.
+`/pr` — auto-generated | `/pr "Custom title"` — custom title
 
-## Usage
+## Steps
 
-`/pr` - Create/update PR with auto-generated content
-`/pr "Custom title"` - Create/update PR with custom title
+1. Analyze ALL commits: `git log main..HEAD --oneline && git diff main...HEAD`
+2. Read `.claude/pr-template.md` for body structure, fill in each section
+3. Check if `gh` CLI is available: `which gh 2>/dev/null`
 
-## Instructions
+### If `gh` is available:
 
-### Step 1: Check if PR already exists
+4. Check for existing PR: `gh pr view --json number,title,body,url 2>/dev/null`
+5. If PR exists: `gh pr edit`. If not: push branch + `gh pr create`
+6. Return the PR URL
 
-```bash
-gh pr view --json number,title,body,url 2>/dev/null
-```
+### If `gh` is NOT available:
 
-### Step 2: Analyze changes
+4. Output the PR title and description as a markdown code block the user can copy
 
-```bash
-git log main..HEAD --oneline
-git diff main...HEAD --stat
-git diff main...HEAD
-```
-
-Review ALL commits to understand full scope of changes.
-
-### Step 3: Read the PR template
-
-Read `.claude/pr-template.md` for the PR body structure. Fill in each section based on the changes analyzed in Step 2.
-
-### Step 4: If PR EXISTS - Update it
-
-Use `gh pr edit` with the filled-in template as the body.
-
-### Step 5: If NO PR - Create new one
-
-Push the branch and use `gh pr create` with the filled-in template as the body.
-
-### Step 6: Return the PR URL
-
-Always provide the PR URL at the end.
-
-## PR Title Format
-
-Use conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`
+**Title format:** conventional commits — `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`
