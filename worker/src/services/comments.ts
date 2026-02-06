@@ -48,7 +48,8 @@ interface CommentData {
 }
 
 async function fetchRedditComments(
-  postUrl: string
+  postUrl: string,
+  logs: SummarizerLog[]
 ): Promise<CommentData | null> {
   // Reddit JSON API: append .json to the URL path
   let jsonUrl: string;
@@ -56,11 +57,19 @@ async function fetchRedditComments(
     const url = new URL(postUrl);
     url.pathname = url.pathname.replace(/\/?$/, ".json");
     jsonUrl = url.toString();
-  } catch {
+  } catch (err) {
+    logs.push({
+      level: "warn",
+      message: `Reddit: invalid URL "${postUrl}": ${err instanceof Error ? err.message : String(err)}`,
+    });
     return null;
   }
 
   try {
+    logs.push({
+      level: "info",
+      message: `Reddit: fetching ${jsonUrl}`,
+    });
     const response = await fetch(jsonUrl, {
       headers: {
         "User-Agent": REDDIT_USER_AGENT,
@@ -68,10 +77,22 @@ async function fetchRedditComments(
       },
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      logs.push({
+        level: "warn",
+        message: `Reddit: HTTP ${response.status} ${response.statusText} for ${jsonUrl}`,
+      });
+      return null;
+    }
 
     const data = (await response.json()) as RedditListing[];
-    if (!Array.isArray(data) || data.length < 2) return null;
+    if (!Array.isArray(data) || data.length < 2) {
+      logs.push({
+        level: "warn",
+        message: `Reddit: unexpected response shape (array length: ${Array.isArray(data) ? data.length : "not array"}) for ${jsonUrl}`,
+      });
+      return null;
+    }
 
     const post = data[0]?.data?.children?.[0]?.data;
     if (!post) return null;
@@ -92,8 +113,16 @@ async function fetchRedditComments(
       }
     }
 
+    logs.push({
+      level: "info",
+      message: `Reddit: got ${comments.length} comments, score=${score}, commentCount=${commentCount} for "${postUrl}"`,
+    });
     return { score, commentCount, comments };
-  } catch {
+  } catch (err) {
+    logs.push({
+      level: "warn",
+      message: `Reddit: fetch error for ${jsonUrl}: ${err instanceof Error ? err.message : String(err)}`,
+    });
     return null;
   }
 }
@@ -122,41 +151,79 @@ interface HNCommentData extends CommentData {
 }
 
 async function findHNItemByUrl(
-  articleUrl: string
+  articleUrl: string,
+  logs: SummarizerLog[]
 ): Promise<{ id: string; score: number; commentCount: number } | null> {
+  const searchUrl = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(articleUrl)}&restrictSearchableAttributes=url&hitsPerPage=1`;
   try {
-    const response = await fetch(
-      `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(articleUrl)}&restrictSearchableAttributes=url&hitsPerPage=1`,
-      { headers: { "User-Agent": USER_AGENT } }
-    );
+    logs.push({
+      level: "info",
+      message: `HN: searching Algolia for "${articleUrl}"`,
+    });
+    const response = await fetch(searchUrl, {
+      headers: { "User-Agent": USER_AGENT },
+    });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      logs.push({
+        level: "warn",
+        message: `HN: Algolia HTTP ${response.status} ${response.statusText}`,
+      });
+      return null;
+    }
 
     const data = (await response.json()) as AlgoliaSearchResult;
     const hit = data.hits?.[0];
-    if (!hit) return null;
+    if (!hit) {
+      logs.push({
+        level: "info",
+        message: `HN: no Algolia results for "${articleUrl}"`,
+      });
+      return null;
+    }
 
+    logs.push({
+      level: "info",
+      message: `HN: found item ${hit.objectID} (score=${hit.points}, comments=${hit.num_comments})`,
+    });
     return {
       id: hit.objectID,
       score: hit.points ?? 0,
       commentCount: hit.num_comments ?? 0,
     };
-  } catch {
+  } catch (err) {
+    logs.push({
+      level: "warn",
+      message: `HN: Algolia search error: ${err instanceof Error ? err.message : String(err)}`,
+    });
     return null;
   }
 }
 
-async function fetchHNCommentTexts(itemId: string): Promise<string[]> {
+async function fetchHNCommentTexts(
+  itemId: string,
+  logs: SummarizerLog[]
+): Promise<string[]> {
   try {
     const response = await fetch(
       `https://hacker-news.firebaseio.com/v0/item/${itemId}.json`,
       { headers: { "User-Agent": USER_AGENT } }
     );
 
-    if (!response.ok) return [];
+    if (!response.ok) {
+      logs.push({
+        level: "warn",
+        message: `HN: Firebase HTTP ${response.status} for item ${itemId}`,
+      });
+      return [];
+    }
 
     const item = (await response.json()) as HNItem;
     const kidIds = item.kids?.slice(0, MAX_COMMENTS_TO_FETCH) ?? [];
+    logs.push({
+      level: "info",
+      message: `HN: fetching ${kidIds.length} comments for item ${itemId}`,
+    });
 
     // Fetch top-level comments in parallel
     const commentFetches = kidIds.map(async (kidId) => {
@@ -179,18 +246,23 @@ async function fetchHNCommentTexts(itemId: string): Promise<string[]> {
     return results.flatMap((r) =>
       r.status === "fulfilled" && r.value ? [r.value] : []
     );
-  } catch {
+  } catch (err) {
+    logs.push({
+      level: "warn",
+      message: `HN: Firebase fetch error for item ${itemId}: ${err instanceof Error ? err.message : String(err)}`,
+    });
     return [];
   }
 }
 
 async function fetchHNComments(
-  articleUrl: string
+  articleUrl: string,
+  logs: SummarizerLog[]
 ): Promise<HNCommentData | null> {
-  const hnItem = await findHNItemByUrl(articleUrl);
+  const hnItem = await findHNItemByUrl(articleUrl, logs);
   if (!hnItem) return null;
 
-  const comments = await fetchHNCommentTexts(hnItem.id);
+  const comments = await fetchHNCommentTexts(hnItem.id, logs);
 
   return {
     score: hnItem.score,
@@ -336,8 +408,8 @@ export async function enrichWithCommentSummaries(
 
     try {
       const commentData = isReddit
-        ? await fetchRedditComments(item.sourceUrl)
-        : await fetchHNComments(item.sourceUrl);
+        ? await fetchRedditComments(item.sourceUrl, logs)
+        : await fetchHNComments(item.sourceUrl, logs);
 
       if (!commentData) {
         logs.push({
