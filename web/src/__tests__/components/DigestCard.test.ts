@@ -185,24 +185,6 @@ describe("DigestCard", () => {
       expect(wrapper.text()).not.toContain("Discussion text here.");
     });
 
-    it("does not show AI-generated label for native summaries", async () => {
-      const item = digestItemFactory.build({
-        commentSummary: "Native summary.",
-        commentCount: 50,
-        commentScore: 200,
-        commentSummarySource: "native",
-      });
-      const { wrapper } = render({ props: { item } });
-
-      const toggleButton = wrapper
-        .findAll("button")
-        .find((b) => b.text().includes("comments"));
-      await toggleButton!.trigger("click");
-
-      expect(wrapper.text()).toContain("Native summary.");
-      expect(wrapper.text()).not.toContain("AI-generated summary");
-    });
-
     it("shows comment count without score when score is absent", () => {
       const item = digestItemFactory.build({
         commentSummary: "Summary text.",

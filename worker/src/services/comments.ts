@@ -4,6 +4,7 @@ import type { AIUsageEntry } from "./logger";
 import type { SummarizerLog } from "./summarizer";
 
 // --- Thresholds for comment summarization ---
+// Filter out low-engagement posts to avoid wasting AI calls on uninteresting discussions
 const MIN_SCORE = 50;
 const MIN_COMMENTS = 10;
 const MAX_COMMENTS_TO_FETCH = 20;
@@ -15,7 +16,7 @@ const REDDIT_USER_AGENT = "web:feed-ai:v1.0 (by /u/feed-ai-bot)";
 
 const REDDIT_SOURCE_IDS = new Set(["r-localllama", "r-vuejs", "r-laravel"]);
 
-const HN_SOURCE_IDS = new Set(["hn-ai", "hn-vue", "hn-frontend"]);
+const HN_SOURCE_IDS = new Set(["hn-ai", "hn-vue", "hn-frontend", "hn-hiring"]);
 
 function isRedditUrl(url: string): boolean {
   try {
@@ -146,10 +147,6 @@ interface AlgoliaSearchResult {
   }>;
 }
 
-interface HNCommentData extends CommentData {
-  hnUrl: string;
-}
-
 async function findHNItemByUrl(
   articleUrl: string,
   logs: SummarizerLog[]
@@ -258,7 +255,7 @@ async function fetchHNCommentTexts(
 async function fetchHNComments(
   articleUrl: string,
   logs: SummarizerLog[]
-): Promise<HNCommentData | null> {
+): Promise<CommentData | null> {
   const hnItem = await findHNItemByUrl(articleUrl, logs);
   if (!hnItem) return null;
 
@@ -268,25 +265,10 @@ async function fetchHNComments(
     score: hnItem.score,
     commentCount: hnItem.commentCount,
     comments,
-    hnUrl: `https://news.ycombinator.com/item?id=${hnItem.id}`,
   };
 }
 
 // --- Comment summarization via Gemini ---
-
-function buildCommentSummaryPrompt(
-  itemTitle: string,
-  comments: string[]
-): string {
-  const commentText = comments.map((c, i) => `[${i + 1}] ${c}`).join("\n\n");
-
-  return `Summarize the key discussion points and notable opinions from these comments about "${itemTitle}" in 2-3 sentences. Highlight any consensus, controversy, or insights not in the article itself.
-
-Comments:
-${commentText}
-
-Return ONLY the summary text, no JSON or formatting.`;
-}
 
 async function summarizeComments(
   itemTitle: string,
@@ -296,7 +278,13 @@ async function summarizeComments(
 ): Promise<{ summary: string; usage: AIUsageEntry } | null> {
   if (comments.length === 0) return null;
 
-  const prompt = buildCommentSummaryPrompt(itemTitle, comments);
+  const commentText = comments.map((c, i) => `[${i + 1}] ${c}`).join("\n\n");
+  const prompt = `Summarize the key discussion points and notable opinions from these comments about "${itemTitle}" in 2-3 sentences. Highlight any consensus, controversy, or insights not in the article itself.
+
+Comments:
+${commentText}
+
+Return ONLY the summary text, no JSON or formatting.`;
 
   try {
     const start = Date.now();

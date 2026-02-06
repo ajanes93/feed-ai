@@ -797,8 +797,6 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     allDigestItems[i].position = i;
   }
 
-  await recordUsages();
-
   // --- Enrich with comment summaries (Reddit + HN) ---
   if (allDigestItems.length > 0 && apiKeys.gemini) {
     const sourceIdMap = new Map(
@@ -827,11 +825,6 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
           digestId,
         }))
       );
-
-      // Record comment summarization AI usages
-      for (const usage of commentResult.aiUsages) {
-        await recordAIUsage(env.DB, usage);
-      }
     } catch (err) {
       await logEvent(env.DB, {
         level: "warn",
@@ -841,6 +834,8 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
       });
     }
   }
+
+  await recordUsages();
 
   if (allDigestItems.length === 0) {
     await logEvent(env.DB, {
