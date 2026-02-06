@@ -336,14 +336,14 @@ app.post("/api/fetch", async (c) => {
 
 app.post("/api/generate", async (c) => {
   const response = await generateDailyDigest(c.env);
-  if (response.ok) safeWaitUntil(c, fireEnrichmentSafe(c.env));
+  if (response.ok) safeWaitUntil(c, () => fireEnrichmentSafe(c.env));
   return response;
 });
 
 app.post("/api/rebuild", async (c) => {
   const today = todayDate();
   const response = await rebuildDigest(c.env, today);
-  if (response.ok) safeWaitUntil(c, fireEnrichmentSafe(c.env));
+  if (response.ok) safeWaitUntil(c, () => fireEnrichmentSafe(c.env));
   return response;
 });
 
@@ -353,12 +353,16 @@ const ENRICH_BATCH_SIZE = 3;
 
 function safeWaitUntil(
   c: Context<{ Bindings: Env }>,
-  promise: Promise<unknown>
+  fn: () => Promise<unknown>
 ) {
   try {
-    c.executionCtx?.waitUntil(promise);
-  } catch {
-    // No execution context (e.g. in tests) — fire and forget
+    if (c.executionCtx) {
+      c.executionCtx.waitUntil(fn());
+    } else {
+      console.warn("No execution context — skipping background task");
+    }
+  } catch (err) {
+    console.error("Failed to schedule background task:", err);
   }
 }
 
@@ -384,7 +388,7 @@ app.post("/api/enrich-comments", async (c) => {
 
   // Self-chain: if more items remain, fire another request via waitUntil
   if (result.remaining > 0) {
-    safeWaitUntil(c, fireEnrichmentSafe(c.env));
+    safeWaitUntil(c, () => fireEnrichmentSafe(c.env));
   }
 
   return c.json(result);
