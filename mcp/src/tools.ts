@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-const DEFAULT_API_BASE = "https://feed-ai-worker.andresjanes.workers.dev";
+const DEFAULT_API_BASE = "https://feed-ai-api.andresjanes.workers.dev";
 
 export async function api(
   path: string,
