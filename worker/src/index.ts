@@ -802,14 +802,14 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
   // --- Enrich with comment summaries (Reddit + HN) ---
   if (allDigestItems.length > 0 && apiKeys.gemini) {
     const sourceIdMap = new Map(
-      dedupedItems.map((item) => [item.link, item.sourceId]),
+      dedupedItems.map((item) => [item.link, item.sourceId])
     );
 
     try {
       const commentResult = await enrichWithCommentSummaries(
         allDigestItems,
         sourceIdMap,
-        { gemini: apiKeys.gemini },
+        { gemini: apiKeys.gemini }
       );
 
       // Replace items in-place with enriched versions
@@ -825,7 +825,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
           message: `[comments] ${log.message}`,
           details: log.details,
           digestId,
-        })),
+        }))
       );
 
       // Record comment summarization AI usages
