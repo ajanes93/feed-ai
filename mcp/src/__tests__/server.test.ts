@@ -35,11 +35,12 @@ function resultText(result: Awaited<ReturnType<Client["callTool"]>>): string {
 describe("MCP server", () => {
   // --- Tool discovery ---
 
-  it("lists all 7 tools", async () => {
+  it("lists all 8 tools", async () => {
     const client = await setup();
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([
+      "fetch_articles",
       "generate_digest",
       "get_dashboard",
       "get_digest",
@@ -181,6 +182,23 @@ describe("MCP server", () => {
 
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toContain("/api/rebuild");
+    expect(opts.method).toBe("POST");
+    expect(opts.headers["Authorization"]).toBe("Bearer mykey");
+  });
+
+  it("fetch_articles sends POST with auth", async () => {
+    const client = await setup();
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ sources: 10, newItems: 42 })
+    );
+
+    await client.callTool({
+      name: "fetch_articles",
+      arguments: { admin_key: "mykey" },
+    });
+
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toContain("/api/fetch");
     expect(opts.method).toBe("POST");
     expect(opts.headers["Authorization"]).toBe("Bearer mykey");
   });

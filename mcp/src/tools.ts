@@ -50,7 +50,7 @@ const getLogsSchema = {
 };
 
 export function registerTools(server: McpServer, apiBase?: string): void {
-  const base = apiBase ? { apiBase } : undefined;
+  const base = { apiBase };
 
   server.tool(
     "get_digest",
@@ -130,6 +130,20 @@ export function registerTools(server: McpServer, apiBase?: string): void {
   );
 
   server.tool(
+    "fetch_articles",
+    "Fetch from all RSS sources and store raw items for accumulation, without generating a digest.",
+    adminKeySchema,
+    async ({ admin_key }) => {
+      const data = await api("/api/fetch", {
+        method: "POST",
+        adminKey: admin_key,
+        ...base,
+      });
+      return jsonResult(data);
+    }
+  );
+
+  server.tool(
     "generate_digest",
     "Trigger daily digest generation (skips if already exists).",
     adminKeySchema,
@@ -144,8 +158,8 @@ export function registerTools(server: McpServer, apiBase?: string): void {
   );
 }
 
-export function createServer(): McpServer {
+export function createServer(apiBase?: string): McpServer {
   const server = new McpServer({ name: "feed-ai", version: "1.0.0" });
-  registerTools(server);
+  registerTools(server, apiBase);
   return server;
 }
