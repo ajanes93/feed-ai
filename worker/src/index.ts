@@ -336,14 +336,14 @@ app.post("/api/fetch", async (c) => {
 
 app.post("/api/generate", async (c) => {
   const response = await generateDailyDigest(c.env);
-  if (response.ok) safeWaitUntil(c, () => fireEnrichmentSafe(c.env));
+  if (response.ok) safeWaitUntil(c, () => fireEnrichmentSafe(c.env, 1));
   return response;
 });
 
 app.post("/api/rebuild", async (c) => {
   const today = todayDate();
   const response = await rebuildDigest(c.env, today);
-  if (response.ok) safeWaitUntil(c, () => fireEnrichmentSafe(c.env));
+  if (response.ok) safeWaitUntil(c, () => fireEnrichmentSafe(c.env, 1));
   return response;
 });
 
@@ -366,15 +366,13 @@ function safeWaitUntil(
   }
 }
 
-function fireEnrichmentRequest(env: Env): Promise<Response> {
-  return fetch(`${env.SELF_URL}/api/enrich-comments`, {
+const MAX_ENRICHMENT_ROUNDS = 10;
+
+function fireEnrichmentSafe(env: Env, round: number): Promise<unknown> {
+  return fetch(`${env.SELF_URL}/api/enrich-comments?round=${round}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${env.ADMIN_KEY}` },
-  });
-}
-
-function fireEnrichmentSafe(env: Env): Promise<unknown> {
-  return fireEnrichmentRequest(env).catch((err) =>
+  }).catch((err) =>
     logEvent(env.DB, {
       level: "error",
       category: "digest",
@@ -384,14 +382,21 @@ function fireEnrichmentSafe(env: Env): Promise<unknown> {
 }
 
 app.post("/api/enrich-comments", async (c) => {
+  const round = parseInt(c.req.query("round") || "1", 10);
   const result = await enrichDigestComments(c.env);
 
-  // Self-chain: if more items remain, fire another request via waitUntil
-  if (result.remaining > 0) {
-    safeWaitUntil(c, () => fireEnrichmentSafe(c.env));
+  // Self-chain: if more items remain and under circuit breaker limit
+  if (result.remaining > 0 && round < MAX_ENRICHMENT_ROUNDS) {
+    safeWaitUntil(c, () => fireEnrichmentSafe(c.env, round + 1));
+  } else if (result.remaining > 0) {
+    await logEvent(c.env.DB, {
+      level: "warn",
+      category: "digest",
+      message: `Comment enrichment hit max rounds (${MAX_ENRICHMENT_ROUNDS}), ${result.remaining} items still unenriched`,
+    });
   }
 
-  return c.json(result);
+  return c.json({ ...result, round });
 });
 
 async function enrichDigestComments(
@@ -1107,7 +1112,7 @@ export default {
 
         const response = await generateDailyDigest(env);
         // Fire comment enrichment as a separate request (fresh subrequest budget)
-        if (response.ok) ctx.waitUntil(fireEnrichmentSafe(env));
+        if (response.ok) ctx.waitUntil(fireEnrichmentSafe(env, 1));
         return response;
       })()
     );
