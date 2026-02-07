@@ -793,3 +793,229 @@ describe("Cron scheduled dispatch", () => {
     expect(digest).not.toBeNull();
   });
 });
+
+describe("POST /api/enrich-comments", () => {
+  const today = new Date().toISOString().split("T")[0];
+  const digestId = `digest-${today}`;
+
+  beforeEach(() => {
+    fetchMock.activate();
+    fetchMock.disableNetConnect();
+  });
+
+  it("enriches Reddit/HN items and updates DB", async () => {
+    // Seed a digest with one Reddit item and one HN item (unenriched)
+    await seedDigest(env.DB, { id: digestId, date: today, itemCount: 3 }, [
+      {
+        id: `${digestId}-0`,
+        category: "ai",
+        title: "Cool AI Post",
+        summary: "Summary",
+        sourceName: "r/LocalLLaMA",
+        sourceUrl:
+          "https://www.reddit.com/r/LocalLLaMA/comments/abc/cool_ai_post",
+        position: 0,
+      },
+      {
+        id: `${digestId}-1`,
+        category: "dev",
+        title: "HN Frontend Story",
+        summary: "Summary",
+        sourceName: "Hacker News Frontend",
+        sourceUrl: "https://example.com/hn-story",
+        position: 1,
+      },
+      {
+        id: `${digestId}-2`,
+        category: "dev",
+        title: "Regular Article",
+        summary: "Not Reddit or HN",
+        sourceName: "Vue.js Blog",
+        sourceUrl: "https://blog.vuejs.org/article",
+        position: 2,
+      },
+    ]);
+
+    // Mock Reddit API — return comments above threshold
+    const redditMock = fetchMock.get("https://www.reddit.com");
+    redditMock.intercept({ method: "GET", path: /.*\.json/ }).reply(
+      200,
+      JSON.stringify([
+        { data: { children: [{ data: { score: 200, num_comments: 50 } }] } },
+        {
+          data: {
+            children: Array.from({ length: 10 }, (_, i) => ({
+              data: { body: `Comment ${i + 1} about AI`, score: 10 },
+            })),
+          },
+        },
+      ]),
+      { headers: { "content-type": "application/json" } }
+    );
+
+    // Mock HN Algolia search — find the HN story
+    const hnMock = fetchMock.get("https://hn.algolia.com");
+    hnMock.intercept({ method: "GET", path: /\/api\/v1\/search/ }).reply(
+      200,
+      JSON.stringify({
+        hits: [{ objectID: "12345", points: 100, num_comments: 30 }],
+      }),
+      { headers: { "content-type": "application/json" } }
+    );
+
+    // Mock HN Firebase — get comment IDs and texts
+    const firebaseMock = fetchMock.get("https://hacker-news.firebaseio.com");
+    firebaseMock
+      .intercept({ method: "GET", path: "/v0/item/12345.json" })
+      .reply(
+        200,
+        JSON.stringify({
+          id: 12345,
+          kids: [100, 101, 102],
+          descendants: 30,
+          score: 100,
+        }),
+        { headers: { "content-type": "application/json" } }
+      );
+    for (const id of [100, 101, 102]) {
+      firebaseMock
+        .intercept({ method: "GET", path: `/v0/item/${id}.json` })
+        .reply(
+          200,
+          JSON.stringify({ id, text: `HN comment ${id} about frontend` }),
+          { headers: { "content-type": "application/json" } }
+        );
+    }
+
+    // Mock Gemini for comment summarization (called twice — Reddit + HN)
+    const geminiMock = fetchMock.get(
+      "https://generativelanguage.googleapis.com"
+    );
+    geminiMock
+      .intercept({ method: "POST", path: /.*/ })
+      .reply(
+        200,
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: "Community discusses AI breakthroughs." }],
+              },
+            },
+          ],
+          usageMetadata: {
+            promptTokenCount: 50,
+            candidatesTokenCount: 20,
+            totalTokenCount: 70,
+          },
+        }),
+        { headers: { "content-type": "application/json" } }
+      )
+      .persist();
+
+    const res = await app.request(
+      "/api/enrich-comments",
+      { method: "POST", headers: AUTH_HEADERS },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.enriched).toBeGreaterThanOrEqual(1);
+    expect(body.remaining).toBe(0);
+
+    // Verify at least one item was enriched in DB
+    const enrichedItems = await env.DB.prepare(
+      "SELECT * FROM items WHERE digest_id = ? AND comment_summary IS NOT NULL"
+    )
+      .bind(digestId)
+      .all();
+    expect(enrichedItems.results.length).toBeGreaterThanOrEqual(1);
+
+    // Verify the regular article was NOT touched
+    const regularItem = await env.DB.prepare("SELECT * FROM items WHERE id = ?")
+      .bind(`${digestId}-2`)
+      .first();
+    expect(regularItem!.comment_summary).toBeNull();
+    expect(regularItem!.comment_summary_source).toBeNull();
+  });
+
+  it("returns zero enriched when no eligible items exist", async () => {
+    await seedDigest(env.DB, { id: digestId, date: today, itemCount: 1 }, [
+      {
+        id: `${digestId}-0`,
+        category: "dev",
+        title: "Vue Blog Post",
+        summary: "No comments source",
+        sourceName: "Vue.js Blog",
+        sourceUrl: "https://blog.vuejs.org/article",
+        position: 0,
+      },
+    ]);
+
+    const res = await app.request(
+      "/api/enrich-comments",
+      { method: "POST", headers: AUTH_HEADERS },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.enriched).toBe(0);
+    expect(body.remaining).toBe(0);
+  });
+
+  it("marks items as skipped when below threshold", async () => {
+    await seedDigest(env.DB, { id: digestId, date: today, itemCount: 1 }, [
+      {
+        id: `${digestId}-0`,
+        category: "ai",
+        title: "Low Score Post",
+        summary: "Summary",
+        sourceName: "r/LocalLLaMA",
+        sourceUrl: "https://www.reddit.com/r/LocalLLaMA/comments/xyz/low_post",
+        position: 0,
+      },
+    ]);
+
+    // Mock Reddit — below threshold (score=5, comments=2)
+    const redditMock = fetchMock.get("https://www.reddit.com");
+    redditMock
+      .intercept({ method: "GET", path: /.*\.json/ })
+      .reply(
+        200,
+        JSON.stringify([
+          { data: { children: [{ data: { score: 5, num_comments: 2 } }] } },
+          { data: { children: [] } },
+        ]),
+        { headers: { "content-type": "application/json" } }
+      );
+
+    const res = await app.request(
+      "/api/enrich-comments",
+      { method: "POST", headers: AUTH_HEADERS },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.enriched).toBe(0);
+    expect(body.skipped).toBe(1);
+
+    // Verify item was marked as skipped
+    const item = await env.DB.prepare("SELECT * FROM items WHERE id = ?")
+      .bind(`${digestId}-0`)
+      .first();
+    expect(item!.comment_summary).toBeNull();
+    expect(item!.comment_summary_source).toBe("skipped");
+  });
+
+  it("requires authentication", async () => {
+    const res = await app.request(
+      "/api/enrich-comments",
+      { method: "POST" },
+      env
+    );
+    expect(res.status).toBe(401);
+  });
+});

@@ -5,14 +5,18 @@ import { todayDate } from "@feed-ai/shared/utils";
 import { sources, FRESHNESS_THRESHOLDS } from "./sources";
 import type { SourceFetchResult } from "./services/fetcher";
 import { fetchAllSources } from "./services/fetcher";
-import { generateDigest, DigestError } from "./services/summarizer";
+import {
+  generateDigest,
+  DigestError,
+  type SummarizerLog,
+} from "./services/summarizer";
 import {
   logEvent,
   logEvents,
   recordAIUsage,
   type AIUsageEntry,
 } from "./services/logger";
-import { enrichWithCommentSummaries } from "./services/comments";
+import { enrichSingleItem } from "./services/comments";
 
 function timingSafeEqual(a: string, b: string): boolean {
   const encoder = new TextEncoder();
@@ -303,6 +307,7 @@ app.get("/api/admin/logs", async (c) => {
 app.use("/api/fetch", authMiddleware);
 app.use("/api/generate", authMiddleware);
 app.use("/api/rebuild", authMiddleware);
+app.use("/api/enrich-comments", authMiddleware);
 
 app.post("/api/fetch", async (c) => {
   let result;
@@ -330,13 +335,194 @@ app.post("/api/fetch", async (c) => {
 });
 
 app.post("/api/generate", async (c) => {
-  return generateDailyDigest(c.env);
+  const response = await generateDailyDigest(c.env);
+  if (response.ok) safeWaitUntil(c, () => fireEnrichmentSafe(c.env, 1));
+  return response;
 });
 
 app.post("/api/rebuild", async (c) => {
   const today = todayDate();
-  return rebuildDigest(c.env, today);
+  const response = await rebuildDigest(c.env, today);
+  if (response.ok) safeWaitUntil(c, () => fireEnrichmentSafe(c.env, 1));
+  return response;
 });
+
+// --- Comment enrichment (self-chaining via waitUntil) ---
+
+const ENRICH_BATCH_SIZE = 3;
+
+function safeWaitUntil(
+  c: Context<{ Bindings: Env }>,
+  fn: () => Promise<unknown>
+) {
+  try {
+    if (c.executionCtx) {
+      c.executionCtx.waitUntil(fn());
+    } else {
+      console.warn("No execution context — skipping background task");
+    }
+  } catch (err) {
+    console.error("Failed to schedule background task:", err);
+  }
+}
+
+const MAX_ENRICHMENT_ROUNDS = 10;
+
+function fireEnrichmentSafe(env: Env, round: number): Promise<unknown> {
+  return fetch(`${env.SELF_URL}/api/enrich-comments?round=${round}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.ADMIN_KEY}` },
+  }).catch((err) =>
+    logEvent(env.DB, {
+      level: "error",
+      category: "digest",
+      message: `Failed to fire comment enrichment: ${err instanceof Error ? err.message : String(err)}`,
+    })
+  );
+}
+
+app.post("/api/enrich-comments", async (c) => {
+  const round = parseInt(c.req.query("round") || "1", 10);
+  const result = await enrichDigestComments(c.env);
+
+  // Self-chain: if more items remain and under circuit breaker limit
+  if (result.remaining > 0 && round < MAX_ENRICHMENT_ROUNDS) {
+    safeWaitUntil(c, () => fireEnrichmentSafe(c.env, round + 1));
+  } else if (result.remaining > 0) {
+    await logEvent(c.env.DB, {
+      level: "warn",
+      category: "digest",
+      message: `Comment enrichment hit max rounds (${MAX_ENRICHMENT_ROUNDS}), ${result.remaining} items still unenriched`,
+    });
+  }
+
+  return c.json({ ...result, round });
+});
+
+async function enrichDigestComments(
+  env: Env
+): Promise<{ enriched: number; remaining: number; skipped: number }> {
+  const today = todayDate();
+  const digestId = `digest-${today}`;
+  const logs: SummarizerLog[] = [];
+  const aiUsages: AIUsageEntry[] = [];
+
+  const geminiKey = env.GEMINI_API_KEY;
+  if (!geminiKey) {
+    return { enriched: 0, remaining: 0, skipped: 0 };
+  }
+
+  // Find unenriched items from Reddit or HN sources (skip already-processed)
+  const unenriched = await env.DB.prepare(
+    `SELECT id, title, source_url FROM items
+     WHERE digest_id = ? AND comment_summary IS NULL AND comment_summary_source IS NULL
+     AND (source_url LIKE '%reddit.com%' OR source_name LIKE 'Hacker News%')
+     LIMIT ?`
+  )
+    .bind(digestId, ENRICH_BATCH_SIZE)
+    .all();
+
+  const candidates = unenriched.results as Array<{
+    id: string;
+    title: string;
+    source_url: string;
+  }>;
+
+  if (candidates.length === 0) {
+    await logEvent(env.DB, {
+      level: "info",
+      category: "digest",
+      message: "Comment enrichment: no unenriched items remain",
+      digestId,
+    });
+    return { enriched: 0, remaining: 0, skipped: 0 };
+  }
+
+  const markSkipped = (id: string) =>
+    env.DB.prepare(
+      `UPDATE items SET comment_summary_source = 'skipped' WHERE id = ?`
+    )
+      .bind(id)
+      .run();
+
+  let enriched = 0;
+  let skipped = 0;
+
+  for (const item of candidates) {
+    try {
+      const result = await enrichSingleItem(
+        item.title,
+        item.source_url,
+        geminiKey,
+        logs
+      );
+
+      if (result) {
+        await env.DB.prepare(
+          `UPDATE items SET comment_summary = ?, comment_count = ?, comment_score = ?, comment_summary_source = 'generated'
+           WHERE id = ?`
+        )
+          .bind(
+            result.commentSummary,
+            result.commentCount,
+            result.commentScore,
+            item.id
+          )
+          .run();
+        aiUsages.push(result.aiUsage);
+        enriched++;
+      } else {
+        await markSkipped(item.id);
+        skipped++;
+      }
+    } catch (err) {
+      logs.push({
+        level: "warn",
+        message: `Failed to enrich "${item.title}": ${err instanceof Error ? err.message : String(err)}`,
+      });
+      await markSkipped(item.id);
+      skipped++;
+    }
+  }
+
+  // Record AI usages
+  if (aiUsages.length > 0) {
+    await recordAIUsage(env.DB, aiUsages);
+  }
+
+  // Log all comment enrichment logs
+  if (logs.length > 0) {
+    await logEvents(
+      env.DB,
+      logs.map((l) => ({
+        level: l.level,
+        category: "digest",
+        message: l.message,
+        digestId,
+      }))
+    );
+  }
+
+  // Count truly unenriched items remaining (no comment_summary_source set)
+  const remainingCount = await env.DB.prepare(
+    `SELECT COUNT(*) as count FROM items
+     WHERE digest_id = ? AND comment_summary IS NULL AND comment_summary_source IS NULL
+     AND (source_url LIKE '%reddit.com%' OR source_name LIKE 'Hacker News%')`
+  )
+    .bind(digestId)
+    .first<{ count: number }>();
+
+  const remaining = remainingCount?.count ?? 0;
+
+  await logEvent(env.DB, {
+    level: "info",
+    category: "digest",
+    message: `Comment enrichment batch: ${enriched} enriched, ${skipped} skipped, ${remaining} remaining`,
+    digestId,
+  });
+
+  return { enriched, remaining, skipped };
+}
 
 // Cron handler
 async function generateDailyDigest(env: Env): Promise<Response> {
@@ -797,44 +983,6 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     allDigestItems[i].position = i;
   }
 
-  // --- Enrich with comment summaries (Reddit + HN) ---
-  if (allDigestItems.length > 0 && apiKeys.gemini) {
-    const sourceIdMap = new Map(
-      dedupedItems.map((item) => [item.link, item.sourceId])
-    );
-
-    try {
-      const commentResult = await enrichWithCommentSummaries(
-        allDigestItems,
-        sourceIdMap,
-        { gemini: apiKeys.gemini }
-      );
-
-      // Replace items in-place with enriched versions
-      allDigestItems.length = 0;
-      allDigestItems.push(...commentResult.items);
-      allAiUsages.push(...commentResult.aiUsages);
-
-      await logEvents(
-        env.DB,
-        commentResult.logs.map((log) => ({
-          level: log.level,
-          category: "summarizer" as const,
-          message: `[comments] ${log.message}`,
-          details: log.details,
-          digestId,
-        }))
-      );
-    } catch (err) {
-      await logEvent(env.DB, {
-        level: "warn",
-        category: "summarizer",
-        message: `Comment enrichment failed: ${err instanceof Error ? err.message : String(err)}`,
-        digestId,
-      });
-    }
-  }
-
   await recordUsages();
 
   if (allDigestItems.length === 0) {
@@ -960,9 +1108,12 @@ export default {
           category: "digest",
           message: `Cron triggered at ${hour}:00 UTC — ${isDigestTime ? "full digest" : "fetch-only"}`,
         });
-        return isDigestTime
-          ? generateDailyDigest(env)
-          : fetchAndStoreArticles(env);
+        if (!isDigestTime) return fetchAndStoreArticles(env);
+
+        const response = await generateDailyDigest(env);
+        // Fire comment enrichment as a separate request (fresh subrequest budget)
+        if (response.ok) ctx.waitUntil(fireEnrichmentSafe(env, 1));
+        return response;
       })()
     );
   },

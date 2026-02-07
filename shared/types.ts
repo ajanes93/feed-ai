@@ -12,7 +12,7 @@ export interface DigestItem {
   commentSummary?: string;
   commentCount?: number;
   commentScore?: number;
-  commentSummarySource?: "generated";
+  commentSummarySource?: "generated" | "skipped";
 }
 
 export interface Digest {
