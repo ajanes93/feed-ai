@@ -4,7 +4,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../tools.js";
 
 const mockFetch = vi.fn();
-vi.stubGlobal("fetch", mockFetch);
+const mockFetcher = { fetch: mockFetch };
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -15,7 +15,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 async function setup() {
   mockFetch.mockReset();
-  const server = createServer();
+  const server = createServer(mockFetcher);
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "1.0.0" });
@@ -30,6 +30,15 @@ type TextContent = { type: "text"; text: string };
 
 function resultText(result: Awaited<ReturnType<Client["callTool"]>>): string {
   return (result.content as TextContent[])[0].text;
+}
+
+function calledUrl(): string {
+  const req: Request = mockFetch.mock.calls[0][0];
+  return new URL(req.url).pathname + new URL(req.url).search;
+}
+
+function calledRequest(): Request {
+  return mockFetch.mock.calls[0][0] as Request;
 }
 
 describe("MCP server", () => {
@@ -63,10 +72,8 @@ describe("MCP server", () => {
       arguments: { date: "2026-01-30" },
     });
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/api/digest/2026-01-30"),
-      expect.objectContaining({ method: "GET" })
-    );
+    expect(calledUrl()).toBe("/api/digest/2026-01-30");
+    expect(calledRequest().method).toBe("GET");
     expect(JSON.parse(resultText(result))).toEqual(digest);
   });
 
@@ -76,10 +83,7 @@ describe("MCP server", () => {
 
     await client.callTool({ name: "get_digest", arguments: {} });
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/api/today"),
-      expect.anything()
-    );
+    expect(calledUrl()).toBe("/api/today");
   });
 
   it("list_digests calls /api/digests", async () => {
@@ -92,10 +96,8 @@ describe("MCP server", () => {
       arguments: {},
     });
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/api/digests"),
-      expect.objectContaining({ method: "GET" })
-    );
+    expect(calledUrl()).toBe("/api/digests");
+    expect(calledRequest().method).toBe("GET");
     expect(JSON.parse(resultText(result))).toEqual(digests);
   });
 
@@ -109,10 +111,8 @@ describe("MCP server", () => {
       arguments: {},
     });
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/api/health"),
-      expect.objectContaining({ method: "GET" })
-    );
+    expect(calledUrl()).toBe("/api/health");
+    expect(calledRequest().method).toBe("GET");
     expect(JSON.parse(resultText(result))).toEqual(health);
   });
 
@@ -129,9 +129,8 @@ describe("MCP server", () => {
       arguments: { admin_key: "key123" },
     });
 
-    const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toContain("/api/admin/dashboard");
-    expect(opts.headers["Authorization"]).toBe("Bearer key123");
+    expect(calledUrl()).toBe("/api/admin/dashboard");
+    expect(calledRequest().headers.get("Authorization")).toBe("Bearer key123");
   });
 
   it("get_logs passes query params and auth", async () => {
@@ -148,12 +147,14 @@ describe("MCP server", () => {
       },
     });
 
-    const [url, opts] = mockFetch.mock.calls[0];
+    const url = calledUrl();
     expect(url).toContain("/api/admin/logs?");
     expect(url).toContain("level=error");
     expect(url).toContain("category=fetch");
     expect(url).toContain("limit=10");
-    expect(opts.headers["Authorization"]).toBe("Bearer secret123");
+    expect(calledRequest().headers.get("Authorization")).toBe(
+      "Bearer secret123"
+    );
   });
 
   it("get_logs omits unset optional params from URL", async () => {
@@ -165,7 +166,7 @@ describe("MCP server", () => {
       arguments: { admin_key: "key" },
     });
 
-    const url: string = mockFetch.mock.calls[0][0];
+    const url = calledUrl();
     expect(url).not.toContain("level=");
     expect(url).not.toContain("category=");
     expect(url).not.toContain("digest_id=");
@@ -180,10 +181,9 @@ describe("MCP server", () => {
       arguments: { admin_key: "mykey" },
     });
 
-    const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toContain("/api/rebuild");
-    expect(opts.method).toBe("POST");
-    expect(opts.headers["Authorization"]).toBe("Bearer mykey");
+    expect(calledUrl()).toBe("/api/rebuild");
+    expect(calledRequest().method).toBe("POST");
+    expect(calledRequest().headers.get("Authorization")).toBe("Bearer mykey");
   });
 
   it("fetch_articles sends POST with auth", async () => {
@@ -197,10 +197,9 @@ describe("MCP server", () => {
       arguments: { admin_key: "mykey" },
     });
 
-    const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toContain("/api/fetch");
-    expect(opts.method).toBe("POST");
-    expect(opts.headers["Authorization"]).toBe("Bearer mykey");
+    expect(calledUrl()).toBe("/api/fetch");
+    expect(calledRequest().method).toBe("POST");
+    expect(calledRequest().headers.get("Authorization")).toBe("Bearer mykey");
   });
 
   it("generate_digest sends POST with auth", async () => {
@@ -212,10 +211,9 @@ describe("MCP server", () => {
       arguments: { admin_key: "mykey" },
     });
 
-    const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toContain("/api/generate");
-    expect(opts.method).toBe("POST");
-    expect(opts.headers["Authorization"]).toBe("Bearer mykey");
+    expect(calledUrl()).toBe("/api/generate");
+    expect(calledRequest().method).toBe("POST");
+    expect(calledRequest().headers.get("Authorization")).toBe("Bearer mykey");
   });
 
   // --- Error handling ---
