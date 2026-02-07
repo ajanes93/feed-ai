@@ -2,7 +2,7 @@ import { createMcpHandler } from "agents/mcp";
 import { createServer } from "./tools.js";
 
 interface Env {
-  API_BASE?: string;
+  API: Fetcher;
 }
 
 export default {
@@ -13,6 +13,6 @@ export default {
       return new Response("feed-ai MCP server. Connect via /mcp");
     }
 
-    return createMcpHandler(createServer(env.API_BASE))(request, env, ctx);
+    return createMcpHandler(createServer(env.API))(request, env, ctx);
   },
 };

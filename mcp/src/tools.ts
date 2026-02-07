@@ -1,21 +1,23 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-const DEFAULT_API_BASE = "https://feed-ai-api.andresjanes.workers.dev";
+type FetchLike = { fetch: typeof fetch };
 
-export async function api(
+async function api(
+  fetcher: FetchLike,
   path: string,
-  options?: { method?: string; adminKey?: string; apiBase?: string }
+  options?: { method?: string; adminKey?: string }
 ): Promise<unknown> {
-  const base = options?.apiBase ?? DEFAULT_API_BASE;
   const headers: Record<string, string> = {};
   if (options?.adminKey) {
     headers["Authorization"] = `Bearer ${options.adminKey}`;
   }
-  const res = await fetch(`${base}${path}`, {
-    method: options?.method ?? "GET",
-    headers,
-  });
+  const res = await fetcher.fetch(
+    new Request(`https://api${path}`, {
+      method: options?.method ?? "GET",
+      headers,
+    })
+  );
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`API ${res.status}: ${text}`);
@@ -49,16 +51,14 @@ const getLogsSchema = {
   limit: z.number().max(500).optional().default(50),
 };
 
-export function registerTools(server: McpServer, apiBase?: string): void {
-  const base = { apiBase };
-
+export function registerTools(server: McpServer, fetcher: FetchLike): void {
   server.tool(
     "get_digest",
     "Fetch a digest by date. Returns items with title, summary, category, source.",
     getDigestSchema,
     async ({ date }) => {
       const path = date ? `/api/digest/${date}` : "/api/today";
-      const data = await api(path, base);
+      const data = await api(fetcher, path);
       return jsonResult(data);
     }
   );
@@ -68,7 +68,7 @@ export function registerTools(server: McpServer, apiBase?: string): void {
     "List the last 30 digests with dates and item counts.",
     {},
     async () => {
-      const data = await api("/api/digests", base);
+      const data = await api(fetcher, "/api/digests");
       return jsonResult(data);
     }
   );
@@ -78,7 +78,7 @@ export function registerTools(server: McpServer, apiBase?: string): void {
     "Check health of all RSS sources — staleness, failures, last success.",
     {},
     async () => {
-      const data = await api("/api/health", base);
+      const data = await api(fetcher, "/api/health");
       return jsonResult(data);
     }
   );
@@ -88,9 +88,8 @@ export function registerTools(server: McpServer, apiBase?: string): void {
     "Full admin dashboard: AI usage stats, source health, recent errors, digest count.",
     adminKeySchema,
     async ({ admin_key }) => {
-      const data = await api("/api/admin/dashboard", {
+      const data = await api(fetcher, "/api/admin/dashboard", {
         adminKey: admin_key,
-        ...base,
       });
       return jsonResult(data);
     }
@@ -107,10 +106,11 @@ export function registerTools(server: McpServer, apiBase?: string): void {
       if (digest_id) params.set("digest_id", digest_id);
       if (limit) params.set("limit", String(limit));
       const query = params.toString();
-      const data = await api(`/api/admin/logs${query ? `?${query}` : ""}`, {
-        adminKey: admin_key,
-        ...base,
-      });
+      const data = await api(
+        fetcher,
+        `/api/admin/logs${query ? `?${query}` : ""}`,
+        { adminKey: admin_key }
+      );
       return jsonResult(data);
     }
   );
@@ -120,10 +120,9 @@ export function registerTools(server: McpServer, apiBase?: string): void {
     "Delete and regenerate today's digest. Use when sources or prompts have changed.",
     adminKeySchema,
     async ({ admin_key }) => {
-      const data = await api("/api/rebuild", {
+      const data = await api(fetcher, "/api/rebuild", {
         method: "POST",
         adminKey: admin_key,
-        ...base,
       });
       return jsonResult(data);
     }
@@ -134,10 +133,9 @@ export function registerTools(server: McpServer, apiBase?: string): void {
     "Fetch from all RSS sources and store raw items for accumulation, without generating a digest.",
     adminKeySchema,
     async ({ admin_key }) => {
-      const data = await api("/api/fetch", {
+      const data = await api(fetcher, "/api/fetch", {
         method: "POST",
         adminKey: admin_key,
-        ...base,
       });
       return jsonResult(data);
     }
@@ -148,18 +146,17 @@ export function registerTools(server: McpServer, apiBase?: string): void {
     "Trigger daily digest generation (skips if already exists).",
     adminKeySchema,
     async ({ admin_key }) => {
-      const data = await api("/api/generate", {
+      const data = await api(fetcher, "/api/generate", {
         method: "POST",
         adminKey: admin_key,
-        ...base,
       });
       return jsonResult(data);
     }
   );
 }
 
-export function createServer(apiBase?: string): McpServer {
+export function createServer(fetcher: FetchLike): McpServer {
   const server = new McpServer({ name: "feed-ai", version: "1.0.0" });
-  registerTools(server, apiBase);
+  registerTools(server, fetcher);
   return server;
 }

@@ -3,6 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2025-03-10"
 compatibility_flags = ["nodejs_compat"]
 
+# Service binding to the main API worker (avoids error 1042 on .workers.dev fetches)
+[[services]]
+binding = "API"
+service = "feed-ai-api"
+
 # Migration to remove the Durable Object class (was McpAgent-based, now stateless)
 [[migrations]]
 tag = "v1"
@@ -11,9 +16,6 @@ new_sqlite_classes = ["FeedAiMcp"]
 [[migrations]]
 tag = "v2"
 deleted_classes = ["FeedAiMcp"]
-
-# API_BASE — set via Cloudflare dashboard (Workers > Settings > Variables)
-# Defaults to production URL in code if not set
 
 [observability]
 enabled = true
