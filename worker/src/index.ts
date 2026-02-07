@@ -335,16 +335,12 @@ app.post("/api/fetch", async (c) => {
 });
 
 app.post("/api/generate", async (c) => {
-  const response = await generateDailyDigest(c.env);
-  if (response.ok) safeWaitUntil(c, () => fireEnrichmentSafe(c.env, 1));
-  return response;
+  return generateDailyDigest(c.env);
 });
 
 app.post("/api/rebuild", async (c) => {
   const today = todayDate();
-  const response = await rebuildDigest(c.env, today);
-  if (response.ok) safeWaitUntil(c, () => fireEnrichmentSafe(c.env, 1));
-  return response;
+  return rebuildDigest(c.env, today);
 });
 
 // --- Comment enrichment (self-chaining via waitUntil) ---
@@ -1096,24 +1092,37 @@ export default {
   fetch: app.fetch,
 
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    // 6am and 12pm UTC: fetch-only (accumulate articles)
-    // 6pm UTC: full digest generation (fetch + summarize)
-    const hour = new Date(event.scheduledTime).getUTCHours();
-    const isDigestTime = hour === 18;
+    // 6am, 12pm: fetch-only | 6pm: digest | 6:05pm: enrich comments
+    const time = new Date(event.scheduledTime);
+    const hour = time.getUTCHours();
+    const minute = time.getUTCMinutes();
+    const isDigestTime = hour === 18 && minute === 0;
+    const isEnrichTime = hour === 18 && minute === 5;
 
     ctx.waitUntil(
       (async () => {
+        if (isEnrichTime) {
+          await logEvent(env.DB, {
+            level: "info",
+            category: "digest",
+            message: "Comment enrichment cron triggered",
+          });
+          const result = await enrichDigestComments(env);
+          // Self-chain if more items remain (fresh budget per request)
+          if (result.remaining > 0) {
+            ctx.waitUntil(fireEnrichmentSafe(env, 2));
+          }
+          return;
+        }
+
         await logEvent(env.DB, {
           level: "info",
           category: "digest",
           message: `Cron triggered at ${hour}:00 UTC — ${isDigestTime ? "full digest" : "fetch-only"}`,
         });
-        if (!isDigestTime) return fetchAndStoreArticles(env);
-
-        const response = await generateDailyDigest(env);
-        // Fire comment enrichment as a separate request (fresh subrequest budget)
-        if (response.ok) ctx.waitUntil(fireEnrichmentSafe(env, 1));
-        return response;
+        return isDigestTime
+          ? generateDailyDigest(env)
+          : fetchAndStoreArticles(env);
       })()
     );
   },

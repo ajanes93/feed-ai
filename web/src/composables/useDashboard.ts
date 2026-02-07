@@ -77,6 +77,44 @@ export function useDashboard() {
     }
   }
 
+  const enriching = ref(false);
+  const enrichResult = ref<string | null>(null);
+  const enrichSuccess = ref(false);
+
+  async function enrichComments() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    enriching.value = true;
+    enrichResult.value = null;
+    enrichSuccess.value = false;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/enrich-comments`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      handleUnauthorized(res);
+
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error("Enrichment failed");
+      }
+
+      enrichResult.value = `Enriched: ${body.enriched}, Skipped: ${body.skipped}, Remaining: ${body.remaining}`;
+      enrichSuccess.value = true;
+    } catch (err) {
+      enrichResult.value =
+        err instanceof Error ? err.message : "Enrichment failed";
+      enrichSuccess.value = false;
+    } finally {
+      enriching.value = false;
+    }
+  }
+
   const rebuilding = ref(false);
   const rebuildResult = ref<string | null>(null);
   const rebuildSuccess = ref(false);
@@ -153,8 +191,12 @@ export function useDashboard() {
     rebuilding,
     rebuildResult,
     rebuildSuccess,
+    enriching,
+    enrichResult,
+    enrichSuccess,
     setAdminKey,
     fetchDashboard,
     rebuildDigest,
+    enrichComments,
   };
 }
