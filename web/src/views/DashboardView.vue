@@ -14,9 +14,13 @@ const {
   rebuilding,
   rebuildResult,
   rebuildSuccess,
+  enriching,
+  enrichResult,
+  enrichSuccess,
   setAdminKey,
   fetchDashboard,
   rebuildDigest,
+  enrichComments,
 } = useDashboard();
 
 const keyInput = ref("");
@@ -41,6 +45,14 @@ onMounted(fetchDashboard);
         <div class="flex items-center gap-3">
           <button
             v-if="data && !needsAuth"
+            :disabled="enriching"
+            class="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+            @click="enrichComments"
+          >
+            {{ enriching ? "Enriching..." : "Enrich Comments" }}
+          </button>
+          <button
+            v-if="data && !needsAuth"
             :disabled="rebuilding"
             class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             @click="rebuildDigest"
@@ -56,7 +68,7 @@ onMounted(fetchDashboard);
         </div>
       </div>
 
-      <!-- Rebuild result -->
+      <!-- Action results -->
       <div
         v-if="rebuildResult"
         class="mb-4 rounded-lg border px-4 py-2 text-sm"
@@ -67,6 +79,17 @@ onMounted(fetchDashboard);
         "
       >
         {{ rebuildResult }}
+      </div>
+      <div
+        v-if="enrichResult"
+        class="mb-4 rounded-lg border px-4 py-2 text-sm"
+        :class="
+          enrichSuccess
+            ? 'border-green-800 bg-green-950 text-green-300'
+            : 'border-amber-800 bg-amber-950 text-amber-300'
+        "
+      >
+        {{ enrichResult }}
       </div>
 
       <!-- Auth prompt -->
