@@ -823,6 +823,7 @@ describe("POST /api/enrich-comments", () => {
         summary: "Summary",
         sourceName: "Hacker News Frontend",
         sourceUrl: "https://example.com/hn-story",
+        commentsUrl: "https://news.ycombinator.com/item?id=12345",
         position: 1,
       },
       {
@@ -864,6 +865,7 @@ describe("POST /api/enrich-comments", () => {
     );
 
     // Mock HN Firebase — get comment IDs and texts
+    // .persist() because direct URL path skips Algolia but still fetches this item
     const firebaseMock = fetchMock.get("https://hacker-news.firebaseio.com");
     firebaseMock
       .intercept({ method: "GET", path: "/v0/item/12345.json" })
@@ -876,7 +878,8 @@ describe("POST /api/enrich-comments", () => {
           score: 100,
         }),
         { headers: { "content-type": "application/json" } }
-      );
+      )
+      .persist();
     for (const id of [100, 101, 102]) {
       firebaseMock
         .intercept({ method: "GET", path: `/v0/item/${id}.json` })

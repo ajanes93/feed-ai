@@ -19,6 +19,7 @@ const xmlParser = new XMLParser({
 interface FeedItem {
   title?: string;
   link?: string | { "@_href"?: string };
+  comments?: string;
   description?: string;
   "content:encoded"?: string;
   content?: string;
@@ -62,6 +63,7 @@ async function fetchRssFeed(source: Source): Promise<RawItem[]> {
     sourceId: source.id,
     title: stripHtml(String(item.title || "Untitled")),
     link: extractLink(item.link),
+    commentsUrl: typeof item.comments === "string" ? item.comments : undefined,
     content: stripHtml(
       String(
         item["content:encoded"] ||

@@ -105,6 +105,7 @@ function mapDigestItem(row: Record<string, unknown>) {
     whyItMatters: row.why_it_matters,
     sourceName: row.source_name,
     sourceUrl: row.source_url,
+    commentsUrl: row.comments_url ?? undefined,
     publishedAt: row.published_at,
     position: row.position,
     commentSummary: row.comment_summary ?? undefined,
@@ -410,9 +411,9 @@ async function enrichDigestComments(
 
   // Find unenriched items from Reddit or HN sources (skip already-processed)
   const unenriched = await env.DB.prepare(
-    `SELECT id, title, source_url FROM items
+    `SELECT id, title, source_url, comments_url FROM items
      WHERE digest_id = ? AND comment_summary IS NULL AND comment_summary_source IS NULL
-     AND (source_url LIKE '%reddit.com%' OR source_name LIKE 'Hacker News%')
+     AND (source_url LIKE '%reddit.com%' OR source_name LIKE 'Hacker News%' OR comments_url LIKE 'https://news.ycombinator.com/%')
      LIMIT ?`
   )
     .bind(digestId, ENRICH_BATCH_SIZE)
@@ -422,6 +423,7 @@ async function enrichDigestComments(
     id: string;
     title: string;
     source_url: string;
+    comments_url: string | null;
   }>;
 
   if (candidates.length === 0) {
@@ -450,7 +452,8 @@ async function enrichDigestComments(
         item.title,
         item.source_url,
         geminiKey,
-        logs
+        logs,
+        item.comments_url ?? undefined
       );
 
       if (result) {
@@ -503,7 +506,7 @@ async function enrichDigestComments(
   const remainingCount = await env.DB.prepare(
     `SELECT COUNT(*) as count FROM items
      WHERE digest_id = ? AND comment_summary IS NULL AND comment_summary_source IS NULL
-     AND (source_url LIKE '%reddit.com%' OR source_name LIKE 'Hacker News%')`
+     AND (source_url LIKE '%reddit.com%' OR source_name LIKE 'Hacker News%' OR comments_url LIKE 'https://news.ycombinator.com/%')`
   )
     .bind(digestId)
     .first<{ count: number }>();
@@ -580,13 +583,14 @@ async function storeRawItems(
   const statements = items.map((item) =>
     db
       .prepare(
-        "INSERT OR IGNORE INTO raw_items (id, source_id, title, link, content, published_at, date) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT OR IGNORE INTO raw_items (id, source_id, title, link, comments_url, content, published_at, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
       )
       .bind(
         crypto.randomUUID(),
         item.sourceId,
         item.title,
         item.link,
+        item.commentsUrl ?? null,
         item.content?.slice(0, 500) ?? null,
         item.publishedAt ?? null,
         date
@@ -682,6 +686,7 @@ async function loadRecentRawItems(db: D1Database): Promise<RawItem[]> {
     sourceId: row.source_id as string,
     title: (row.title as string) || "",
     link: (row.link as string) || "",
+    commentsUrl: (row.comments_url as string) ?? undefined,
     content: (row.content as string) ?? undefined,
     publishedAt: (row.published_at as number) ?? undefined,
   }));
@@ -1002,7 +1007,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     ).bind(digestId, date, allDigestItems.length),
     ...allDigestItems.map((item) =>
       env.DB.prepare(
-        "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, published_at, position, comment_summary, comment_count, comment_score, comment_summary_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, comments_url, published_at, position, comment_summary, comment_count, comment_score, comment_summary_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(
         item.id,
         item.digestId,
@@ -1012,6 +1017,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
         item.whyItMatters ?? null,
         item.sourceName,
         item.sourceUrl ?? null,
+        item.commentsUrl ?? null,
         item.publishedAt ?? null,
         item.position,
         item.commentSummary ?? null,

@@ -7,6 +7,7 @@ export interface DigestItem {
   whyItMatters?: string;
   sourceName: string;
   sourceUrl: string;
+  commentsUrl?: string;
   publishedAt?: string;
   position: number;
   commentSummary?: string;
