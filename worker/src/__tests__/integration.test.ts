@@ -865,7 +865,7 @@ describe("POST /api/enrich-comments", () => {
     );
 
     // Mock HN Firebase — get comment IDs and texts
-    // .persist() because fetchHNItemDirect + fetchHNCommentTexts both fetch item 12345
+    // .persist() because direct URL path skips Algolia but still fetches this item
     const firebaseMock = fetchMock.get("https://hacker-news.firebaseio.com");
     firebaseMock
       .intercept({ method: "GET", path: "/v0/item/12345.json" })

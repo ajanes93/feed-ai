@@ -58,29 +58,25 @@ async function fetchRssFeed(source: Source): Promise<RawItem[]> {
   const parsed = xmlParser.parse(xml);
   const items = extractItems(parsed);
 
-  return items.slice(0, ITEM_LIMIT).map((item) => {
-    const commentsUrl =
-      typeof item.comments === "string" ? item.comments : undefined;
-    return {
-      id: crypto.randomUUID(),
-      sourceId: source.id,
-      title: stripHtml(String(item.title || "Untitled")),
-      link: extractLink(item.link),
-      commentsUrl,
-      content: stripHtml(
-        String(
-          item["content:encoded"] ||
-            item.content ||
-            item.description ||
-            item.summary ||
-            ""
-        )
-      ),
-      publishedAt: parsePublishedDate(
-        item.pubDate || item.published || item.updated
-      ),
-    };
-  });
+  return items.slice(0, ITEM_LIMIT).map((item) => ({
+    id: crypto.randomUUID(),
+    sourceId: source.id,
+    title: stripHtml(String(item.title || "Untitled")),
+    link: extractLink(item.link),
+    commentsUrl: typeof item.comments === "string" ? item.comments : undefined,
+    content: stripHtml(
+      String(
+        item["content:encoded"] ||
+          item.content ||
+          item.description ||
+          item.summary ||
+          ""
+      )
+    ),
+    publishedAt: parsePublishedDate(
+      item.pubDate || item.published || item.updated
+    ),
+  }));
 }
 
 interface JobicyJob {

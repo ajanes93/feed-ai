@@ -478,7 +478,7 @@ function isEligibleSource(
     REDDIT_SOURCE_IDS.has(sourceId) ||
     isRedditUrl(sourceUrl) ||
     HN_SOURCE_IDS.has(sourceId) ||
-    (!!commentsUrl && commentsUrl.startsWith("https://news.ycombinator.com/"))
+    !!commentsUrl?.startsWith("https://news.ycombinator.com/")
   );
 }
 
