@@ -413,7 +413,7 @@ async function enrichDigestComments(
   const unenriched = await env.DB.prepare(
     `SELECT id, title, source_url, comments_url FROM items
      WHERE digest_id = ? AND comment_summary IS NULL AND comment_summary_source IS NULL
-     AND (source_url LIKE '%reddit.com%' OR source_name LIKE 'Hacker News%' OR comments_url LIKE '%news.ycombinator.com%')
+     AND (source_url LIKE '%reddit.com%' OR source_name LIKE 'Hacker News%' OR comments_url LIKE 'https://news.ycombinator.com/%')
      LIMIT ?`
   )
     .bind(digestId, ENRICH_BATCH_SIZE)
@@ -506,7 +506,7 @@ async function enrichDigestComments(
   const remainingCount = await env.DB.prepare(
     `SELECT COUNT(*) as count FROM items
      WHERE digest_id = ? AND comment_summary IS NULL AND comment_summary_source IS NULL
-     AND (source_url LIKE '%reddit.com%' OR source_name LIKE 'Hacker News%' OR comments_url LIKE '%news.ycombinator.com%')`
+     AND (source_url LIKE '%reddit.com%' OR source_name LIKE 'Hacker News%' OR comments_url LIKE 'https://news.ycombinator.com/%')`
   )
     .bind(digestId)
     .first<{ count: number }>();
