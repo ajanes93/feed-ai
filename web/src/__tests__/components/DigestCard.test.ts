@@ -197,6 +197,71 @@ describe("DigestCard", () => {
     });
   });
 
+  describe("discussion link", () => {
+    it("renders 'View discussion' link when commentsUrl is set", () => {
+      const item = digestItemFactory.build({
+        commentsUrl: "https://news.ycombinator.com/item?id=12345",
+      });
+      const { wrapper } = render({ props: { item } });
+      const link = wrapper
+        .findAll("a")
+        .find((a) => a.text().includes("View discussion"));
+      expect(link).toBeDefined();
+      expect(link!.attributes("href")).toBe(
+        "https://news.ycombinator.com/item?id=12345"
+      );
+      expect(link!.attributes("target")).toBe("_blank");
+    });
+
+    it("renders discussion link alongside comment summary", () => {
+      const item = digestItemFactory.build({
+        commentsUrl: "https://news.ycombinator.com/item?id=99999",
+        commentSummary: "Great discussion about the topic.",
+        commentCount: 85,
+        commentScore: 169,
+        commentSummarySource: "generated",
+      });
+      const { wrapper } = render({ props: { item } });
+
+      // Both comment stats and discussion link should be visible
+      expect(wrapper.text()).toContain("85 comments");
+      expect(wrapper.text()).toContain("169 points");
+      const link = wrapper
+        .findAll("a")
+        .find((a) => a.text().includes("View discussion"));
+      expect(link).toBeDefined();
+      expect(link!.attributes("href")).toBe(
+        "https://news.ycombinator.com/item?id=99999"
+      );
+    });
+
+    it("does not render discussion link when commentsUrl is absent", () => {
+      const item = digestItemFactory.build({
+        commentsUrl: undefined,
+        commentSummary: undefined,
+      });
+      const { wrapper } = render({ props: { item } });
+      const link = wrapper
+        .findAll("a")
+        .find((a) => a.text().includes("View discussion"));
+      expect(link).toBeUndefined();
+    });
+
+    it("shows comment icon when commentsUrl exists without commentSummary", () => {
+      const item = digestItemFactory.build({
+        commentsUrl: "https://news.ycombinator.com/item?id=12345",
+        commentSummary: undefined,
+      });
+      const { wrapper } = render({ props: { item } });
+      // The discussion link should have the comment bubble SVG icon
+      const link = wrapper
+        .findAll("a")
+        .find((a) => a.text().includes("View discussion"));
+      expect(link).toBeDefined();
+      expect(link!.find("svg").exists()).toBe(true);
+    });
+  });
+
   describe("favicon", () => {
     it("renders favicon image from source URL", () => {
       const { wrapper } = render();

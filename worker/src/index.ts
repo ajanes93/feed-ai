@@ -579,11 +579,11 @@ async function storeRawItems(
 ): Promise<void> {
   if (items.length === 0) return;
 
-  // INSERT OR IGNORE — duplicates (same source_id + link) are silently skipped
+  // Upsert: insert new items, update comments_url for existing ones
   const statements = items.map((item) =>
     db
       .prepare(
-        "INSERT OR IGNORE INTO raw_items (id, source_id, title, link, comments_url, content, published_at, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO raw_items (id, source_id, title, link, comments_url, content, published_at, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(source_id, link) DO UPDATE SET comments_url = excluded.comments_url WHERE excluded.comments_url IS NOT NULL"
       )
       .bind(
         crypto.randomUUID(),
