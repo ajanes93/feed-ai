@@ -24,6 +24,8 @@ async function mockApiWithComments(page: Page) {
             sourceName: "r/LocalLLaMA",
             sourceUrl:
               "https://www.reddit.com/r/LocalLLaMA/comments/abc/post",
+            commentsUrl:
+              "https://www.reddit.com/r/LocalLLaMA/comments/abc/post",
           },
           1,
         ),
@@ -48,6 +50,7 @@ async function mockApiWithComments(page: Page) {
             title: "New LLM Training Technique",
             sourceName: "Hacker News AI",
             sourceUrl: "https://example.com/llm-training",
+            commentsUrl: "https://news.ycombinator.com/item?id=42345",
           },
           3,
         ),
@@ -136,6 +139,50 @@ test.describe("Comment summaries", () => {
     await toggleBtn.click();
     await expect(
       aiSlide.getByText("AI-generated summary").first(),
+    ).not.toBeVisible();
+  });
+
+  test("discussion link points to correct URL", async ({ page }) => {
+    await page.goto("/");
+
+    const aiSlide = feedSlide(page, "ai");
+
+    // First item has Reddit commentsUrl
+    const firstArticle = aiSlide.locator("article").first();
+    const link = firstArticle.locator('a:has-text("View discussion")');
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute(
+      "href",
+      "https://www.reddit.com/r/LocalLLaMA/comments/abc/post",
+    );
+    await expect(link).toHaveAttribute("target", "_blank");
+  });
+
+  test("discussion link coexists with comment summary toggle", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    const aiSlide = feedSlide(page, "ai");
+    const firstArticle = aiSlide.locator("article").first();
+
+    // Both comment stats and discussion link should be visible simultaneously
+    await expect(firstArticle.getByText("142 comments")).toBeVisible();
+    await expect(
+      firstArticle.locator('a:has-text("View discussion")'),
+    ).toBeVisible();
+  });
+
+  test("no discussion link for items without commentsUrl", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    const devSlide = feedSlide(page, "dev");
+    await expect(devSlide.getByText("Vue 4 Announced")).toBeVisible();
+    // Dev item has no commentsUrl, so no discussion link
+    await expect(
+      devSlide.locator('a:has-text("View discussion")'),
     ).not.toBeVisible();
   });
 });

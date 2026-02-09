@@ -18,6 +18,7 @@ function buildDigestItem(
     whyItMatters: string;
     sourceName: string;
     sourceUrl: string;
+    commentsUrl: string;
     publishedAt: string;
     position: number;
   }> = {},
@@ -31,6 +32,7 @@ function buildDigestItem(
     whyItMatters: overrides.whyItMatters ?? "This matters for testing",
     sourceName: overrides.sourceName ?? "Test Source",
     sourceUrl: overrides.sourceUrl ?? `https://example.com/${seq}`,
+    ...(overrides.commentsUrl && { commentsUrl: overrides.commentsUrl }),
     publishedAt: overrides.publishedAt ?? "2025-01-28T10:00:00Z",
     position: overrides.position ?? seq,
   };
