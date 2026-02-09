@@ -35,6 +35,38 @@ describe("generateDigest", () => {
     expect(result.aiUsages[0].status).toBe("success");
   });
 
+  it("uses source config name instead of AI-provided source_name", async () => {
+    const items = rawItemFactory.buildList(2, {}, { transient: {} });
+    // Override sourceId to match a real source in config
+    items[0].sourceId = "hn-ai";
+    items[1].sourceId = "vue-blog";
+
+    // AI returns wrong source names — code should override with config names
+    const response = JSON.stringify([
+      {
+        item_index: 0,
+        title: items[0].title,
+        summary: "Summary",
+        category: "ai",
+        source_name: "hn-ai",
+      },
+      {
+        item_index: 1,
+        title: items[1].title,
+        summary: "Summary",
+        category: "dev",
+        source_name: "Wrong Name",
+      },
+    ]);
+
+    mockGeminiSuccess(response);
+
+    const result = await generateDigest(items, { gemini: "test-key" }, "news");
+
+    expect(result.items[0].sourceName).toBe("Hacker News AI");
+    expect(result.items[1].sourceName).toBe("Vue.js Blog");
+  });
+
   it("falls back to Claude when Gemini fails", async () => {
     const items = rawItemFactory.buildList(3);
     const response = aiResponse(items, [0, 1]);
