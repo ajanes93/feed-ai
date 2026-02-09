@@ -5,6 +5,7 @@ export interface RawItem {
   sourceId: string;
   title: string;
   link: string;
+  commentsUrl?: string;
   content?: string;
   publishedAt?: number;
 }

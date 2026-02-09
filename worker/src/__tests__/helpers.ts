@@ -81,6 +81,7 @@ export async function seedDigest(
     summary: string;
     sourceName: string;
     sourceUrl: string;
+    commentsUrl?: string;
     position: number;
     whyItMatters?: string;
     commentSummary?: string;
@@ -96,7 +97,7 @@ export async function seedDigest(
     ...items.map((item) =>
       db
         .prepare(
-          "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, position, comment_summary, comment_count, comment_score, comment_summary_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, comments_url, position, comment_summary, comment_count, comment_score, comment_summary_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           item.id,
@@ -107,6 +108,7 @@ export async function seedDigest(
           item.whyItMatters ?? null,
           item.sourceName,
           item.sourceUrl,
+          item.commentsUrl ?? null,
           item.position,
           item.commentSummary ?? null,
           item.commentCount ?? null,

@@ -491,6 +491,7 @@ export async function generateDigest(
       whyItMatters: item.why_it_matters,
       sourceName: item.source_name,
       sourceUrl: rawItem.link,
+      commentsUrl: rawItem.commentsUrl,
       publishedAt: rawItem.publishedAt
         ? new Date(rawItem.publishedAt).toISOString()
         : undefined,

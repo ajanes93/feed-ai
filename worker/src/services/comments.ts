@@ -252,10 +252,47 @@ async function fetchHNCommentTexts(
   }
 }
 
+/**
+ * Extract the HN item ID from a news.ycombinator.com URL.
+ * e.g. "https://news.ycombinator.com/item?id=12345" → "12345"
+ */
+function extractHNItemId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "news.ycombinator.com") {
+      return parsed.searchParams.get("id");
+    }
+  } catch {
+    // ignore invalid URLs
+  }
+  return null;
+}
+
 async function fetchHNComments(
   articleUrl: string,
-  logs: SummarizerLog[]
+  logs: SummarizerLog[],
+  commentsUrl?: string
 ): Promise<CommentData | null> {
+  // If we have a direct HN comments URL, extract the item ID and skip Algolia
+  if (commentsUrl) {
+    const directId = extractHNItemId(commentsUrl);
+    if (directId) {
+      logs.push({
+        level: "info",
+        message: `HN: using direct item ID ${directId} from comments URL`,
+      });
+      const item = await fetchHNItemDirect(directId, logs);
+      if (!item) return null;
+      const comments = await fetchHNCommentTexts(directId, logs);
+      return {
+        score: item.score,
+        commentCount: item.commentCount,
+        comments,
+      };
+    }
+  }
+
+  // Fallback: search Algolia by article URL
   const hnItem = await findHNItemByUrl(articleUrl, logs);
   if (!hnItem) return null;
 
@@ -266,6 +303,39 @@ async function fetchHNComments(
     commentCount: hnItem.commentCount,
     comments,
   };
+}
+
+/**
+ * Fetch HN item metadata directly from Firebase by item ID.
+ */
+async function fetchHNItemDirect(
+  itemId: string,
+  logs: SummarizerLog[]
+): Promise<{ score: number; commentCount: number } | null> {
+  try {
+    const response = await fetch(
+      `https://hacker-news.firebaseio.com/v0/item/${itemId}.json`,
+      { headers: { "User-Agent": USER_AGENT } }
+    );
+    if (!response.ok) {
+      logs.push({
+        level: "warn",
+        message: `HN: Firebase HTTP ${response.status} for item ${itemId}`,
+      });
+      return null;
+    }
+    const item = (await response.json()) as HNItem;
+    return {
+      score: item.score ?? 0,
+      commentCount: item.descendants ?? 0,
+    };
+  } catch (err) {
+    logs.push({
+      level: "warn",
+      message: `HN: Firebase fetch error for item ${itemId}: ${err instanceof Error ? err.message : String(err)}`,
+    });
+    return null;
+  }
 }
 
 // --- Comment summarization via Gemini ---
@@ -371,14 +441,15 @@ export async function enrichSingleItem(
   title: string,
   sourceUrl: string,
   geminiKey: string,
-  logs: SummarizerLog[]
+  logs: SummarizerLog[],
+  commentsUrl?: string
 ): Promise<SingleItemEnrichment | null> {
   const isReddit = isRedditUrl(sourceUrl);
   const platform = isReddit ? "Reddit" : "HN";
 
   const commentData = isReddit
     ? await fetchRedditComments(sourceUrl, logs)
-    : await fetchHNComments(sourceUrl, logs);
+    : await fetchHNComments(sourceUrl, logs, commentsUrl);
 
   if (!commentData) {
     logs.push({
@@ -429,11 +500,16 @@ interface CommentEnrichmentResult {
   logs: SummarizerLog[];
 }
 
-function isEligibleSource(sourceUrl: string, sourceId: string): boolean {
+function isEligibleSource(
+  sourceUrl: string,
+  sourceId: string,
+  commentsUrl?: string
+): boolean {
   return (
     REDDIT_SOURCE_IDS.has(sourceId) ||
     isRedditUrl(sourceUrl) ||
-    HN_SOURCE_IDS.has(sourceId)
+    HN_SOURCE_IDS.has(sourceId) ||
+    (!!commentsUrl && commentsUrl.includes("news.ycombinator.com"))
   );
 }
 
@@ -460,14 +536,15 @@ export async function enrichWithCommentSummaries(
     const item = enrichedItems[i];
     const sourceId = sourceIdMap.get(item.sourceUrl) ?? "";
 
-    if (!isEligibleSource(item.sourceUrl, sourceId)) continue;
+    if (!isEligibleSource(item.sourceUrl, sourceId, item.commentsUrl)) continue;
 
     try {
       const result = await enrichSingleItem(
         item.title,
         item.sourceUrl,
         apiKeys.gemini,
-        logs
+        logs,
+        item.commentsUrl
       );
 
       if (result) {
