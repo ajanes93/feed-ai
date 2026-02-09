@@ -253,10 +253,6 @@ async function fetchHNItemWithComments(
   }
 }
 
-/**
- * Extract the HN item ID from a news.ycombinator.com URL.
- * e.g. "https://news.ycombinator.com/item?id=12345" → "12345"
- */
 function extractHNItemId(url: string): string | null {
   try {
     const parsed = new URL(url);
@@ -265,7 +261,7 @@ function extractHNItemId(url: string): string | null {
       return id && /^\d+$/.test(id) ? id : null;
     }
   } catch {
-    // ignore invalid URLs
+    return null;
   }
   return null;
 }
@@ -275,15 +271,14 @@ async function fetchHNComments(
   logs: SummarizerLog[],
   commentsUrl?: string
 ): Promise<CommentData | null> {
-  // If we have a direct HN comments URL, extract the item ID and skip Algolia
   if (commentsUrl) {
-    const directId = extractHNItemId(commentsUrl);
-    if (directId) {
+    const itemId = extractHNItemId(commentsUrl);
+    if (itemId) {
       logs.push({
         level: "info",
-        message: `HN: using direct item ID ${directId} from comments URL`,
+        message: `HN: using direct item ID ${itemId} from comments URL`,
       });
-      const result = await fetchHNItemWithComments(directId, logs);
+      const result = await fetchHNItemWithComments(itemId, logs);
       if (!result) return null;
       return {
         score: result.item.score ?? 0,
@@ -293,7 +288,6 @@ async function fetchHNComments(
     }
   }
 
-  // Fallback: search Algolia by article URL
   const hnItem = await findHNItemByUrl(articleUrl, logs);
   if (!hnItem) return null;
 
