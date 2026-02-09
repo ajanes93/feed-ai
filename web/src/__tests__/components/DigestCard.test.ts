@@ -198,7 +198,7 @@ describe("DigestCard", () => {
   });
 
   describe("discussion link", () => {
-    it("renders 'View discussion' link when commentsUrl is set", () => {
+    it("renders 'View discussion' link with icon when commentsUrl is set", () => {
       const item = digestItemFactory.build({
         commentsUrl: "https://news.ycombinator.com/item?id=12345",
       });
@@ -211,6 +211,7 @@ describe("DigestCard", () => {
         "https://news.ycombinator.com/item?id=12345"
       );
       expect(link!.attributes("target")).toBe("_blank");
+      expect(link!.find("svg").exists()).toBe(true);
     });
 
     it("renders discussion link alongside comment summary", () => {
@@ -245,20 +246,6 @@ describe("DigestCard", () => {
         .findAll("a")
         .find((a) => a.text().includes("View discussion"));
       expect(link).toBeUndefined();
-    });
-
-    it("shows comment icon when commentsUrl exists without commentSummary", () => {
-      const item = digestItemFactory.build({
-        commentsUrl: "https://news.ycombinator.com/item?id=12345",
-        commentSummary: undefined,
-      });
-      const { wrapper } = render({ props: { item } });
-      // The discussion link should have the comment bubble SVG icon
-      const link = wrapper
-        .findAll("a")
-        .find((a) => a.text().includes("View discussion"));
-      expect(link).toBeDefined();
-      expect(link!.find("svg").exists()).toBe(true);
     });
   });
 

@@ -579,11 +579,11 @@ async function storeRawItems(
 ): Promise<void> {
   if (items.length === 0) return;
 
-  // Upsert: insert new items, update comments_url for existing ones
+  // Upsert: insert new items, backfill comments_url only when missing
   const statements = items.map((item) =>
     db
       .prepare(
-        "INSERT INTO raw_items (id, source_id, title, link, comments_url, content, published_at, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(source_id, link) DO UPDATE SET comments_url = excluded.comments_url WHERE excluded.comments_url IS NOT NULL"
+        "INSERT INTO raw_items (id, source_id, title, link, comments_url, content, published_at, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(source_id, link) DO UPDATE SET comments_url = excluded.comments_url WHERE excluded.comments_url IS NOT NULL AND raw_items.comments_url IS NULL"
       )
       .bind(
         crypto.randomUUID(),

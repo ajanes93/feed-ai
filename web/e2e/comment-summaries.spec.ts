@@ -142,18 +142,6 @@ test.describe("Comment summaries", () => {
     ).not.toBeVisible();
   });
 
-  test("shows 'View discussion' link when commentsUrl is set", async ({
-    page,
-  }) => {
-    await page.goto("/");
-
-    const aiSlide = feedSlide(page, "ai");
-
-    // Items with commentsUrl should show the discussion link
-    const discussionLinks = aiSlide.getByText("View discussion");
-    await expect(discussionLinks.first()).toBeVisible();
-  });
-
   test("discussion link points to correct URL", async ({ page }) => {
     await page.goto("/");
 
