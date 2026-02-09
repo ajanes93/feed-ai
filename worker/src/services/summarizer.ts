@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { RawItem, DigestItem, countByCategory } from "../types";
 import { todayDate } from "@feed-ai/shared/utils";
-import { CATEGORY_LIMITS } from "../sources";
+import { CATEGORY_LIMITS, sources } from "../sources";
 import type { AIUsageEntry } from "./logger";
 
 interface DigestItemRaw {
@@ -480,6 +480,8 @@ export async function generateDigest(
     });
   }
 
+  const sourceNameMap = new Map(sources.map((s) => [s.id, s.name]));
+
   const digestItems: DigestItem[] = limited.map((item, index) => {
     const rawItem = items[item.item_index];
     return {
@@ -489,7 +491,7 @@ export async function generateDigest(
       title: item.title,
       summary: item.summary,
       whyItMatters: item.why_it_matters,
-      sourceName: item.source_name,
+      sourceName: sourceNameMap.get(rawItem.sourceId) ?? item.source_name,
       sourceUrl: rawItem.link,
       commentsUrl: rawItem.commentsUrl,
       publishedAt: rawItem.publishedAt
