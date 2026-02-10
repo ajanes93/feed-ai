@@ -18,3 +18,7 @@ export function parsePublishedDate(dateStr?: string): number | undefined {
   const timestamp = new Date(dateStr).getTime();
   return isNaN(timestamp) ? undefined : timestamp;
 }
+
+export function parseEpochTimestamp(epoch?: number): number | undefined {
+  return epoch ? epoch * 1000 : undefined;
+}
