@@ -149,6 +149,97 @@ describe("useDashboard", () => {
     });
   });
 
+  describe("fetchSources", () => {
+    it("calls POST /api/fetch with auth header", async () => {
+      const fetchSpy = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({ totalItems: 50, sourcesOk: 40, sourcesTotal: 44 }),
+      });
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const { fetchSources } = useDashboard();
+      await fetchSources();
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining("/api/fetch"),
+        expect.objectContaining({
+          method: "POST",
+          headers: { Authorization: "Bearer test-key" },
+        })
+      );
+    });
+
+    it("sets fetchResult on success", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              totalItems: 50,
+              sourcesOk: 40,
+              sourcesTotal: 44,
+            }),
+        })
+      );
+
+      const { fetchResult, fetchSuccess, fetchSources } = useDashboard();
+      await fetchSources();
+
+      expect(fetchResult.value).toBe("Fetched 50 items from 40/44 sources");
+      expect(fetchSuccess.value).toBe(true);
+    });
+
+    it("sets fetchResult to error on failure", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 500,
+          json: () => Promise.resolve({ error: "Timeout" }),
+        })
+      );
+
+      const { fetchResult, fetchSuccess, fetchSources } = useDashboard();
+      await fetchSources();
+
+      expect(fetchResult.value).toBe("Timeout");
+      expect(fetchSuccess.value).toBe(false);
+    });
+
+    it("clears auth on 401", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({}),
+        })
+      );
+
+      const { needsAuth, fetchSources } = useDashboard();
+      await fetchSources();
+
+      expect(needsAuth.value).toBe(true);
+      expect(sessionStorage.getItem("admin_key")).toBeNull();
+    });
+
+    it("requires auth when no admin key is set", async () => {
+      sessionStorage.clear();
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const { needsAuth, fetchSources } = useDashboard();
+      await fetchSources();
+
+      expect(needsAuth.value).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe("rebuildDigest", () => {
     it("calls POST /api/rebuild with auth header", async () => {
       const fetchSpy = vi.fn().mockResolvedValue({

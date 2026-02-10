@@ -370,6 +370,15 @@ onMounted(async () => {
                       class="h-full overflow-y-scroll overscroll-contain pb-[calc(2rem+env(safe-area-inset-bottom))]"
                     >
                       <DigestFeed :items="itemsForCategory(cat)" />
+                      <p class="py-6 text-center text-xs text-gray-600">
+                        <a
+                          href="https://andresjanes.com"
+                          target="_blank"
+                          rel="noopener"
+                          class="transition hover:text-gray-400"
+                          >andresjanes.com</a
+                        >
+                      </p>
                     </div>
                   </SwiperSlide>
                 </Swiper>
