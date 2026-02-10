@@ -37,8 +37,8 @@ export function useDigest() {
       const res = await fetch(url);
       if (!res.ok) {
         error.value =
-          res.status === 404
-            ? notFoundMessage || "Failed to load digest"
+          res.status === 404 && notFoundMessage
+            ? notFoundMessage
             : "Failed to load digest";
         digest.value = null;
         return;

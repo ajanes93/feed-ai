@@ -69,13 +69,6 @@ export function useDashboard() {
     needsAuth.value = true;
   }
 
-  function handleUnauthorized(res: Response) {
-    if (res.status === 401) {
-      clearAdminKey();
-      throw new Error("Invalid admin key");
-    }
-  }
-
   const enriching = ref(false);
   const enrichResult = ref<string | null>(null);
   const enrichSuccess = ref(false);
@@ -96,7 +89,10 @@ export function useDashboard() {
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
 
-      handleUnauthorized(res);
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
 
       const body = await res.json();
       if (!res.ok) {
@@ -134,7 +130,10 @@ export function useDashboard() {
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
 
-      handleUnauthorized(res);
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
 
       const text = await res.text();
       if (!res.ok) {
@@ -167,7 +166,10 @@ export function useDashboard() {
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
 
-      handleUnauthorized(res);
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
 
       if (!res.ok) {
         throw new Error("Failed to load dashboard");
