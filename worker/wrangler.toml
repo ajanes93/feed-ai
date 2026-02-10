@@ -15,5 +15,7 @@ migrations_dir = "migrations"
 [observability]
 enabled = true
 
+[vars]
+SELF_URL = "https://feed-ai-api.andresjanes.workers.dev"
 
 # ANTHROPIC_API_KEY — set via Cloudflare dashboard (Workers > Settings > Secrets)
