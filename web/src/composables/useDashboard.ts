@@ -1,6 +1,5 @@
 import { ref } from "vue";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8787";
 const STORAGE_KEY = "admin_key";
 
 export interface AIUsageEntry {
@@ -92,7 +91,7 @@ export function useDashboard() {
     enrichSuccess.value = false;
 
     try {
-      const res = await fetch(`${API_BASE}/api/enrich-comments`, {
+      const res = await fetch(`/api/enrich-comments`, {
         method: "POST",
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
@@ -130,7 +129,7 @@ export function useDashboard() {
     rebuildSuccess.value = false;
 
     try {
-      const res = await fetch(`${API_BASE}/api/rebuild`, {
+      const res = await fetch(`/api/rebuild`, {
         method: "POST",
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
@@ -164,7 +163,7 @@ export function useDashboard() {
     error.value = null;
 
     try {
-      const res = await fetch(`${API_BASE}/api/admin/dashboard`, {
+      const res = await fetch(`/api/admin/dashboard`, {
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
 

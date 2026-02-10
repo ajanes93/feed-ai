@@ -2,8 +2,6 @@ import { ref, computed } from "vue";
 import type { Digest } from "../types";
 import { todayDate } from "@feed-ai/shared/utils";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8787";
-
 export function useDigest() {
   const digest = ref<Digest | null>(null);
   const loading = ref(false);
@@ -15,7 +13,7 @@ export function useDigest() {
 
   async function fetchDigestList() {
     try {
-      const res = await fetch(`${API_BASE}/api/digests`);
+      const res = await fetch(`/api/digests`);
       if (!res.ok) return;
       const list: Array<{ date: string }> = await res.json();
       availableDates.value = list.map((d) => d.date);
@@ -64,7 +62,7 @@ export function useDigest() {
     const today = todayDate();
     if (availableDates.value.includes(today)) {
       viewingToday.value = false;
-      await fetchDigest(`${API_BASE}/api/digest/${today}`);
+      await fetchDigest(`/api/digest/${today}`);
     } else {
       showTodayEmpty();
     }
@@ -73,7 +71,7 @@ export function useDigest() {
   async function fetchDate(date: string, keepCurrent = false) {
     if (availableDates.value.length === 0) await fetchDigestList();
     viewingToday.value = false;
-    await fetchDigest(`${API_BASE}/api/digest/${date}`, undefined, keepCurrent);
+    await fetchDigest(`/api/digest/${date}`, undefined, keepCurrent);
   }
 
   function showTodayEmpty() {

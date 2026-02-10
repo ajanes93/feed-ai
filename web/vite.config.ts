@@ -9,5 +9,8 @@ export default defineConfig({
     fs: {
       allow: [path.resolve(__dirname, "..")],
     },
+    proxy: {
+      "/api": "http://localhost:8787",
+    },
   },
 });
