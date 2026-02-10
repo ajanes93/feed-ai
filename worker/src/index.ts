@@ -141,6 +141,7 @@ app.use(
   cors({
     origin: [
       "https://feed-ai.andresjanes.com",
+      "https://feed-ai.pages.dev",
       "http://localhost:5173",
     ],
     allowHeaders: ["Content-Type", "Authorization"],
