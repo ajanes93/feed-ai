@@ -15,7 +15,7 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   GEMINI_API_KEY?: string;
   ADMIN_KEY: string;
-  SELF_URL: string;
+  SELF: Fetcher;
 }
 
 export function countByCategory(

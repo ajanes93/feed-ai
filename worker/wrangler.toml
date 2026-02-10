@@ -15,5 +15,9 @@ migrations_dir = "migrations"
 [observability]
 enabled = true
 
+# Service binding to self (used for comment enrichment chaining)
+[[services]]
+binding = "SELF"
+service = "feed-ai-api"
 
 # ANTHROPIC_API_KEY — set via Cloudflare dashboard (Workers > Settings > Secrets)

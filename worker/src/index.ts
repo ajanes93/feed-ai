@@ -372,17 +372,21 @@ function safeWaitUntil(
 
 const MAX_ENRICHMENT_ROUNDS = 10;
 
-function fireEnrichmentSafe(env: Env, round: number): Promise<unknown> {
-  return fetch(`${env.SELF_URL}/api/enrich-comments?round=${round}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.ADMIN_KEY}` },
-  }).catch((err) =>
-    logEvent(env.DB, {
+async function fireEnrichmentSafe(env: Env, round: number) {
+  try {
+    await env.SELF.fetch(
+      new Request(`https://self/api/enrich-comments?round=${round}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${env.ADMIN_KEY}` },
+      })
+    );
+  } catch (err) {
+    await logEvent(env.DB, {
       level: "error",
       category: "digest",
       message: `Failed to fire comment enrichment: ${err instanceof Error ? err.message : String(err)}`,
-    })
-  );
+    });
+  }
 }
 
 app.post("/api/enrich-comments", async (c) => {
