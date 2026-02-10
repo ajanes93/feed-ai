@@ -4,6 +4,7 @@ import { RawItem } from "../types";
 import { fetchBlueskySource } from "./bluesky";
 import { fetchScrapeSource } from "./scrape";
 import { fetchHNHiring } from "./hn-hiring";
+import { fetchHimalayas } from "./himalayas";
 import {
   stripHtml,
   parsePublishedDate,
@@ -116,9 +117,12 @@ async function fetchJsonApi(source: Source): Promise<RawItem[]> {
 
 export async function fetchSource(source: Source): Promise<RawItem[]> {
   try {
-    // Special case: hn-hiring uses Algolia API instead of RSS
+    // Special cases: sources with custom API formats
     if (source.id === "hn-hiring") {
       return await fetchHNHiring(source);
+    }
+    if (source.id === "himalayas-vue") {
+      return await fetchHimalayas(source);
     }
 
     switch (source.type) {

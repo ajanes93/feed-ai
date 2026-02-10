@@ -282,7 +282,14 @@ export const sources: Source[] = [
     id: "jobicy-vue-uk",
     name: "Jobicy Vue UK/Remote",
     type: "api",
-    url: "https://jobicy.com/api/v2/remote-jobs?tag=frontend&geo=uk",
+    url: "https://jobicy.com/api/v2/remote-jobs?tag=vue&geo=uk",
+    category: "jobs",
+  },
+  {
+    id: "himalayas-vue",
+    name: "Himalayas Vue",
+    type: "api",
+    url: "https://himalayas.app/jobs/api?limit=20&q=vue",
     category: "jobs",
   },
 
