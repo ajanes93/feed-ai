@@ -144,7 +144,7 @@ app.use(
       const { hostname } = new URL(origin);
       if (hostname === "localhost") return origin;
       if (hostname.endsWith(".andresjanes.com")) return origin;
-      if (hostname.endsWith(".pages.dev")) return origin;
+      if (hostname.endsWith(".andresjanes.pages.dev")) return origin;
       return "";
     },
     allowHeaders: ["Content-Type", "Authorization"],
