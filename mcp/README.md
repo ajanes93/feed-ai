@@ -21,7 +21,7 @@ Admin tools require the `admin_key` parameter (the worker's `ADMIN_KEY` secret).
 The MCP server is deployed as a Cloudflare Worker. Add the worker URL to Claude.ai or Claude mobile MCP settings:
 
 ```
-https://feed-ai-mcp.andresjanes.workers.dev/mcp
+https://feed-ai-mcp.andresjanes.com/mcp
 ```
 
 ## Development

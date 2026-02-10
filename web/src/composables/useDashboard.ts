@@ -1,6 +1,5 @@
 import { ref } from "vue";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8787";
 const STORAGE_KEY = "admin_key";
 
 export interface AIUsageEntry {
@@ -70,13 +69,6 @@ export function useDashboard() {
     needsAuth.value = true;
   }
 
-  function handleUnauthorized(res: Response) {
-    if (res.status === 401) {
-      clearAdminKey();
-      throw new Error("Invalid admin key");
-    }
-  }
-
   const enriching = ref(false);
   const enrichResult = ref<string | null>(null);
   const enrichSuccess = ref(false);
@@ -92,12 +84,15 @@ export function useDashboard() {
     enrichSuccess.value = false;
 
     try {
-      const res = await fetch(`${API_BASE}/api/enrich-comments`, {
+      const res = await fetch(`/api/enrich-comments`, {
         method: "POST",
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
 
-      handleUnauthorized(res);
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
 
       const body = await res.json();
       if (!res.ok) {
@@ -130,12 +125,15 @@ export function useDashboard() {
     rebuildSuccess.value = false;
 
     try {
-      const res = await fetch(`${API_BASE}/api/rebuild`, {
+      const res = await fetch(`/api/rebuild`, {
         method: "POST",
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
 
-      handleUnauthorized(res);
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
 
       const text = await res.text();
       if (!res.ok) {
@@ -164,11 +162,14 @@ export function useDashboard() {
     error.value = null;
 
     try {
-      const res = await fetch(`${API_BASE}/api/admin/dashboard`, {
+      const res = await fetch(`/api/admin/dashboard`, {
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
 
-      handleUnauthorized(res);
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
 
       if (!res.ok) {
         throw new Error("Failed to load dashboard");

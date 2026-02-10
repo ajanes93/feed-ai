@@ -139,11 +139,18 @@ export const app = new Hono<{ Bindings: Env }>();
 app.use(
   "/*",
   cors({
-    origin: [
-      "https://feed-ai.pages.dev",
-      "https://feed-ai.andresjanes.com",
-      "http://localhost:5173",
-    ],
+    origin: (origin) => {
+      if (!origin) return "";
+      const { hostname } = new URL(origin);
+      if (
+        hostname === "localhost" ||
+        hostname.endsWith(".andresjanes.com") ||
+        hostname.endsWith(".andresjanes.pages.dev")
+      ) {
+        return origin;
+      }
+      return "";
+    },
     allowHeaders: ["Content-Type", "Authorization"],
   })
 );
@@ -365,17 +372,21 @@ function safeWaitUntil(
 
 const MAX_ENRICHMENT_ROUNDS = 10;
 
-function fireEnrichmentSafe(env: Env, round: number): Promise<unknown> {
-  return fetch(`${env.SELF_URL}/api/enrich-comments?round=${round}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.ADMIN_KEY}` },
-  }).catch((err) =>
-    logEvent(env.DB, {
+async function fireEnrichmentSafe(env: Env, round: number) {
+  try {
+    await env.SELF.fetch(
+      new Request(`https://self/api/enrich-comments?round=${round}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${env.ADMIN_KEY}` },
+      })
+    );
+  } catch (err) {
+    await logEvent(env.DB, {
       level: "error",
       category: "digest",
       message: `Failed to fire comment enrichment: ${err instanceof Error ? err.message : String(err)}`,
-    })
-  );
+    });
+  }
 }
 
 app.post("/api/enrich-comments", async (c) => {

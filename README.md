@@ -55,7 +55,7 @@ cd worker && npm run dev
 cd web && npm run dev
 ```
 
-The web dev server connects to `http://localhost:8787` by default (configurable via `VITE_API_BASE`).
+The web dev server proxies `/api/*` to `http://localhost:8787` via Vite. In production, a Pages Function proxies to the worker via service binding.
 
 ### Database
 
@@ -152,12 +152,6 @@ Triggered daily at 6pm UTC via cron, or manually via `POST /api/generate`.
 | `ADMIN_KEY` | Yes | Bearer token for admin endpoints |
 | `GEMINI_API_KEY` | One of these | Google Gemini API key |
 | `ANTHROPIC_API_KEY` | One of these | Anthropic API key |
-
-### Web (build-time)
-
-| Variable | Description |
-| -------- | ----------- |
-| `VITE_API_BASE` | Worker API URL (set in GitHub Actions vars) |
 
 ## Testing
 

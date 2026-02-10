@@ -67,7 +67,6 @@ ln -s ~/.cache/ms-playwright/chromium_headless_shell-1194/chrome-linux/headless_
 - `ADMIN_KEY` — Bearer token for admin endpoints (worker secret)
 - `GEMINI_API_KEY` — Gemini API key, primary AI provider (worker secret)
 - `ANTHROPIC_API_KEY` — Claude API key, fallback provider (worker secret)
-- `VITE_API_BASE` — Worker API URL (frontend build-time, via GitHub Actions)
 
 ## Philosophy
 
