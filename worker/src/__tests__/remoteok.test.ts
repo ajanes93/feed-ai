@@ -179,6 +179,19 @@ describe("fetchRemoteOK", () => {
     expect(items).toEqual([]);
   });
 
+  it("returns empty array when API returns non-array", async () => {
+    fetchMock
+      .get("https://remoteok.com")
+      .intercept({ method: "GET", path: "/api" })
+      .reply(200, JSON.stringify({ error: "rate limited" }), {
+        headers: { "content-type": "application/json" },
+      });
+
+    const items = await fetchRemoteOK(REMOTEOK_SOURCE);
+
+    expect(items).toEqual([]);
+  });
+
   it("limits results to 20 items", async () => {
     const manyJobs = Array.from({ length: 25 }, (_, i) => ({
       position: `Job ${i}`,

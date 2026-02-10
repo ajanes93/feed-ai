@@ -1,6 +1,11 @@
 import { Source } from "../sources";
 import { RawItem } from "../types";
-import { ITEM_LIMIT, USER_AGENT, stripHtml } from "./constants";
+import {
+  ITEM_LIMIT,
+  USER_AGENT,
+  stripHtml,
+  parseEpochTimestamp,
+} from "./constants";
 
 interface HimalayasJob {
   title: string;
@@ -37,6 +42,6 @@ export async function fetchHimalayas(source: Source): Promise<RawItem[]> {
       : job.title || "Untitled",
     link: job.applicationLink || "",
     content: stripHtml(job.description || job.excerpt || ""),
-    publishedAt: job.pubDate ? job.pubDate * 1000 : undefined,
+    publishedAt: parseEpochTimestamp(job.pubDate),
   }));
 }

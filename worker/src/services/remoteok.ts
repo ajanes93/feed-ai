@@ -1,6 +1,11 @@
 import { Source } from "../sources";
 import { RawItem } from "../types";
-import { ITEM_LIMIT, USER_AGENT, stripHtml } from "./constants";
+import {
+  ITEM_LIMIT,
+  USER_AGENT,
+  stripHtml,
+  parseEpochTimestamp,
+} from "./constants";
 
 interface RemoteOKJob {
   slug?: string;
@@ -39,7 +44,8 @@ export async function fetchRemoteOK(source: Source): Promise<RawItem[]> {
     return [];
   }
 
-  const data: unknown[] = await response.json();
+  const data: unknown = await response.json();
+  if (!Array.isArray(data)) return [];
   // First element is a legal notice object — skip it
   const jobs = data.slice(1) as RemoteOKJob[];
 
@@ -54,6 +60,6 @@ export async function fetchRemoteOK(source: Source): Promise<RawItem[]> {
         : job.position || "Untitled",
       link: job.url || "",
       content: stripHtml(job.description || ""),
-      publishedAt: job.epoch ? job.epoch * 1000 : undefined,
+      publishedAt: parseEpochTimestamp(job.epoch),
     }));
 }

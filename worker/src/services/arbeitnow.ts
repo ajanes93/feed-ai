@@ -1,6 +1,11 @@
 import { Source } from "../sources";
 import { RawItem } from "../types";
-import { ITEM_LIMIT, USER_AGENT, stripHtml } from "./constants";
+import {
+  ITEM_LIMIT,
+  USER_AGENT,
+  stripHtml,
+  parseEpochTimestamp,
+} from "./constants";
 
 interface ArbeitnowJob {
   slug?: string;
@@ -19,7 +24,7 @@ interface ArbeitnowResponse {
 }
 
 const RELEVANT_KEYWORDS =
-  /\b(vue|vuejs|vue\.js|nuxt|frontend|front.end|typescript)\b/i;
+  /\b(vue|vuejs|vue\.js|nuxt|frontend|front[.\s-]end|typescript|javascript)\b/i;
 
 function isRelevant(job: ArbeitnowJob): boolean {
   if (!job.remote) return false;
@@ -52,6 +57,6 @@ export async function fetchArbeitnow(source: Source): Promise<RawItem[]> {
         : job.title || "Untitled",
       link: job.url || "",
       content: stripHtml(job.description || ""),
-      publishedAt: job.created_at ? job.created_at * 1000 : undefined,
+      publishedAt: parseEpochTimestamp(job.created_at),
     }));
 }
