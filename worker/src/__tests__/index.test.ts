@@ -326,7 +326,7 @@ describe("CORS", () => {
       {
         method: "OPTIONS",
         headers: {
-          Origin: "https://feed-ai.pages.dev",
+          Origin: "https://feed-ai.andresjanes.com",
           "Access-Control-Request-Method": "POST",
           "Access-Control-Request-Headers": "Authorization",
         },

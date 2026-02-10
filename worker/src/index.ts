@@ -140,7 +140,6 @@ app.use(
   "/*",
   cors({
     origin: [
-      "https://feed-ai.pages.dev",
       "https://feed-ai.andresjanes.com",
       "http://localhost:5173",
     ],
