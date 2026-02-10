@@ -69,6 +69,47 @@ export function useDashboard() {
     needsAuth.value = true;
   }
 
+  const fetching = ref(false);
+  const fetchResult = ref<string | null>(null);
+  const fetchSuccess = ref(false);
+
+  async function fetchSources() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    fetching.value = true;
+    fetchResult.value = null;
+    fetchSuccess.value = false;
+
+    try {
+      const res = await fetch(`/api/fetch`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
+
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || "Fetch failed");
+      }
+
+      fetchResult.value = `Fetched ${body.totalItems} items from ${body.sourcesOk}/${body.sourcesTotal} sources`;
+      fetchSuccess.value = true;
+      await fetchDashboard();
+    } catch (err) {
+      fetchResult.value = err instanceof Error ? err.message : "Fetch failed";
+      fetchSuccess.value = false;
+    } finally {
+      fetching.value = false;
+    }
+  }
+
   const enriching = ref(false);
   const enrichResult = ref<string | null>(null);
   const enrichSuccess = ref(false);
@@ -189,6 +230,9 @@ export function useDashboard() {
     error,
     needsAuth,
     adminKey,
+    fetching,
+    fetchResult,
+    fetchSuccess,
     rebuilding,
     rebuildResult,
     rebuildSuccess,
@@ -197,6 +241,7 @@ export function useDashboard() {
     enrichSuccess,
     setAdminKey,
     fetchDashboard,
+    fetchSources,
     rebuildDigest,
     enrichComments,
   };

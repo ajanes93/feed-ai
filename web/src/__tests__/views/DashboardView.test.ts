@@ -36,7 +36,7 @@ describe("DashboardView", () => {
 
     it("renders back to feed link", async () => {
       const { wrapper } = await render();
-      expect(wrapper.text()).toContain("Back to Feed");
+      expect(wrapper.text()).toContain("Feed");
     });
   });
 
@@ -163,18 +163,18 @@ describe("DashboardView", () => {
   });
 
   describe("rebuild today button", () => {
-    it("renders Rebuild Today button when dashboard is loaded", async () => {
+    it("renders Rebuild button when dashboard is loaded", async () => {
       const { wrapper } = await render();
-      expect(wrapper.text()).toContain("Rebuild Today");
+      expect(wrapper.text()).toContain("Rebuild");
     });
 
-    it("does not render Rebuild Today button before auth", async () => {
+    it("does not render Rebuild button before auth", async () => {
       sessionStorage.clear();
       stubFetchJson(DASHBOARD_DATA);
       const wrapper = mount(DashboardView);
       await flushPromises();
 
-      expect(wrapper.text()).not.toContain("Rebuild Today");
+      expect(wrapper.text()).not.toContain("Rebuild");
     });
 
     it("shows Rebuilding... text while rebuild is in progress", async () => {
@@ -185,7 +185,7 @@ describe("DashboardView", () => {
 
       const rebuildBtn = wrapper
         .findAll("button")
-        .find((b) => b.text().includes("Rebuild Today"));
+        .find((b) => b.text().includes("Rebuild"));
       expect(rebuildBtn).toBeDefined();
       await rebuildBtn!.trigger("click");
       await nextTick();
@@ -219,7 +219,7 @@ describe("DashboardView", () => {
 
       const rebuildBtn = wrapper
         .findAll("button")
-        .find((b) => b.text().includes("Rebuild Today"));
+        .find((b) => b.text().includes("Rebuild"));
       await rebuildBtn!.trigger("click");
       await flushPromises();
 
@@ -240,7 +240,7 @@ describe("DashboardView", () => {
 
       const rebuildBtn = wrapper
         .findAll("button")
-        .find((b) => b.text().includes("Rebuild Today"));
+        .find((b) => b.text().includes("Rebuild"));
       await rebuildBtn!.trigger("click");
       await flushPromises();
 
@@ -254,7 +254,7 @@ describe("DashboardView", () => {
 
       const rebuildBtn = wrapper
         .findAll("button")
-        .find((b) => b.text().includes("Rebuild Today"));
+        .find((b) => b.text().includes("Rebuild"));
       await rebuildBtn!.trigger("click");
       await nextTick();
 

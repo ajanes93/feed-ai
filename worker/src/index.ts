@@ -783,36 +783,7 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
     digestId,
   });
 
-  // --- Fetch fresh + merge with accumulated raw_items ---
-  const fetchStart = Date.now();
-  const { items: freshItems, health } = await fetchAllSources(sources);
-  const fetchMs = Date.now() - fetchStart;
-
-  const successSources = health.filter((h) => h.success);
-  const failedSources = health.filter((h) => !h.success);
-
-  await logEvent(env.DB, {
-    level: "info",
-    category: "fetch",
-    message: `Fetched ${freshItems.length} fresh items from ${successSources.length}/${health.length} sources`,
-    details: {
-      fetchMs,
-      successSources: successSources.map((s) => ({
-        id: s.sourceId,
-        items: s.itemCount,
-      })),
-      failedSources: failedSources.map((s) => ({
-        id: s.sourceId,
-        error: s.error,
-      })),
-    },
-    digestId,
-  });
-
-  await recordSourceHealth(env, health);
-
-  // Store fresh items, then load all accumulated items (today + yesterday)
-  await storeRawItems(env.DB, freshItems, date);
+  // --- Load accumulated raw_items (populated by fetch crons) ---
   const allRawItems = await loadRecentRawItems(env.DB);
 
   await logEvent(env.DB, {
@@ -827,12 +798,6 @@ async function buildAndSaveDigest(env: Env, date: string): Promise<Response> {
       level: "error",
       category: "fetch",
       message: "No items available from any source — aborting digest",
-      details: {
-        failedSources: failedSources.map((s) => ({
-          id: s.sourceId,
-          error: s.error,
-        })),
-      },
       digestId,
     });
     return new Response("No items fetched", { status: 500 });
