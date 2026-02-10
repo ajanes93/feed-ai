@@ -32,6 +32,6 @@ npm run test:e2e  # Run Playwright e2e tests
 - **Vitest** + **Vue Test Utils** for unit tests
 - **Playwright** for e2e tests
 
-## Environment Variables
+## API Proxy
 
-- `VITE_API_BASE` — Worker API URL (defaults to `http://localhost:8787` in dev)
+In dev, Vite proxies `/api/*` to `http://localhost:8787` (see `vite.config.ts`). In production, a Pages Function proxies to the worker via Cloudflare service binding (see `functions/api/[[path]].ts`).

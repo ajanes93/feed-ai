@@ -338,4 +338,43 @@ describe("CORS", () => {
     const allowHeaders = res.headers.get("Access-Control-Allow-Headers");
     expect(allowHeaders).toContain("Authorization");
   });
+
+  it.each([
+    "https://feed-ai.andresjanes.com",
+    "https://other.andresjanes.com",
+    "https://abc123.andresjanes.pages.dev",
+    "http://localhost:5173",
+  ])("allows origin %s", async (origin) => {
+    const res = await app.request(
+      "/api/health",
+      {
+        method: "OPTIONS",
+        headers: {
+          Origin: origin,
+          "Access-Control-Request-Method": "GET",
+        },
+      },
+      env
+    );
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe(origin);
+  });
+
+  it.each([
+    "https://evil.com",
+    "https://notandresjanes.com",
+    "https://evil.pages.dev",
+  ])("rejects origin %s", async (origin) => {
+    const res = await app.request(
+      "/api/health",
+      {
+        method: "OPTIONS",
+        headers: {
+          Origin: origin,
+          "Access-Control-Request-Method": "GET",
+        },
+      },
+      env
+    );
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBeFalsy();
+  });
 });
