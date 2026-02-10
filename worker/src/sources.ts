@@ -249,7 +249,7 @@ export const sources: Source[] = [
     category: "dev",
   },
 
-  // === Jobs (5 sources) ===
+  // === Jobs (9 sources) ===
   {
     id: "vuejobs",
     name: "VueJobs",
@@ -290,6 +290,34 @@ export const sources: Source[] = [
     name: "Himalayas Vue",
     type: "api",
     url: "https://himalayas.app/jobs/api?limit=20&q=vue",
+    category: "jobs",
+  },
+  {
+    id: "remoteok-frontend",
+    name: "RemoteOK Frontend",
+    type: "api",
+    url: "https://remoteok.com/api",
+    category: "jobs",
+  },
+  {
+    id: "arbeitnow-remote",
+    name: "Arbeitnow Remote",
+    type: "api",
+    url: "https://www.arbeitnow.com/api/job-board-api",
+    category: "jobs",
+  },
+  {
+    id: "rwfa-frontend",
+    name: "Real Work From Anywhere",
+    type: "rss",
+    url: "https://www.realworkfromanywhere.com/remote-frontend-jobs/rss.xml",
+    category: "jobs",
+  },
+  {
+    id: "devitjobs-uk",
+    name: "DevITjobs UK",
+    type: "rss",
+    url: "https://devitjobs.uk/job_feed.xml",
     category: "jobs",
   },
 

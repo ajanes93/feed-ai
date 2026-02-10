@@ -5,6 +5,8 @@ import { fetchBlueskySource } from "./bluesky";
 import { fetchScrapeSource } from "./scrape";
 import { fetchHNHiring } from "./hn-hiring";
 import { fetchHimalayas } from "./himalayas";
+import { fetchRemoteOK } from "./remoteok";
+import { fetchArbeitnow } from "./arbeitnow";
 import {
   stripHtml,
   parsePublishedDate,
@@ -123,6 +125,12 @@ export async function fetchSource(source: Source): Promise<RawItem[]> {
     }
     if (source.id === "himalayas-vue") {
       return await fetchHimalayas(source);
+    }
+    if (source.id === "remoteok-frontend") {
+      return await fetchRemoteOK(source);
+    }
+    if (source.id === "arbeitnow-remote") {
+      return await fetchArbeitnow(source);
     }
 
     switch (source.type) {
