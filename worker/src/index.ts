@@ -139,11 +139,14 @@ export const app = new Hono<{ Bindings: Env }>();
 app.use(
   "/*",
   cors({
-    origin: [
-      "https://feed-ai.andresjanes.com",
-      "https://feed-ai.pages.dev",
-      "http://localhost:5173",
-    ],
+    origin: (origin) => {
+      if (!origin) return "";
+      const { hostname } = new URL(origin);
+      if (hostname === "localhost") return origin;
+      if (hostname.endsWith(".andresjanes.com")) return origin;
+      if (hostname.endsWith(".pages.dev")) return origin;
+      return "";
+    },
     allowHeaders: ["Content-Type", "Authorization"],
   })
 );
@@ -366,10 +369,12 @@ function safeWaitUntil(
 const MAX_ENRICHMENT_ROUNDS = 10;
 
 function fireEnrichmentSafe(env: Env, round: number): Promise<unknown> {
-  return fetch(`${env.SELF_URL}/api/enrich-comments?round=${round}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.ADMIN_KEY}` },
-  }).catch((err) =>
+  return env.SELF.fetch(
+    new Request(`https://self/api/enrich-comments?round=${round}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.ADMIN_KEY}` },
+    })
+  ).catch((err) =>
     logEvent(env.DB, {
       level: "error",
       category: "digest",
