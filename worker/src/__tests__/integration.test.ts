@@ -262,7 +262,33 @@ describe("POST /api/generate (end-to-end)", () => {
   });
 
   it("generates a full digest and saves to D1", async () => {
-    mockAllSources();
+    const today = new Date().toISOString().split("T")[0];
+
+    // Seed raw_items (simulating earlier fetch crons)
+    await seedRawItems(env.DB, [
+      {
+        sourceId: "anthropic-news",
+        title: "AI Breakthrough",
+        link: "https://example.com/ai-news",
+        content: "Major AI development",
+        date: today,
+      },
+      {
+        sourceId: "vue-blog",
+        title: "Vue 4 Released",
+        link: "https://example.com/vue-4",
+        content: "New Vue release",
+        date: today,
+      },
+      {
+        sourceId: "vuejobs",
+        title: "Vue Dev Role",
+        link: "https://example.com/vue-job",
+        content: "Remote Vue.js position",
+        date: today,
+      },
+    ]);
+
     mockGeminiForPipeline();
 
     const res = await app.request(
@@ -276,7 +302,6 @@ describe("POST /api/generate (end-to-end)", () => {
     expect(text).toContain("Generated digest with");
 
     // Verify digest saved in D1
-    const today = new Date().toISOString().split("T")[0];
     const digest = await env.DB.prepare("SELECT * FROM digests WHERE date = ?")
       .bind(today)
       .first();
@@ -297,12 +322,6 @@ describe("POST /api/generate (end-to-end)", () => {
     expect(firstItem.summary).toBeTruthy();
     expect(firstItem.category).toBeTruthy();
     expect(firstItem.position).toBe(0);
-
-    // Verify source health was recorded
-    const health = await env.DB.prepare(
-      "SELECT COUNT(*) as count FROM source_health"
-    ).first();
-    expect((health as Record<string, unknown>).count).toBeGreaterThan(0);
 
     // Verify AI usage was recorded
     const aiUsage = await env.DB.prepare(
@@ -456,7 +475,24 @@ describe("POST /api/rebuild (end-to-end)", () => {
       ]
     );
 
-    mockAllSources();
+    // Seed raw_items for rebuild to use
+    await seedRawItems(env.DB, [
+      {
+        sourceId: "anthropic-news",
+        title: "Fresh AI Article",
+        link: "https://example.com/fresh-ai",
+        content: "New content",
+        date: today,
+      },
+      {
+        sourceId: "vuejobs",
+        title: "Vue Dev Role",
+        link: "https://example.com/vue-job",
+        content: "Remote Vue.js position",
+        date: today,
+      },
+    ]);
+
     mockGeminiForPipeline();
 
     const res = await app.request(
@@ -490,12 +526,11 @@ describe("Raw items accumulation", () => {
     fetchMock.disableNetConnect();
   });
 
-  it("generate stores fetched articles in raw_items table", async () => {
+  it("fetch endpoint stores articles in raw_items table", async () => {
     mockAllSources();
-    mockGeminiForPipeline();
 
     const res = await app.request(
-      "/api/generate",
+      "/api/fetch",
       { method: "POST", headers: AUTH_HEADERS },
       env
     );
@@ -760,7 +795,24 @@ describe("Cron scheduled dispatch", () => {
   });
 
   it("dispatches full digest mode at 18:00 UTC", async () => {
-    mockAllSources();
+    const today = new Date().toISOString().split("T")[0];
+    await seedRawItems(env.DB, [
+      {
+        sourceId: "anthropic-news",
+        title: "Cron AI Article",
+        link: "https://example.com/cron-ai",
+        content: "Content",
+        date: today,
+      },
+      {
+        sourceId: "vuejobs",
+        title: "Cron Job Listing",
+        link: "https://example.com/cron-job",
+        content: "Job content",
+        date: today,
+      },
+    ]);
+
     mockGeminiForPipeline();
 
     const event = {
@@ -786,7 +838,6 @@ describe("Cron scheduled dispatch", () => {
     expect(logs.results[0].message as string).toContain("full digest");
 
     // Verify a digest was actually generated
-    const today = new Date().toISOString().split("T")[0];
     const digest = await env.DB.prepare("SELECT * FROM digests WHERE date = ?")
       .bind(today)
       .first();

@@ -11,6 +11,9 @@ const {
   loading,
   error,
   needsAuth,
+  fetching,
+  fetchResult,
+  fetchSuccess,
   rebuilding,
   rebuildResult,
   rebuildSuccess,
@@ -19,6 +22,7 @@ const {
   enrichSuccess,
   setAdminKey,
   fetchDashboard,
+  fetchSources,
   rebuildDigest,
   enrichComments,
 } = useDashboard();
@@ -42,33 +46,52 @@ onMounted(fetchDashboard);
       <!-- Header -->
       <div class="mb-6 flex items-center justify-between">
         <h1 class="text-xl font-semibold text-white">Dashboard</h1>
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
           <button
             v-if="data && !needsAuth"
-            :disabled="enriching"
-            class="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-            @click="enrichComments"
+            :disabled="fetching"
+            class="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:border-gray-500 hover:text-white disabled:opacity-50"
+            @click="fetchSources"
           >
-            {{ enriching ? "Enriching..." : "Enrich Comments" }}
+            {{ fetching ? "Fetching..." : "Fetch" }}
           </button>
           <button
             v-if="data && !needsAuth"
             :disabled="rebuilding"
-            class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            class="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:border-gray-500 hover:text-white disabled:opacity-50"
             @click="rebuildDigest"
           >
-            {{ rebuilding ? "Rebuilding..." : "Rebuild Today" }}
+            {{ rebuilding ? "Rebuilding..." : "Rebuild" }}
+          </button>
+          <button
+            v-if="data && !needsAuth"
+            :disabled="enriching"
+            class="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:border-gray-500 hover:text-white disabled:opacity-50"
+            @click="enrichComments"
+          >
+            {{ enriching ? "Enriching..." : "Enrich" }}
           </button>
           <router-link
             to="/"
-            class="text-sm text-gray-400 hover:text-white"
+            class="text-xs text-gray-500 hover:text-white"
           >
-            Back to Feed
+            Feed
           </router-link>
         </div>
       </div>
 
       <!-- Action results -->
+      <div
+        v-if="fetchResult"
+        class="mb-4 rounded-lg border px-4 py-2 text-sm"
+        :class="
+          fetchSuccess
+            ? 'border-green-800 bg-green-950 text-green-300'
+            : 'border-amber-800 bg-amber-950 text-amber-300'
+        "
+      >
+        {{ fetchResult }}
+      </div>
       <div
         v-if="rebuildResult"
         class="mb-4 rounded-lg border px-4 py-2 text-sm"
