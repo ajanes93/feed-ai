@@ -1071,3 +1071,326 @@ describe("POST /api/enrich-comments", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("POST /api/summarize (incremental)", () => {
+  const today = new Date().toISOString().split("T")[0];
+
+  beforeEach(() => {
+    fetchMock.activate();
+    fetchMock.disableNetConnect();
+  });
+
+  it("creates a new digest from unsummarized items", async () => {
+    await seedRawItems(env.DB, [
+      {
+        sourceId: "anthropic-news",
+        title: "Fresh AI Story",
+        link: "https://example.com/fresh-ai",
+        content: "Big AI news",
+        date: today,
+      },
+      {
+        sourceId: "vue-blog",
+        title: "Vue Update",
+        link: "https://example.com/vue-update",
+        content: "Vue news",
+        date: today,
+      },
+    ]);
+
+    mockGeminiForPipeline();
+
+    const res = await app.request(
+      "/api/summarize",
+      { method: "POST", headers: AUTH_HEADERS },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain("created");
+
+    // Verify digest was created
+    const digest = await env.DB.prepare("SELECT * FROM digests WHERE date = ?")
+      .bind(today)
+      .first();
+    expect(digest).not.toBeNull();
+    expect(digest!.item_count).toBeGreaterThan(0);
+
+    // Verify items were marked as summarized
+    const unsummarized = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM raw_items WHERE date = ? AND summarized_at IS NULL"
+    )
+      .bind(today)
+      .first();
+    expect((unsummarized as Record<string, unknown>).count).toBe(0);
+  });
+
+  it("appends to existing digest on subsequent calls", async () => {
+    // Create an existing digest with one item
+    await seedDigest(
+      env.DB,
+      { id: `digest-${today}`, date: today, itemCount: 1 },
+      [
+        {
+          id: `digest-${today}-0`,
+          category: "ai",
+          title: "Earlier Item",
+          summary: "From morning summarize",
+          sourceName: "Test",
+          sourceUrl: "https://example.com/earlier",
+          position: 0,
+        },
+      ]
+    );
+
+    // Seed new unsummarized items (from a later fetch)
+    await seedRawItems(env.DB, [
+      {
+        sourceId: "anthropic-news",
+        title: "Afternoon AI Story",
+        link: "https://example.com/afternoon-ai",
+        content: "Afternoon content",
+        date: today,
+      },
+    ]);
+
+    mockGeminiForPipeline();
+
+    const res = await app.request(
+      "/api/summarize",
+      { method: "POST", headers: AUTH_HEADERS },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain("appended");
+
+    // Verify digest item_count increased
+    const digest = await env.DB.prepare("SELECT * FROM digests WHERE date = ?")
+      .bind(today)
+      .first();
+    expect(digest!.item_count).toBeGreaterThan(1);
+
+    // Verify original item still exists
+    const original = await env.DB.prepare("SELECT * FROM items WHERE id = ?")
+      .bind(`digest-${today}-0`)
+      .first();
+    expect(original).not.toBeNull();
+    expect(original!.title).toBe("Earlier Item");
+
+    // Verify new items have higher positions
+    const allItems = await env.DB.prepare(
+      "SELECT * FROM items WHERE digest_id = ? ORDER BY position"
+    )
+      .bind(`digest-${today}`)
+      .all();
+    expect(allItems.results.length).toBe(digest!.item_count);
+    // New items should start at position 1
+    const newItems = allItems.results.filter(
+      (i) => i.id !== `digest-${today}-0`
+    );
+    for (const item of newItems) {
+      expect(item.position as number).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("returns early when no unsummarized items exist", async () => {
+    const res = await app.request(
+      "/api/summarize",
+      { method: "POST", headers: AUTH_HEADERS },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain("No new items");
+  });
+
+  it("handles all-duplicate items gracefully", async () => {
+    // Create existing digest with an item
+    await seedDigest(
+      env.DB,
+      { id: `digest-${today}`, date: today, itemCount: 1 },
+      [
+        {
+          id: `digest-${today}-0`,
+          category: "ai",
+          title: "Existing Article",
+          summary: "Already in digest",
+          sourceName: "Test",
+          sourceUrl: "https://example.com/existing",
+          position: 0,
+        },
+      ]
+    );
+
+    // Seed unsummarized item with same URL as existing digest item
+    await seedRawItems(env.DB, [
+      {
+        sourceId: "anthropic-news",
+        title: "Existing Article",
+        link: "https://example.com/existing",
+        content: "Same content",
+        date: today,
+      },
+    ]);
+
+    const res = await app.request(
+      "/api/summarize",
+      { method: "POST", headers: AUTH_HEADERS },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain("duplicates");
+
+    // Items should still be marked as summarized (not retried)
+    const unsummarized = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM raw_items WHERE date = ? AND summarized_at IS NULL"
+    )
+      .bind(today)
+      .first();
+    expect((unsummarized as Record<string, unknown>).count).toBe(0);
+  });
+
+  it("requires authentication", async () => {
+    const res = await app.request("/api/summarize", { method: "POST" }, env);
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("Cron dispatch: summarize and enrich times", () => {
+  beforeEach(() => {
+    fetchMock.activate();
+    fetchMock.disableNetConnect();
+  });
+
+  it("dispatches summarize at 7:00 UTC", async () => {
+    const today = new Date().toISOString().split("T")[0];
+    await seedRawItems(env.DB, [
+      {
+        sourceId: "anthropic-news",
+        title: "Morning Article",
+        link: "https://example.com/morning",
+        content: "Content",
+        date: today,
+      },
+    ]);
+
+    mockGeminiForPipeline();
+
+    const event = {
+      scheduledTime: new Date("2025-01-28T07:00:00Z").getTime(),
+      cron: "0 7 * * *",
+    };
+    const waitUntilPromises: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (p: Promise<unknown>) => {
+        waitUntilPromises.push(p);
+      },
+      passThroughOnException: () => {},
+    } as unknown as ExecutionContext;
+
+    worker.scheduled(event as ScheduledEvent, env, ctx);
+    await Promise.all(waitUntilPromises);
+
+    const logs = await env.DB.prepare(
+      "SELECT * FROM error_logs WHERE message LIKE '%Cron triggered%'"
+    ).all();
+    expect(logs.results.length).toBe(1);
+    expect(logs.results[0].message as string).toContain("7:00 UTC");
+    expect(logs.results[0].message as string).toContain("summarize");
+  });
+
+  it("dispatches fetch at 17:00 UTC (AI category)", async () => {
+    mockAllSources();
+
+    const event = {
+      scheduledTime: new Date("2025-01-28T17:00:00Z").getTime(),
+      cron: "0 17 * * *",
+    };
+    const waitUntilPromises: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (p: Promise<unknown>) => {
+        waitUntilPromises.push(p);
+      },
+      passThroughOnException: () => {},
+    } as unknown as ExecutionContext;
+
+    worker.scheduled(event as ScheduledEvent, env, ctx);
+    await Promise.all(waitUntilPromises);
+
+    const logs = await env.DB.prepare(
+      "SELECT * FROM error_logs WHERE message LIKE '%Cron triggered%'"
+    ).all();
+    expect(logs.results.length).toBe(1);
+    expect(logs.results[0].message as string).toContain("17:00 UTC");
+    expect(logs.results[0].message as string).toContain("fetch ai");
+  });
+
+  it("dispatches enrich at 7:05 UTC", async () => {
+    const today = new Date().toISOString().split("T")[0];
+    // Seed an empty digest so enrichment has something to look at (but no eligible items)
+    await seedDigest(
+      env.DB,
+      { id: `digest-${today}`, date: today, itemCount: 0 },
+      []
+    );
+
+    const event = {
+      scheduledTime: new Date("2025-01-28T07:05:00Z").getTime(),
+      cron: "5 7 * * *",
+    };
+    const waitUntilPromises: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (p: Promise<unknown>) => {
+        waitUntilPromises.push(p);
+      },
+      passThroughOnException: () => {},
+    } as unknown as ExecutionContext;
+
+    worker.scheduled(event as ScheduledEvent, env, ctx);
+    await Promise.all(waitUntilPromises);
+
+    const logs = await env.DB.prepare(
+      "SELECT * FROM error_logs WHERE message LIKE '%Cron triggered%'"
+    ).all();
+    expect(logs.results.length).toBe(1);
+    expect(logs.results[0].message as string).toContain("7:05 UTC");
+    expect(logs.results[0].message as string).toContain("enrich");
+  });
+
+  it("dispatches enrich at 13:05 UTC", async () => {
+    const today = new Date().toISOString().split("T")[0];
+    await seedDigest(
+      env.DB,
+      { id: `digest-${today}`, date: today, itemCount: 0 },
+      []
+    );
+
+    const event = {
+      scheduledTime: new Date("2025-01-28T13:05:00Z").getTime(),
+      cron: "5 13 * * *",
+    };
+    const waitUntilPromises: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (p: Promise<unknown>) => {
+        waitUntilPromises.push(p);
+      },
+      passThroughOnException: () => {},
+    } as unknown as ExecutionContext;
+
+    worker.scheduled(event as ScheduledEvent, env, ctx);
+    await Promise.all(waitUntilPromises);
+
+    const logs = await env.DB.prepare(
+      "SELECT * FROM error_logs WHERE message LIKE '%Cron triggered%'"
+    ).all();
+    expect(logs.results.length).toBe(1);
+    expect(logs.results[0].message as string).toContain("13:05 UTC");
+    expect(logs.results[0].message as string).toContain("enrich");
+  });
+});
