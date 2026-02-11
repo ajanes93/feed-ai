@@ -249,7 +249,7 @@ export const sources: Source[] = [
     category: "dev",
   },
 
-  // === Jobs (9 sources) ===
+  // === Jobs (6 sources) ===
   {
     id: "vuejobs",
     name: "VueJobs",
@@ -262,20 +262,6 @@ export const sources: Source[] = [
     name: "HN Who's Hiring",
     type: "hn",
     url: "https://hn.algolia.com/api/v1/search?query=%22Ask%20HN%3A%20Who%20is%20hiring%22&tags=ask_hn&hitsPerPage=1",
-    category: "jobs",
-  },
-  {
-    id: "remotive-dev",
-    name: "Remotive Software Dev",
-    type: "rss",
-    url: "https://remotive.com/remote-jobs/feed/software-development",
-    category: "jobs",
-  },
-  {
-    id: "wwr-frontend",
-    name: "We Work Remotely Frontend",
-    type: "rss",
-    url: "https://weworkremotely.com/categories/remote-front-end-programming-jobs.rss",
     category: "jobs",
   },
   {
@@ -304,20 +290,6 @@ export const sources: Source[] = [
     name: "Arbeitnow Remote",
     type: "api",
     url: "https://www.arbeitnow.com/api/job-board-api",
-    category: "jobs",
-  },
-  {
-    id: "rwfa-frontend",
-    name: "Real Work From Anywhere",
-    type: "rss",
-    url: "https://www.realworkfromanywhere.com/remote-frontend-jobs/rss.xml",
-    category: "jobs",
-  },
-  {
-    id: "devitjobs-uk",
-    name: "DevITjobs UK",
-    type: "rss",
-    url: "https://devitjobs.uk/job_feed.xml",
     category: "jobs",
   },
 

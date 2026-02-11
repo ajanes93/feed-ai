@@ -88,7 +88,7 @@ Return ONLY a JSON array, no other text:
 function buildJobsPrompt(items: RawItem[]): string {
   const grouped = groupBySource(items);
 
-  return `You are filtering job listings for a senior software engineer based in the UK, looking for remote roles.
+  return `You are filtering job listings for a senior Vue.js developer based in the UK, looking for remote roles.
 
 Today's date is ${todayDate()}.
 
@@ -96,10 +96,10 @@ ${grouped}
 
 You MUST return at least 3 items — aim for 5-8. Always pick the closest matches even if none are a perfect fit — more options are better than fewer.
 
-Select ${CATEGORY_LIMITS.jobs} relevant job listings. Prioritize:
+Select ${CATEGORY_LIMITS.jobs} relevant job listings. STRICT REQUIREMENTS:
+- The role MUST mention Vue.js, Nuxt, or VueJS — reject anything that doesn't
 - Remote roles accessible from the UK
 - Senior, lead, or staff level positions only — exclude mid-level and junior roles
-- Vue.js or TypeScript frontend with Laravel or Ruby/Rails backends
 - Salary £75k+ (include roles with undisclosed salary)
 - Exclude roles that are clearly US-only or on-site only
 

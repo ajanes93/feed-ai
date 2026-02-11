@@ -23,8 +23,7 @@ interface ArbeitnowResponse {
   data?: ArbeitnowJob[];
 }
 
-const RELEVANT_KEYWORDS =
-  /\b(vue|vuejs|vue\.js|nuxt|frontend|front[.\s-]end|typescript|javascript)\b/i;
+const RELEVANT_KEYWORDS = /\b(vue|vuejs|vue\.js|nuxt)\b/i;
 
 function isRelevant(job: ArbeitnowJob): boolean {
   if (!job.remote) return false;

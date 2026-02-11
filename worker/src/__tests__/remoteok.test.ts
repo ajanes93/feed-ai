@@ -118,9 +118,8 @@ describe("fetchRemoteOK", () => {
 
     const items = await fetchRemoteOK(REMOTEOK_SOURCE);
 
-    expect(items).toHaveLength(2);
+    expect(items).toHaveLength(1);
     expect(items[0].title).toContain("Vue Developer");
-    expect(items[1].title).toContain("Frontend Lead");
   });
 
   it("converts unix timestamp to milliseconds", async () => {
@@ -133,7 +132,7 @@ describe("fetchRemoteOK", () => {
           {
             position: "Dev",
             company: "Co",
-            tags: ["typescript"],
+            tags: ["vue"],
             url: "https://remoteok.com/jobs/1",
             epoch: 1738300800,
           },
@@ -196,7 +195,7 @@ describe("fetchRemoteOK", () => {
     const manyJobs = Array.from({ length: 25 }, (_, i) => ({
       position: `Job ${i}`,
       company: `Company ${i}`,
-      tags: ["frontend"],
+      tags: ["vue"],
       url: `https://remoteok.com/jobs/${i}`,
       epoch: 1738300800 + i,
     }));

@@ -791,7 +791,7 @@ describe("Cron scheduled dispatch", () => {
     ).all();
     expect(logs.results.length).toBe(1);
     expect(logs.results[0].message as string).toContain("6:00 UTC");
-    expect(logs.results[0].message as string).toContain("fetch-only");
+    expect(logs.results[0].message as string).toContain("fetch ai");
   });
 
   it("dispatches full digest mode at 18:00 UTC", async () => {

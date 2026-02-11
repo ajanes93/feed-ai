@@ -7,7 +7,7 @@ import {
   parsePublishedDate,
 } from "./constants";
 
-const JOB_KEYWORDS = /vue|laravel|frontend|typescript|remote/i;
+const JOB_KEYWORDS = /\b(vue|vuejs|vue\.js|nuxt)\b/i;
 
 interface AlgoliaSearchResponse {
   hits: Array<{ objectID: string }>;
