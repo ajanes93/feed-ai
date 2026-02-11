@@ -81,7 +81,7 @@ test.describe("AI Assistant — Welcome State", () => {
   });
 
   test("shows back button", async ({ mockPage }) => {
-    await expect(mockPage.getByText("Feed")).toBeVisible();
+    await expect(mockPage.getByText("Feed", { exact: true })).toBeVisible();
   });
 });
 
@@ -146,7 +146,7 @@ test.describe("AI Assistant — Navigation", () => {
     await expect(mockPage).toHaveURL("/ai");
 
     // Click back
-    await mockPage.getByText("Feed").click();
+    await mockPage.getByText("Feed", { exact: true }).click();
     await expect(mockPage).not.toHaveURL("/ai");
   });
 
