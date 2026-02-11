@@ -160,6 +160,7 @@ function onClick(key: string) {
 <template>
   <div
     ref="containerRef"
+    data-testid="category-filter"
     class="relative flex touch-none justify-center gap-1.5"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"

@@ -17,6 +17,12 @@ import {
   type AIUsageEntry,
 } from "./services/logger";
 import { enrichSingleItem } from "./services/comments";
+import {
+  isValidPromptKey,
+  checkAndRecordRateLimit,
+  getRemainingRequests,
+  generateAiResponse,
+} from "./services/ai-chat";
 
 function timingSafeEqual(a: string, b: string): boolean {
   const encoder = new TextEncoder();
@@ -219,6 +225,56 @@ app.get("/api/health", async (c) => {
       .filter((row) => activeSourceIds.has(row.source_id as string))
       .map((row) => mapSourceHealth(row as Record<string, unknown>))
   );
+});
+
+// --- AI Chat (rate limited by device fingerprint, no admin auth) ---
+
+app.post("/api/ai/chat", async (c) => {
+  const body = await c.req.json<{ prompt: string }>();
+  const fingerprint = c.req.header("X-Device-Fingerprint") ?? "";
+
+  if (!isValidPromptKey(body.prompt)) {
+    return c.json({ error: "Invalid prompt" }, 400);
+  }
+  if (!fingerprint || fingerprint.length < 8) {
+    return c.json({ error: "Device fingerprint required" }, 400);
+  }
+
+  const rateLimit = await checkAndRecordRateLimit(c.env.DB, fingerprint);
+  if (!rateLimit.allowed) {
+    return c.json(
+      { error: "Daily limit reached. Try again tomorrow.", remaining: 0 },
+      429
+    );
+  }
+
+  try {
+    const result = await generateAiResponse(c.env, body.prompt);
+    return c.json({ text: result.text, remaining: rateLimit.remaining });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await logEvent(c.env.DB, {
+      level: "error",
+      category: "ai",
+      message: `AI chat error: ${message}`,
+    });
+    return c.json(
+      {
+        error: "AI service error. Please try again.",
+        remaining: rateLimit.remaining,
+      },
+      500
+    );
+  }
+});
+
+app.get("/api/ai/remaining", async (c) => {
+  const fingerprint = c.req.header("X-Device-Fingerprint") ?? "";
+  if (!fingerprint || fingerprint.length < 8) {
+    return c.json({ remaining: 0 });
+  }
+  const remaining = await getRemainingRequests(c.env.DB, fingerprint);
+  return c.json({ remaining });
 });
 
 // Auth middleware for admin endpoints

@@ -36,8 +36,8 @@ test.describe("Pull-to-refresh", () => {
     const styleAfter = await content.getAttribute("style");
     expect(styleAfter).toContain("translateY");
 
-    // Pull indicator should NOT use fixed positioning
-    const fixedIndicator = mockPage.locator(".fixed");
+    // Pull indicator should NOT use fixed positioning (scoped to content area)
+    const fixedIndicator = content.locator(".fixed");
     await expect(fixedIndicator).toHaveCount(0);
 
     // Pull indicator should be absolutely positioned above content
