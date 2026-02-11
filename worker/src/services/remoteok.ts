@@ -17,17 +17,7 @@ interface RemoteOKJob {
   epoch?: number;
 }
 
-const RELEVANT_TAGS = new Set([
-  "vue",
-  "vuejs",
-  "vue.js",
-  "nuxt",
-  "frontend",
-  "front end",
-  "front-end",
-  "typescript",
-  "javascript",
-]);
+const RELEVANT_TAGS = new Set(["vue", "vuejs", "vue.js", "nuxt"]);
 
 function isRelevant(job: RemoteOKJob): boolean {
   const tags = (job.tags || []).map((t) => t.toLowerCase());

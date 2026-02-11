@@ -265,20 +265,6 @@ export const sources: Source[] = [
     category: "jobs",
   },
   {
-    id: "remotive-dev",
-    name: "Remotive Software Dev",
-    type: "rss",
-    url: "https://remotive.com/remote-jobs/feed/software-development",
-    category: "jobs",
-  },
-  {
-    id: "wwr-frontend",
-    name: "We Work Remotely Frontend",
-    type: "rss",
-    url: "https://weworkremotely.com/categories/remote-front-end-programming-jobs.rss",
-    category: "jobs",
-  },
-  {
     id: "jobicy-vue-uk",
     name: "Jobicy Vue UK/Remote",
     type: "api",
@@ -304,20 +290,6 @@ export const sources: Source[] = [
     name: "Arbeitnow Remote",
     type: "api",
     url: "https://www.arbeitnow.com/api/job-board-api",
-    category: "jobs",
-  },
-  {
-    id: "rwfa-frontend",
-    name: "Real Work From Anywhere",
-    type: "rss",
-    url: "https://www.realworkfromanywhere.com/remote-frontend-jobs/rss.xml",
-    category: "jobs",
-  },
-  {
-    id: "devitjobs-uk",
-    name: "DevITjobs UK",
-    type: "rss",
-    url: "https://devitjobs.uk/job_feed.xml",
     category: "jobs",
   },
 

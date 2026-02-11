@@ -72,11 +72,10 @@ describe("fetchHNHiring", () => {
 
     const items = await fetchHNHiring(HN_HIRING_SOURCE);
 
-    expect(items).toHaveLength(2);
+    expect(items).toHaveLength(1);
     expect(items[0].title).toContain("Vue Developer");
     expect(items[0].link).toBe("https://news.ycombinator.com/item?id=1001");
     expect(items[0].sourceId).toBe("hn-hiring");
-    expect(items[1].title).toContain("Laravel");
   });
 
   it("strips HTML from comment text", async () => {
@@ -95,7 +94,7 @@ describe("fetchHNHiring", () => {
         algoliaItemResponse([
           {
             id: 2001,
-            text: "<p>Company | <b>Frontend</b> Engineer | <a href='https://apply.com'>Apply</a></p>",
+            text: "<p>Company | <b>Vue.js</b> Engineer | <a href='https://apply.com'>Apply</a></p>",
             created_at: "2026-01-30T12:00:00Z",
           },
         ]),
@@ -106,7 +105,7 @@ describe("fetchHNHiring", () => {
 
     expect(items).toHaveLength(1);
     expect(items[0].content).not.toContain("<");
-    expect(items[0].content).toContain("Frontend");
+    expect(items[0].content).toContain("Vue.js");
   });
 
   it("returns empty array when search returns no hits", async () => {
@@ -154,7 +153,7 @@ describe("fetchHNHiring", () => {
   it("limits results to 20 items", async () => {
     const manyComments = Array.from({ length: 30 }, (_, i) => ({
       id: 3000 + i,
-      text: `Company ${i} | Frontend TypeScript Developer | Remote`,
+      text: `Company ${i} | Vue.js Developer | Remote`,
       created_at: "2026-01-30T12:00:00Z",
     }));
 
@@ -178,7 +177,7 @@ describe("fetchHNHiring", () => {
   });
 
   it("truncates long titles to 100 chars with ellipsis", async () => {
-    const longText = "A".repeat(150) + " | Frontend | Remote";
+    const longText = "A".repeat(150) + " | Vue | Remote";
 
     fetchMock
       .get("https://hn.algolia.com")

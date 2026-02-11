@@ -2,7 +2,7 @@ import { Hono, type Context, type Next } from "hono";
 import { cors } from "hono/cors";
 import { Env, RawItem, DigestItem, countByCategory } from "./types";
 import { todayDate } from "@feed-ai/shared/utils";
-import { sources, FRESHNESS_THRESHOLDS } from "./sources";
+import { sources, FRESHNESS_THRESHOLDS, type Source } from "./sources";
 import type { SourceFetchResult } from "./services/fetcher";
 import { fetchAllSources } from "./services/fetcher";
 import {
@@ -616,9 +616,17 @@ async function storeRawItems(
 
 // --- Shared fetch + store logic ---
 
-async function runFetchAndStore(env: Env) {
+function filterSourcesByCategories(
+  categories?: Source["category"][]
+): Source[] {
+  if (!categories) return sources;
+  return sources.filter((s) => categories.includes(s.category));
+}
+
+async function runFetchAndStore(env: Env, categories?: Source["category"][]) {
   const today = todayDate();
-  const { items, health } = await fetchAllSources(sources);
+  const filtered = filterSourcesByCategories(categories);
+  const { items, health } = await fetchAllSources(filtered);
   await recordSourceHealth(env, health);
   await storeRawItems(env.DB, items, today);
   return { items, health, today };
@@ -626,24 +634,33 @@ async function runFetchAndStore(env: Env) {
 
 // --- Fetch-only: accumulate articles without summarizing ---
 
-export async function fetchAndStoreArticles(env: Env): Promise<Response> {
+export async function fetchAndStoreArticles(
+  env: Env,
+  categories?: Source["category"][]
+): Promise<Response> {
   const start = Date.now();
+  const filtered = filterSourcesByCategories(categories);
+  const label = categories ? categories.join("+") : "all";
 
   await logEvent(env.DB, {
     level: "info",
     category: "fetch",
-    message: "Starting scheduled fetch-and-store",
-    details: { date: todayDate(), sourceCount: sources.length },
+    message: `Starting scheduled fetch-and-store (${label})`,
+    details: {
+      date: todayDate(),
+      sourceCount: filtered.length,
+      categories: label,
+    },
   });
 
   let result;
   try {
-    result = await runFetchAndStore(env);
+    result = await runFetchAndStore(env, categories);
   } catch (err) {
     await logEvent(env.DB, {
       level: "error",
       category: "fetch",
-      message: `Failed to fetch/store: ${err instanceof Error ? err.message : String(err)}`,
+      message: `Failed to fetch/store (${label}): ${err instanceof Error ? err.message : String(err)}`,
     });
     return new Response("Failed to store items", { status: 500 });
   }
@@ -668,16 +685,17 @@ export async function fetchAndStoreArticles(env: Env): Promise<Response> {
   await logEvent(env.DB, {
     level: "info",
     category: "fetch",
-    message: `Fetch-and-store complete: ${items.length} items stored for ${today}`,
+    message: `Fetch-and-store complete (${label}): ${items.length} items stored for ${today}`,
     details: {
       fetched: items.length,
       successSources: health.filter((h) => h.success).length,
       failedSources: failedSources.length,
+      categories: label,
       durationMs: Date.now() - start,
     },
   });
 
-  return new Response(`Stored ${items.length} items for ${today}`, {
+  return new Response(`Stored ${items.length} ${label} items for ${today}`, {
     status: 200,
   });
 }
@@ -1074,37 +1092,57 @@ export default {
   fetch: app.fetch,
 
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    // 6am, 12pm: fetch-only | 6pm: digest | 6:05pm: enrich comments
+    // Fetch crons split by category (minute offsets):
+    //   :00 = AI sources, :05 = Dev sources, :10 = Jobs+Sport sources
+    // Digest + enrich at 18:00 / 18:05
     const time = new Date(event.scheduledTime);
     const hour = time.getUTCHours();
     const minute = time.getUTCMinutes();
-    const isDigestTime = hour === 18 && minute === 0;
-    const isEnrichTime = hour === 18 && minute === 5;
+
+    // Category mapping by minute offset for fetch windows
+    const fetchCategories: Record<number, Source["category"][]> = {
+      0: ["ai"],
+      5: ["dev"],
+      10: ["jobs", "sport"],
+    };
 
     ctx.waitUntil(
       (async () => {
-        if (isEnrichTime) {
+        // 18:05 — enrich comments
+        if (hour === 18 && minute === 5) {
           await logEvent(env.DB, {
             level: "info",
             category: "digest",
             message: "Comment enrichment cron triggered",
           });
           const result = await enrichDigestComments(env);
-          // Self-chain if more items remain (fresh budget per request)
           if (result.remaining > 0) {
             ctx.waitUntil(fireEnrichmentSafe(env, 2));
           }
           return;
         }
 
-        await logEvent(env.DB, {
-          level: "info",
-          category: "digest",
-          message: `Cron triggered at ${hour}:00 UTC — ${isDigestTime ? "full digest" : "fetch-only"}`,
-        });
-        return isDigestTime
-          ? generateDailyDigest(env)
-          : fetchAndStoreArticles(env);
+        // 18:00 — full digest generation
+        if (hour === 18 && minute === 0) {
+          await logEvent(env.DB, {
+            level: "info",
+            category: "digest",
+            message: "Cron triggered at 18:00 UTC — full digest",
+          });
+          return generateDailyDigest(env);
+        }
+
+        // Fetch windows: :00 AI, :05 Dev, :10 Jobs+Sport
+        const categories = fetchCategories[minute];
+        if (categories) {
+          const label = categories.join("+");
+          await logEvent(env.DB, {
+            level: "info",
+            category: "fetch",
+            message: `Cron triggered at ${hour}:${String(minute).padStart(2, "0")} UTC — fetch ${label}`,
+          });
+          return fetchAndStoreArticles(env, categories);
+        }
       })()
     );
   },

@@ -73,14 +73,14 @@ describe("fetchArbeitnow", () => {
         200,
         arbeitnowResponse([
           {
-            title: "Frontend Developer",
+            title: "Vue Developer",
             company_name: "RemoteCo",
             remote: true,
             url: "https://arbeitnow.com/jobs/1",
             tags: ["IT"],
           },
           {
-            title: "Frontend Developer",
+            title: "Vue Developer",
             company_name: "OfficeCo",
             remote: false,
             url: "https://arbeitnow.com/jobs/2",
@@ -138,7 +138,7 @@ describe("fetchArbeitnow", () => {
             company_name: "Co",
             remote: true,
             url: "https://arbeitnow.com/jobs/1",
-            tags: ["TypeScript", "React"],
+            tags: ["Vue", "React"],
           },
         ]),
         { headers: { "content-type": "application/json" } }
@@ -158,7 +158,7 @@ describe("fetchArbeitnow", () => {
         200,
         arbeitnowResponse([
           {
-            title: "Frontend Dev",
+            title: "Vue Dev",
             company_name: "Co",
             remote: true,
             url: "https://arbeitnow.com/jobs/1",
@@ -199,7 +199,7 @@ describe("fetchArbeitnow", () => {
 
   it("limits results to 20 items", async () => {
     const manyJobs = Array.from({ length: 25 }, (_, i) => ({
-      title: `Frontend Dev ${i}`,
+      title: `Vue Dev ${i}`,
       company_name: `Company ${i}`,
       remote: true,
       url: `https://arbeitnow.com/jobs/${i}`,
