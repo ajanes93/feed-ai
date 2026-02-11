@@ -315,6 +315,7 @@ app.get("/api/admin/logs", async (c) => {
 app.use("/api/fetch", authMiddleware);
 app.use("/api/generate", authMiddleware);
 app.use("/api/rebuild", authMiddleware);
+app.use("/api/summarize", authMiddleware);
 app.use("/api/enrich-comments", authMiddleware);
 
 app.post("/api/fetch", async (c) => {
@@ -351,60 +352,47 @@ app.post("/api/rebuild", async (c) => {
   return rebuildDigest(c.env, today);
 });
 
+app.post("/api/summarize", async (c) => {
+  return summarizeNewItems(c.env);
+});
+
 // --- Comment enrichment (self-chaining via waitUntil) ---
 
 const ENRICH_BATCH_SIZE = 3;
 
-function safeWaitUntil(
-  c: Context<{ Bindings: Env }>,
-  fn: () => Promise<unknown>
-) {
-  try {
-    if (c.executionCtx) {
-      c.executionCtx.waitUntil(fn());
-    } else {
-      console.warn("No execution context — skipping background task");
-    }
-  } catch (err) {
-    console.error("Failed to schedule background task:", err);
-  }
-}
-
 const MAX_ENRICHMENT_ROUNDS = 10;
 
-async function fireEnrichmentSafe(env: Env, round: number) {
-  try {
-    await env.SELF.fetch(
-      new Request(`https://self/api/enrich-comments?round=${round}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${env.ADMIN_KEY}` },
-      })
-    );
-  } catch (err) {
+async function runAllEnrichment(env: Env): Promise<{
+  totalEnriched: number;
+  totalSkipped: number;
+  rounds: number;
+}> {
+  let totalEnriched = 0;
+  let totalSkipped = 0;
+  let round = 0;
+
+  for (round = 1; round <= MAX_ENRICHMENT_ROUNDS; round++) {
+    const result = await enrichDigestComments(env);
+    totalEnriched += result.enriched;
+    totalSkipped += result.skipped;
+
+    if (result.remaining === 0) break;
+  }
+
+  if (round > MAX_ENRICHMENT_ROUNDS) {
     await logEvent(env.DB, {
-      level: "error",
+      level: "warn",
       category: "digest",
-      message: `Failed to fire comment enrichment: ${err instanceof Error ? err.message : String(err)}`,
+      message: `Comment enrichment hit max rounds (${MAX_ENRICHMENT_ROUNDS})`,
     });
   }
+
+  return { totalEnriched, totalSkipped, rounds: round };
 }
 
 app.post("/api/enrich-comments", async (c) => {
-  const round = parseInt(c.req.query("round") || "1", 10);
-  const result = await enrichDigestComments(c.env);
-
-  // Self-chain: if more items remain and under circuit breaker limit
-  if (result.remaining > 0 && round < MAX_ENRICHMENT_ROUNDS) {
-    safeWaitUntil(c, () => fireEnrichmentSafe(c.env, round + 1));
-  } else if (result.remaining > 0) {
-    await logEvent(c.env.DB, {
-      level: "warn",
-      category: "digest",
-      message: `Comment enrichment hit max rounds (${MAX_ENRICHMENT_ROUNDS}), ${result.remaining} items still unenriched`,
-    });
-  }
-
-  return c.json({ ...result, round });
+  const result = await runAllEnrichment(c.env);
+  return c.json(result);
 });
 
 async function enrichDigestComments(
@@ -576,6 +564,217 @@ async function rebuildDigest(env: Env, date: string): Promise<Response> {
   return buildAndSaveDigest(env, date);
 }
 
+// --- Incremental summarization: process new items and append to today's digest ---
+
+export async function summarizeNewItems(env: Env): Promise<Response> {
+  const today = todayDate();
+  const digestId = `digest-${today}`;
+  const pipelineStart = Date.now();
+
+  // Load only unsummarized items
+  const unsummarized = await loadUnsummarizedRawItems(env.DB);
+
+  await logEvent(env.DB, {
+    level: "info",
+    category: "digest",
+    message: `Incremental summarize: ${unsummarized.length} unsummarized items found`,
+    digestId,
+  });
+
+  if (unsummarized.length === 0) {
+    return new Response("No new items to summarize", { status: 200 });
+  }
+
+  // Dedup against existing digest items (and recent digests)
+  const dedupedItems = await deduplicateItems(unsummarized, env.DB);
+
+  if (dedupedItems.length === 0) {
+    // Mark all as summarized even if they were dupes — don't reprocess
+    await markItemsSummarized(env.DB, unsummarized);
+    await logEvent(env.DB, {
+      level: "info",
+      category: "digest",
+      message: "Incremental summarize: all new items were duplicates",
+      digestId,
+    });
+    return new Response("All new items were duplicates", { status: 200 });
+  }
+
+  const { jobItems, newsItems } = splitJobsAndNews(dedupedItems);
+
+  const apiKeys = {
+    gemini: env.GEMINI_API_KEY,
+    anthropic: env.ANTHROPIC_API_KEY,
+  };
+  const newDigestItems: DigestItem[] = [];
+  const allAiUsages: AIUsageEntry[] = [];
+
+  async function runDigest(rawItems: RawItem[], type: "news" | "jobs") {
+    try {
+      const { items, aiUsages, logs } = await generateDigest(
+        rawItems,
+        apiKeys,
+        type
+      );
+      newDigestItems.push(...items);
+      allAiUsages.push(...aiUsages);
+
+      await logEvents(
+        env.DB,
+        logs.map((log) => ({
+          level: log.level,
+          category: "summarizer" as const,
+          message: `[incremental-${type}] ${log.message}`,
+          details: log.details,
+          digestId,
+        }))
+      );
+    } catch (err) {
+      if (err instanceof DigestError) allAiUsages.push(...err.aiUsages);
+      await logEvent(env.DB, {
+        level: "error",
+        category: "summarizer",
+        message: `Incremental ${type} summarize failed: ${err instanceof Error ? err.message : String(err)}`,
+        digestId,
+      });
+    }
+  }
+
+  if (newsItems.length > 0) await runDigest(newsItems, "news");
+  if (jobItems.length > 0) await runDigest(jobItems, "jobs");
+
+  // Record AI usages
+  if (allAiUsages.length > 0) {
+    await recordAIUsage(env.DB, allAiUsages);
+  }
+
+  if (newDigestItems.length === 0) {
+    // Still mark as summarized so we don't retry
+    await markItemsSummarized(env.DB, unsummarized);
+    await logEvent(env.DB, {
+      level: "warn",
+      category: "digest",
+      message: "Incremental summarize produced no items",
+      digestId,
+    });
+    return new Response("No items produced from summarization", {
+      status: 200,
+    });
+  }
+
+  // Check if digest already exists for today
+  const existing = await env.DB.prepare("SELECT id FROM digests WHERE date = ?")
+    .bind(today)
+    .first();
+
+  if (existing) {
+    // Append: get current max position, then insert new items after it
+    const maxPos = await env.DB.prepare(
+      "SELECT MAX(position) as max_pos FROM items WHERE digest_id = ?"
+    )
+      .bind(digestId)
+      .first<{ max_pos: number | null }>();
+    const startPos = (maxPos?.max_pos ?? -1) + 1;
+
+    for (let i = 0; i < newDigestItems.length; i++) {
+      newDigestItems[i].id = `${digestId}-${startPos + i}`;
+      newDigestItems[i].digestId = digestId;
+      newDigestItems[i].position = startPos + i;
+    }
+
+    const currentCount = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM items WHERE digest_id = ?"
+    )
+      .bind(digestId)
+      .first<{ count: number }>();
+    const newTotal = (currentCount?.count ?? 0) + newDigestItems.length;
+
+    await env.DB.batch([
+      env.DB.prepare("UPDATE digests SET item_count = ? WHERE id = ?").bind(
+        newTotal,
+        digestId
+      ),
+      ...newDigestItems.map((item) =>
+        env.DB.prepare(
+          "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, comments_url, published_at, position, comment_summary, comment_count, comment_score, comment_summary_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(
+          item.id,
+          item.digestId,
+          item.category,
+          item.title,
+          item.summary,
+          item.whyItMatters ?? null,
+          item.sourceName,
+          item.sourceUrl ?? null,
+          item.commentsUrl ?? null,
+          item.publishedAt ?? null,
+          item.position,
+          item.commentSummary ?? null,
+          item.commentCount ?? null,
+          item.commentScore ?? null,
+          item.commentSummarySource ?? null
+        )
+      ),
+    ]);
+  } else {
+    // Create new digest
+    for (let i = 0; i < newDigestItems.length; i++) {
+      newDigestItems[i].id = `${digestId}-${i}`;
+      newDigestItems[i].digestId = digestId;
+      newDigestItems[i].position = i;
+    }
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO digests (id, date, item_count) VALUES (?, ?, ?)"
+      ).bind(digestId, today, newDigestItems.length),
+      ...newDigestItems.map((item) =>
+        env.DB.prepare(
+          "INSERT INTO items (id, digest_id, category, title, summary, why_it_matters, source_name, source_url, comments_url, published_at, position, comment_summary, comment_count, comment_score, comment_summary_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(
+          item.id,
+          item.digestId,
+          item.category,
+          item.title,
+          item.summary,
+          item.whyItMatters ?? null,
+          item.sourceName,
+          item.sourceUrl ?? null,
+          item.commentsUrl ?? null,
+          item.publishedAt ?? null,
+          item.position,
+          item.commentSummary ?? null,
+          item.commentCount ?? null,
+          item.commentScore ?? null,
+          item.commentSummarySource ?? null
+        )
+      ),
+    ]);
+  }
+
+  // Mark all unsummarized items as processed
+  await markItemsSummarized(env.DB, unsummarized);
+
+  const pipelineMs = Date.now() - pipelineStart;
+  await logEvent(env.DB, {
+    level: "info",
+    category: "digest",
+    message: `Incremental summarize complete: ${newDigestItems.length} items ${existing ? "appended" : "created"}`,
+    details: {
+      pipelineMs,
+      newItems: newDigestItems.length,
+      appended: !!existing,
+      categories: countByCategory(newDigestItems),
+    },
+    digestId,
+  });
+
+  return new Response(
+    `Summarized ${newDigestItems.length} new items (${existing ? "appended to" : "created"} digest)`,
+    { status: 200 }
+  );
+}
+
 // --- Digest pipeline helpers ---
 
 const sourceCategoryMap = new Map(sources.map((s) => [s.id, s.category]));
@@ -696,6 +895,18 @@ export async function fetchAndStoreArticles(
 
 // --- Load accumulated raw items from DB ---
 
+function mapRawItemRow(row: Record<string, unknown>): RawItem {
+  return {
+    id: row.id as string,
+    sourceId: row.source_id as string,
+    title: (row.title as string) || "",
+    link: (row.link as string) || "",
+    commentsUrl: (row.comments_url as string) ?? undefined,
+    content: (row.content as string) ?? undefined,
+    publishedAt: (row.published_at as number) ?? undefined,
+  };
+}
+
 async function loadRecentRawItems(db: D1Database): Promise<RawItem[]> {
   // Include articles from the last 24 hours so nothing falls through the cracks
   const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
@@ -704,15 +915,39 @@ async function loadRecentRawItems(db: D1Database): Promise<RawItem[]> {
     .bind(yesterday)
     .all();
 
-  return result.results.map((row) => ({
-    id: row.id as string,
-    sourceId: row.source_id as string,
-    title: (row.title as string) || "",
-    link: (row.link as string) || "",
-    commentsUrl: (row.comments_url as string) ?? undefined,
-    content: (row.content as string) ?? undefined,
-    publishedAt: (row.published_at as number) ?? undefined,
-  }));
+  return result.results.map((row) =>
+    mapRawItemRow(row as Record<string, unknown>)
+  );
+}
+
+async function loadUnsummarizedRawItems(db: D1Database): Promise<RawItem[]> {
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  const result = await db
+    .prepare(
+      "SELECT * FROM raw_items WHERE date >= ? AND summarized_at IS NULL"
+    )
+    .bind(yesterday)
+    .all();
+
+  return result.results.map((row) =>
+    mapRawItemRow(row as Record<string, unknown>)
+  );
+}
+
+async function markItemsSummarized(
+  db: D1Database,
+  items: RawItem[]
+): Promise<void> {
+  if (items.length === 0) return;
+  const now = Math.floor(Date.now() / 1000);
+  const statements = items.map((item) =>
+    db
+      .prepare("UPDATE raw_items SET summarized_at = ? WHERE id = ?")
+      .bind(now, item.id)
+  );
+  for (let i = 0; i < statements.length; i += 100) {
+    await db.batch(statements.slice(i, i + 100));
+  }
 }
 
 function normalizeTitle(title: string): string {
@@ -1086,56 +1321,50 @@ export default {
   fetch: app.fetch,
 
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    // Fetch crons split by category (minute offsets):
-    //   :00 = AI sources, :05 = Dev sources, :10 = Jobs+Sport sources
-    // Digest + enrich at 18:00 / 18:05
+    // Each cron does ONE thing to stay under Cloudflare subrequest limits.
+    // Three fetch→summarize→enrich cycles per day:
+    //   6/12/17 :00/:05/:10 fetch (by category) | 7/13/18 summarize | 7:05/13:05/18:05 enrich
     const time = new Date(event.scheduledTime);
     const hour = time.getUTCHours();
     const minute = time.getUTCMinutes();
+    const isFetchHour = hour === 6 || hour === 12 || hour === 17;
+    const isSummarizeTime = minute === 0 && (hour === 7 || hour === 13 || hour === 18);
+    const isEnrichTime = minute === 5 && (hour === 7 || hour === 13 || hour === 18);
 
     ctx.waitUntil(
       (async () => {
-        // 18:05 — enrich comments
-        if (hour === 18 && minute === 5) {
+        if (isEnrichTime) {
           await logEvent(env.DB, {
             level: "info",
             category: "digest",
-            message: "Comment enrichment cron triggered",
+            message: `Cron triggered at ${hour}:${String(minute).padStart(2, "0")} UTC — enrich comments`,
           });
-          const result = await enrichDigestComments(env);
-          if (result.remaining > 0) {
-            ctx.waitUntil(fireEnrichmentSafe(env, 2));
-          }
-          return;
-        }
-
-        // 18:00 — full digest generation
-        if (hour === 18 && minute === 0) {
+          await runAllEnrichment(env);
+        } else if (isSummarizeTime) {
           await logEvent(env.DB, {
             level: "info",
             category: "digest",
-            message: "Cron triggered at 18:00 UTC — full digest",
+            message: `Cron triggered at ${hour}:00 UTC — summarize`,
           });
-          return generateDailyDigest(env);
+          await summarizeNewItems(env);
+        } else if (isFetchHour) {
+          // Fetch split by category: :00 AI, :05 Dev, :10 Jobs+Sport
+          const fetchCategories: Record<number, Source["category"][]> = {
+            0: ["ai"],
+            5: ["dev"],
+            10: ["jobs", "sport"],
+          };
+          const categories = fetchCategories[minute];
+          if (!categories) return;
+
+          const label = categories.join("+");
+          await logEvent(env.DB, {
+            level: "info",
+            category: "fetch",
+            message: `Cron triggered at ${hour}:${String(minute).padStart(2, "0")} UTC — fetch ${label}`,
+          });
+          await fetchAndStoreArticles(env, categories);
         }
-
-        // Fetch windows: :00 AI, :05 Dev, :10 Jobs+Sport
-        const fetchCategories: Record<number, Source["category"][]> = {
-          0: ["ai"],
-          5: ["dev"],
-          10: ["jobs", "sport"],
-        };
-
-        const categories = fetchCategories[minute];
-        if (!categories) return;
-
-        const label = categories.join("+");
-        await logEvent(env.DB, {
-          level: "info",
-          category: "fetch",
-          message: `Cron triggered at ${hour}:${String(minute).padStart(2, "0")} UTC — fetch ${label}`,
-        });
-        return fetchAndStoreArticles(env, categories);
       })()
     );
   },

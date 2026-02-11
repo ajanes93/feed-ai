@@ -768,7 +768,7 @@ describe("Cron scheduled dispatch", () => {
     fetchMock.disableNetConnect();
   });
 
-  it("logs cron trigger with fetch-only mode at 6am", async () => {
+  it("logs cron trigger with fetch-only at 6am", async () => {
     mockAllSources();
 
     const event = {
@@ -975,8 +975,7 @@ describe("POST /api/enrich-comments", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.enriched).toBeGreaterThanOrEqual(1);
-    expect(body.remaining).toBe(0);
+    expect(body.totalEnriched).toBeGreaterThanOrEqual(1);
 
     // Verify at least one item was enriched in DB
     const enrichedItems = await env.DB.prepare(
@@ -1015,8 +1014,7 @@ describe("POST /api/enrich-comments", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.enriched).toBe(0);
-    expect(body.remaining).toBe(0);
+    expect(body.totalEnriched).toBe(0);
   });
 
   it("marks items as skipped when below threshold", async () => {
@@ -1053,8 +1051,8 @@ describe("POST /api/enrich-comments", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.enriched).toBe(0);
-    expect(body.skipped).toBe(1);
+    expect(body.totalEnriched).toBe(0);
+    expect(body.totalSkipped).toBe(1);
 
     // Verify item was marked as skipped
     const item = await env.DB.prepare("SELECT * FROM items WHERE id = ?")

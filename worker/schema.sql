@@ -48,7 +48,8 @@ CREATE TABLE raw_items (
   content TEXT,
   published_at INTEGER,
   fetched_at INTEGER DEFAULT (unixepoch()),
-  date TEXT
+  date TEXT,
+  summarized_at INTEGER
 );
 
 -- Source health tracking

@@ -4,10 +4,9 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 [triggers]
-# Fetch crons split by category (minute offsets reduce per-invocation load):
-#   :00 AI (8 sources), :05 Dev (22 sources), :10 Jobs+Sport (9 sources)
-# Digest at 18:00, comment enrichment at 18:05
-crons = ["0 6,12 * * *", "5 6,12 * * *", "10 6,12 * * *", "0 18 * * *", "5 18 * * *"]
+# 3 fetch→summarize→enrich cycles. Fetches split by category (minute offsets):
+#   :00 AI, :05 Dev, :10 Jobs+Sport | +1h summarize | +1h05 enrich
+crons = ["0 6,12,17 * * *", "5 6,12,17 * * *", "10 6,12,17 * * *", "0 7,13,18 * * *", "5 7,13,18 * * *"]
 
 [[d1_databases]]
 binding = "DB"
@@ -17,10 +16,5 @@ migrations_dir = "migrations"
 
 [observability]
 enabled = true
-
-# Service binding to self (used for comment enrichment chaining)
-[[services]]
-binding = "SELF"
-service = "feed-ai-api"
 
 # ANTHROPIC_API_KEY — set via Cloudflare dashboard (Workers > Settings > Secrets)
