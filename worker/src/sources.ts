@@ -249,7 +249,7 @@ export const sources: Source[] = [
     category: "dev",
   },
 
-  // === Jobs (9 sources) ===
+  // === Jobs (6 sources) ===
   {
     id: "vuejobs",
     name: "VueJobs",

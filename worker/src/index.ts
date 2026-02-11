@@ -639,18 +639,13 @@ export async function fetchAndStoreArticles(
   categories?: Source["category"][]
 ): Promise<Response> {
   const start = Date.now();
-  const filtered = filterSourcesByCategories(categories);
   const label = categories ? categories.join("+") : "all";
 
   await logEvent(env.DB, {
     level: "info",
     category: "fetch",
     message: `Starting scheduled fetch-and-store (${label})`,
-    details: {
-      date: todayDate(),
-      sourceCount: filtered.length,
-      categories: label,
-    },
+    details: { date: todayDate() },
   });
 
   let result;
@@ -690,7 +685,6 @@ export async function fetchAndStoreArticles(
       fetched: items.length,
       successSources: health.filter((h) => h.success).length,
       failedSources: failedSources.length,
-      categories: label,
       durationMs: Date.now() - start,
     },
   });
@@ -1099,13 +1093,6 @@ export default {
     const hour = time.getUTCHours();
     const minute = time.getUTCMinutes();
 
-    // Category mapping by minute offset for fetch windows
-    const fetchCategories: Record<number, Source["category"][]> = {
-      0: ["ai"],
-      5: ["dev"],
-      10: ["jobs", "sport"],
-    };
-
     ctx.waitUntil(
       (async () => {
         // 18:05 — enrich comments
@@ -1133,16 +1120,22 @@ export default {
         }
 
         // Fetch windows: :00 AI, :05 Dev, :10 Jobs+Sport
+        const fetchCategories: Record<number, Source["category"][]> = {
+          0: ["ai"],
+          5: ["dev"],
+          10: ["jobs", "sport"],
+        };
+
         const categories = fetchCategories[minute];
-        if (categories) {
-          const label = categories.join("+");
-          await logEvent(env.DB, {
-            level: "info",
-            category: "fetch",
-            message: `Cron triggered at ${hour}:${String(minute).padStart(2, "0")} UTC — fetch ${label}`,
-          });
-          return fetchAndStoreArticles(env, categories);
-        }
+        if (!categories) return;
+
+        const label = categories.join("+");
+        await logEvent(env.DB, {
+          level: "info",
+          category: "fetch",
+          message: `Cron triggered at ${hour}:${String(minute).padStart(2, "0")} UTC — fetch ${label}`,
+        });
+        return fetchAndStoreArticles(env, categories);
       })()
     );
   },
