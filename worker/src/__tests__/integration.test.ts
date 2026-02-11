@@ -794,7 +794,7 @@ describe("Cron scheduled dispatch", () => {
     expect(logs.results[0].message as string).toContain("fetch ai");
   });
 
-  it("dispatches full digest mode at 18:00 UTC", async () => {
+  it("dispatches summarize at 18:00 UTC", async () => {
     const today = new Date().toISOString().split("T")[0];
     await seedRawItems(env.DB, [
       {
@@ -835,9 +835,9 @@ describe("Cron scheduled dispatch", () => {
     ).all();
     expect(logs.results.length).toBe(1);
     expect(logs.results[0].message as string).toContain("18:00 UTC");
-    expect(logs.results[0].message as string).toContain("full digest");
+    expect(logs.results[0].message as string).toContain("summarize");
 
-    // Verify a digest was actually generated
+    // Verify a digest was created via incremental summarize
     const digest = await env.DB.prepare("SELECT * FROM digests WHERE date = ?")
       .bind(today)
       .first();
