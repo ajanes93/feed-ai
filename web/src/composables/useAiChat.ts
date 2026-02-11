@@ -17,15 +17,6 @@ export interface ChatMessage {
   promptKey?: PromptKey;
 }
 
-const PROMPT_LABELS: Record<PromptKey, string> = {
-  daily: "Today's briefing",
-  weekly: "This week",
-  monthly: "Monthly recap",
-  top_ai: "Top AI news",
-  dev_updates: "Dev updates",
-  lincoln: "Lincoln City",
-};
-
 export function useAiChat() {
   const messages = ref<ChatMessage[]>([]);
   const loading = ref(false);
@@ -56,7 +47,7 @@ export function useAiChat() {
     }
   }
 
-  async function query(key: PromptKey) {
+  async function query(key: PromptKey, label: string) {
     if (loading.value) return;
     if (!fingerprint.value) {
       error.value = "Initializing…";
@@ -72,16 +63,12 @@ export function useAiChat() {
     error.value = null;
     loading.value = true;
 
-    // Add user message
-    messages.value = [
-      ...messages.value,
-      {
-        id: crypto.randomUUID(),
-        role: "user",
-        text: PROMPT_LABELS[key],
-        promptKey: key,
-      },
-    ];
+    messages.value.push({
+      id: crypto.randomUUID(),
+      role: "user",
+      text: label,
+      promptKey: key,
+    });
 
     try {
       const res = await fetch("/api/ai/chat", {
@@ -98,8 +85,7 @@ export function useAiChat() {
 
       if (!res.ok) {
         error.value = data.error ?? "Something went wrong.";
-        // Remove the user message on error
-        messages.value = messages.value.slice(0, -1);
+        messages.value.pop();
         return;
       }
 
@@ -108,17 +94,14 @@ export function useAiChat() {
         serverRemaining.value = data.remaining;
       }
 
-      messages.value = [
-        ...messages.value,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          text: data.text ?? "",
-        },
-      ];
+      messages.value.push({
+        id: crypto.randomUUID(),
+        role: "assistant",
+        text: data.text ?? "",
+      });
     } catch {
       error.value = "Network error. Please try again.";
-      messages.value = messages.value.slice(0, -1);
+      messages.value.pop();
     } finally {
       loading.value = false;
     }
@@ -129,15 +112,13 @@ export function useAiChat() {
     error.value = null;
   }
 
-  // Used prompt keys (for filtering follow-up chips)
-  const usedPrompts = computed(
-    () =>
-      new Set(
-        messages.value
-          .filter((m) => m.promptKey)
-          .map((m) => m.promptKey as PromptKey)
-      )
-  );
+  const usedPrompts = computed(() => {
+    const used = new Set<PromptKey>();
+    for (const msg of messages.value) {
+      if (msg.promptKey) used.add(msg.promptKey);
+    }
+    return used;
+  });
 
   return {
     messages,

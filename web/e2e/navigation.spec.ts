@@ -101,28 +101,31 @@ test.describe("Date navigation", () => {
 test.describe("Category filter", () => {
   test("renders all category buttons", async ({ mockPage }) => {
     await mockPage.goto("/");
+    const filter = mockPage.getByTestId("category-filter");
 
-    await expect(mockPage.getByRole("button", { name: /AI/ })).toBeVisible();
-    await expect(mockPage.getByRole("button", { name: /Dev/ })).toBeVisible();
-    await expect(mockPage.getByRole("button", { name: /Jobs/ })).toBeVisible();
-    await expect(mockPage.getByRole("button", { name: /Sport/ })).toBeVisible();
+    await expect(filter.getByRole("button", { name: /AI/ })).toBeVisible();
+    await expect(filter.getByRole("button", { name: /Dev/ })).toBeVisible();
+    await expect(filter.getByRole("button", { name: /Jobs/ })).toBeVisible();
+    await expect(filter.getByRole("button", { name: /Sport/ })).toBeVisible();
   });
 
   test("shows correct counts per category", async ({ mockPage }) => {
     await mockPage.goto("/");
+    const filter = mockPage.getByTestId("category-filter");
 
-    const aiBtn = mockPage.getByRole("button", { name: /AI/ });
+    const aiBtn = filter.getByRole("button", { name: /AI/ });
     await expect(aiBtn).toContainText("2");
 
-    const devBtn = mockPage.getByRole("button", { name: /Dev/ });
+    const devBtn = filter.getByRole("button", { name: /Dev/ });
     await expect(devBtn).toContainText("2");
   });
 
   test("category filter highlights active category", async ({ mockPage }) => {
     await mockPage.goto("/");
+    const filter = mockPage.getByTestId("category-filter");
 
     // AI is the default active category
-    const aiBtn = mockPage.getByRole("button", { name: /AI/ });
+    const aiBtn = filter.getByRole("button", { name: /AI/ });
     await expect(aiBtn).toHaveClass(/text-gray-950/);
   });
 });

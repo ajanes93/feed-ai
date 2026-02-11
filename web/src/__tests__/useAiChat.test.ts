@@ -45,7 +45,7 @@ describe("useAiChat", () => {
     });
 
     const { query, messages } = useAiChat();
-    await query("daily");
+    await query("daily", "Today's briefing");
 
     expect(messages.value).toHaveLength(2);
     expect(messages.value[0].role).toBe("user");
@@ -65,7 +65,7 @@ describe("useAiChat", () => {
     });
 
     const { query, remaining } = useAiChat();
-    await query("daily");
+    await query("daily", "Today's briefing");
 
     expect(remaining.value).toBe(3);
   });
@@ -81,7 +81,7 @@ describe("useAiChat", () => {
     });
 
     const { query, error, messages } = useAiChat();
-    await query("daily");
+    await query("daily", "Today's briefing");
 
     expect(error.value).toContain("Daily limit");
     // User message should be removed on error
@@ -99,7 +99,7 @@ describe("useAiChat", () => {
     });
 
     const { query, reset, messages, error } = useAiChat();
-    await query("daily");
+    await query("daily", "Today's briefing");
     expect(messages.value).toHaveLength(2);
 
     reset();
@@ -118,7 +118,7 @@ describe("useAiChat", () => {
     });
 
     const { query, usedPrompts } = useAiChat();
-    await query("daily");
+    await query("daily", "Today's briefing");
 
     expect(usedPrompts.value.has("daily")).toBe(true);
     expect(usedPrompts.value.has("weekly")).toBe(false);
@@ -139,11 +139,11 @@ describe("useAiChat", () => {
     );
 
     const { query, loading } = useAiChat();
-    const p1 = query("daily");
+    const p1 = query("daily", "Today's briefing");
 
     expect(loading.value).toBe(true);
     // Second query should be ignored while loading
-    const p2 = query("weekly");
+    const p2 = query("weekly", "This week");
 
     // Resolve the pending request
     resolveChat!({

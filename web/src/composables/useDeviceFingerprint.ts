@@ -11,6 +11,10 @@ export function useDeviceFingerprint() {
       .then((fp) => fp.get())
       .then((result) => {
         fingerprint.value = result.visitorId;
+      })
+      .catch(() => {
+        // Fallback: random ID when fingerprinting fails (ad blockers, etc.)
+        fingerprint.value = crypto.randomUUID().replace(/-/g, "");
       });
   }
 

@@ -14,30 +14,16 @@ type PromptKey = (typeof ALLOWED_PROMPTS)[number];
 
 const DAILY_LIMIT = 5;
 
-const PROMPT_LABELS: Record<PromptKey, string> = {
-  daily: "Today's briefing",
-  weekly: "This week",
-  monthly: "Monthly recap",
-  top_ai: "Top AI news",
-  dev_updates: "Dev updates",
-  lincoln: "Lincoln City",
-};
-
 export function isValidPromptKey(key: string): key is PromptKey {
   return (ALLOWED_PROMPTS as readonly string[]).includes(key);
 }
 
 // --- Rate limiting via D1 (device fingerprint) ---
 
-interface RateLimitResult {
-  allowed: boolean;
-  remaining: number;
-}
-
 export async function checkAndRecordRateLimit(
   db: D1Database,
   fingerprint: string
-): Promise<RateLimitResult> {
+): Promise<{ allowed: boolean; remaining: number }> {
   const dayAgo = Math.floor(Date.now() / 1000) - 86400;
 
   const [, countResult] = await db.batch([
@@ -147,7 +133,7 @@ Rules:
 
 function buildUserPrompt(key: PromptKey, items: DigestItemRow[]): string {
   if (items.length === 0) {
-    return `The user asked for "${PROMPT_LABELS[key]}" but there are no digest items available for this time period. Let them know briefly and suggest they check back later.`;
+    return `No digest items available for this time period. Let the user know briefly and suggest they check back later.`;
   }
 
   const context = items

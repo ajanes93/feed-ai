@@ -18,46 +18,39 @@ const {
 
 const scrollContainer = ref<HTMLElement | null>(null);
 
-interface PromptChip {
-  key: PromptKey;
-  emoji: string;
-  label: string;
-  description: string;
-}
-
-const prompts: PromptChip[] = [
+const prompts = [
   {
-    key: "daily",
+    key: "daily" as PromptKey,
     emoji: "☀️",
     label: "Today's briefing",
     description: "Key stories today",
   },
   {
-    key: "weekly",
+    key: "weekly" as PromptKey,
     emoji: "📅",
     label: "This week",
     description: "Weekly highlights",
   },
   {
-    key: "monthly",
+    key: "monthly" as PromptKey,
     emoji: "📊",
     label: "Monthly recap",
     description: "Month in review",
   },
   {
-    key: "top_ai",
+    key: "top_ai" as PromptKey,
     emoji: "🤖",
     label: "Top AI news",
     description: "AI developments",
   },
   {
-    key: "dev_updates",
+    key: "dev_updates" as PromptKey,
     emoji: "⚡",
     label: "Dev updates",
     description: "Tools & frameworks",
   },
   {
-    key: "lincoln",
+    key: "lincoln" as PromptKey,
     emoji: "⚽",
     label: "Lincoln City",
     description: "Imps news",
@@ -70,22 +63,14 @@ const availableChips = computed(() =>
 
 const hasMessages = computed(() => messages.value.length > 0);
 
-async function handleQuery(key: PromptKey) {
+async function handleQuery(key: PromptKey, label: string) {
   if (loading.value || remaining.value <= 0) return;
-  await query(key);
+  await query(key, label);
   await nextTick();
   scrollContainer.value?.scrollTo({
     top: scrollContainer.value.scrollHeight,
     behavior: "smooth",
   });
-}
-
-function handleReset() {
-  reset();
-}
-
-function goBack() {
-  router.back();
 }
 
 onMounted(() => {
@@ -99,7 +84,7 @@ onMounted(() => {
     <header class="flex items-center justify-between px-4 py-3">
       <button
         class="flex items-center gap-1 text-sm text-gray-400 transition-colors hover:text-white"
-        @click="goBack"
+        @click="router.back()"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -137,7 +122,7 @@ onMounted(() => {
           v-if="hasMessages"
           class="text-gray-500 transition-colors hover:text-white"
           title="New conversation"
-          @click="handleReset"
+          @click="reset"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -202,7 +187,7 @@ onMounted(() => {
             :disabled="loading || remaining <= 0"
             class="flex flex-col items-start rounded-xl border border-white/[0.07] bg-white/[0.025] p-4 text-left transition-all hover:-translate-y-0.5 hover:border-white/[0.15] hover:bg-white/[0.04] disabled:pointer-events-none disabled:opacity-40"
             :style="{ animationDelay: `${60 + i * 50}ms` }"
-            @click="handleQuery(chip.key)"
+            @click="handleQuery(chip.key, chip.label)"
           >
             <span class="text-lg">{{ chip.emoji }}</span>
             <span class="mt-1.5 text-sm font-medium text-[#e2e8f0]">{{
@@ -247,6 +232,7 @@ onMounted(() => {
             v-else
             class="mb-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4"
           >
+            <!-- eslint-disable-next-line vue/no-v-html -- sanitized by DOMPurify -->
             <div
               class="ai-prose text-sm leading-relaxed text-[#c9d1dc]"
               v-html="renderMarkdown(msg.text)"
@@ -297,7 +283,7 @@ onMounted(() => {
           :key="chip.key"
           :disabled="loading || remaining <= 0"
           class="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-1.5 text-xs text-[#e2e8f0] transition-all hover:border-white/[0.15] hover:bg-white/[0.04] disabled:pointer-events-none disabled:opacity-40"
-          @click="handleQuery(chip.key)"
+          @click="handleQuery(chip.key, chip.label)"
         >
           <span>{{ chip.emoji }}</span>
           {{ chip.label }}

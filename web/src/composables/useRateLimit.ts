@@ -4,16 +4,16 @@ import { useSessionStorage } from "@vueuse/core";
 const LIMIT = 5;
 const WINDOW_MS = 86400000; // 24 hours
 
-function pruned(timestamps: number[]): number[] {
-  const cutoff = Date.now() - WINDOW_MS;
-  return timestamps.filter((t) => t > cutoff);
-}
-
 const timestamps = useSessionStorage<number[]>("feed-ai-rate-timestamps", []);
 
 export function useRateLimit() {
+  function prune() {
+    const cutoff = Date.now() - WINDOW_MS;
+    timestamps.value = timestamps.value.filter((t) => t > cutoff);
+  }
+
   function check(): { ok: boolean; waitSeconds: number } {
-    timestamps.value = pruned(timestamps.value);
+    prune();
     if (timestamps.value.length >= LIMIT) {
       const oldest = timestamps.value[0];
       const waitMs = oldest + WINDOW_MS - Date.now();
@@ -23,11 +23,14 @@ export function useRateLimit() {
   }
 
   function record() {
-    timestamps.value = [...pruned(timestamps.value), Date.now()];
+    prune();
+    timestamps.value.push(Date.now());
   }
 
   const remaining = computed(() => {
-    return Math.max(0, LIMIT - pruned(timestamps.value).length);
+    const cutoff = Date.now() - WINDOW_MS;
+    const valid = timestamps.value.filter((t) => t > cutoff);
+    return Math.max(0, LIMIT - valid.length);
   });
 
   return { check, record, remaining };
