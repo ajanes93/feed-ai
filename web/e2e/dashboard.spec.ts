@@ -81,9 +81,9 @@ test.describe("Dashboard", () => {
     await expect(page.getByText("42")).toBeVisible();
   });
 
-  test("renders Rebuild Today button", async ({ dashboardPage }) => {
+  test("renders Rebuild button", async ({ dashboardPage }) => {
     await expect(
-      dashboardPage.getByRole("button", { name: "Rebuild Today" }),
+      dashboardPage.getByRole("button", { name: "Rebuild" }),
     ).toBeVisible();
   });
 
@@ -98,7 +98,7 @@ test.describe("Dashboard", () => {
       }),
     );
 
-    await dashboardPage.getByRole("button", { name: "Rebuild Today" }).click();
+    await dashboardPage.getByRole("button", { name: "Rebuild" }).click();
 
     await expect(
       dashboardPage.getByText("Generated digest with 15 items"),
@@ -116,7 +116,7 @@ test.describe("Dashboard", () => {
       }),
     );
 
-    await dashboardPage.getByRole("button", { name: "Rebuild Today" }).click();
+    await dashboardPage.getByRole("button", { name: "Rebuild" }).click();
 
     await expect(
       dashboardPage.getByText("Generated digest with 12 items"),
@@ -132,13 +132,13 @@ test.describe("Dashboard", () => {
       }),
     );
 
-    await dashboardPage.getByRole("button", { name: "Rebuild Today" }).click();
+    await dashboardPage.getByRole("button", { name: "Rebuild" }).click();
 
     await expect(dashboardPage.getByText("No items fetched")).toBeVisible();
   });
 
   test("navigates back to feed via link", async ({ dashboardPage }) => {
-    await dashboardPage.getByText("Back to Feed").click();
+    await dashboardPage.getByText("Feed").click();
     await expect(dashboardPage).toHaveURL("/");
   });
 });
