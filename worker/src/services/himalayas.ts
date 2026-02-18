@@ -15,10 +15,20 @@ interface HimalayasJob {
   applicationLink?: string;
   pubDate?: number;
   guid?: string;
+  remote?: boolean;
+  categories?: string[];
 }
 
 interface HimalayasResponse {
   jobs?: HimalayasJob[];
+}
+
+const VUE_KEYWORDS = /\b(vue|vuejs|vue\.js|nuxt)\b/i;
+
+function isRelevant(job: HimalayasJob): boolean {
+  if (job.remote !== true) return false;
+  const text = `${job.title} ${job.excerpt || ""} ${(job.categories || []).join(" ")}`;
+  return VUE_KEYWORDS.test(text);
 }
 
 export async function fetchHimalayas(source: Source): Promise<RawItem[]> {
@@ -34,14 +44,17 @@ export async function fetchHimalayas(source: Source): Promise<RawItem[]> {
   const data: HimalayasResponse = await response.json();
   const jobs = data.jobs || [];
 
-  return jobs.slice(0, ITEM_LIMIT).map((job) => ({
-    id: crypto.randomUUID(),
-    sourceId: source.id,
-    title: job.companyName
-      ? `${job.title} — ${job.companyName}`
-      : job.title || "Untitled",
-    link: job.applicationLink || "",
-    content: stripHtml(job.description || job.excerpt || ""),
-    publishedAt: parseEpochTimestamp(job.pubDate),
-  }));
+  return jobs
+    .filter(isRelevant)
+    .slice(0, ITEM_LIMIT)
+    .map((job) => ({
+      id: crypto.randomUUID(),
+      sourceId: source.id,
+      title: job.companyName
+        ? `${job.title} — ${job.companyName}`
+        : job.title || "Untitled",
+      link: job.applicationLink || "",
+      content: stripHtml(job.description || job.excerpt || ""),
+      publishedAt: parseEpochTimestamp(job.pubDate),
+    }));
 }

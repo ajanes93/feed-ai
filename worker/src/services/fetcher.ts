@@ -7,6 +7,7 @@ import { fetchHNHiring } from "./hn-hiring";
 import { fetchHimalayas } from "./himalayas";
 import { fetchRemoteOK } from "./remoteok";
 import { fetchArbeitnow } from "./arbeitnow";
+import { fetchVueJobs } from "./vuejobs";
 import {
   stripHtml,
   parsePublishedDate,
@@ -131,6 +132,9 @@ export async function fetchSource(source: Source): Promise<RawItem[]> {
     }
     if (source.id === "arbeitnow-remote") {
       return await fetchArbeitnow(source);
+    }
+    if (source.id === "vuejobs") {
+      return await fetchVueJobs(source);
     }
 
     switch (source.type) {

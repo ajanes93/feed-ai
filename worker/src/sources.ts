@@ -273,16 +273,16 @@ export const sources: Source[] = [
   },
   {
     id: "himalayas-vue",
-    name: "Himalayas Vue",
+    name: "Himalayas Vue Remote",
     type: "api",
-    url: "https://himalayas.app/jobs/api?limit=20&q=vue",
+    url: "https://himalayas.app/jobs/api?limit=20&q=vue&remote=true",
     category: "jobs",
   },
   {
     id: "remoteok-frontend",
-    name: "RemoteOK Frontend",
+    name: "RemoteOK Vue",
     type: "api",
-    url: "https://remoteok.com/api",
+    url: "https://remoteok.com/api?tag=vue",
     category: "jobs",
   },
   {

@@ -88,20 +88,22 @@ Return ONLY a JSON array, no other text:
 function buildJobsPrompt(items: RawItem[]): string {
   const grouped = groupBySource(items);
 
-  return `You are filtering job listings for a senior Vue.js developer based in the UK, looking for remote roles.
+  return `You are filtering job listings for a senior Vue.js developer based in the UK who ONLY wants fully remote roles.
 
 Today's date is ${todayDate()}.
 
 ${grouped}
 
-You MUST return at least 3 items — aim for 5-8. Always pick the closest matches even if none are a perfect fit — more options are better than fewer.
+Select up to ${CATEGORY_LIMITS.jobs} relevant job listings. Quality over quantity — only include genuinely good matches. Return an empty array [] if nothing fits.
 
-Select ${CATEGORY_LIMITS.jobs} relevant job listings. STRICT REQUIREMENTS:
-- The role MUST mention Vue.js, Nuxt, or VueJS — reject anything that doesn't
-- Remote roles accessible from the UK
-- Senior, lead, or staff level positions only — exclude mid-level and junior roles
-- Salary £75k+ (include roles with undisclosed salary)
-- Exclude roles that are clearly US-only or on-site only
+HARD REQUIREMENTS (reject immediately if any fail):
+- REMOTE ONLY: The role must be explicitly remote/distributed/work-from-home. Reject on-site, hybrid, or office-based roles. Reject if remote status is unclear.
+- VUE REQUIRED: The role must specifically require Vue.js, Nuxt, or VueJS. Reject generic "frontend" or "React" roles that don't mention Vue.
+- UK ELIGIBLE: Must be open to UK-based remote workers. Reject roles restricted to US-only, specific US states, or other non-UK regions.
+
+PREFERENCES (use to rank, not reject):
+- Senior, lead, or staff level preferred
+- Salary £75k+ preferred (include roles with undisclosed salary)
 
 For each selected job, provide:
 - item_index: The [number] shown before the item above
