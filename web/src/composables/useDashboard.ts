@@ -193,6 +193,44 @@ export function useDashboard() {
     }
   }
 
+  async function appendToDigest() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    rebuilding.value = true;
+    rebuildResult.value = null;
+    rebuildSuccess.value = false;
+
+    try {
+      const res = await fetch(`/api/summarize`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
+
+      const text = await res.text();
+      if (!res.ok) {
+        throw new Error(text || "Append failed");
+      }
+
+      rebuildResult.value = text;
+      rebuildSuccess.value = true;
+      await fetchDashboard();
+    } catch (err) {
+      rebuildResult.value =
+        err instanceof Error ? err.message : "Append failed";
+      rebuildSuccess.value = false;
+    } finally {
+      rebuilding.value = false;
+    }
+  }
+
   async function fetchDashboard() {
     if (!adminKey.value) {
       needsAuth.value = true;
@@ -243,6 +281,7 @@ export function useDashboard() {
     fetchDashboard,
     fetchSources,
     rebuildDigest,
+    appendToDigest,
     enrichComments,
   };
 }

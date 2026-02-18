@@ -5,6 +5,7 @@ import { useDashboard } from "../composables/useDashboard";
 import { timeAgo, formatTokens } from "../utils/formatting";
 import DataTable from "../components/DataTable.vue";
 import StatCard from "../components/StatCard.vue";
+import DropdownMenu from "../components/DropdownMenu.vue";
 
 const {
   data,
@@ -24,8 +25,21 @@ const {
   fetchDashboard,
   fetchSources,
   rebuildDigest,
+  appendToDigest,
   enrichComments,
 } = useDashboard();
+
+const menuRef = ref<InstanceType<typeof DropdownMenu>>();
+
+const anyBusy = ref(false);
+
+function runAction(fn: () => Promise<void>) {
+  menuRef.value?.close();
+  anyBusy.value = true;
+  fn().finally(() => {
+    anyBusy.value = false;
+  });
+}
 
 const keyInput = ref("");
 
@@ -47,30 +61,75 @@ onMounted(fetchDashboard);
       <div class="mb-6 flex items-center justify-between">
         <h1 class="text-xl font-semibold text-white">Dashboard</h1>
         <div class="flex items-center gap-2">
-          <button
+          <DropdownMenu
             v-if="data && !needsAuth"
-            :disabled="fetching"
-            class="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:border-gray-500 hover:text-white disabled:opacity-50"
-            @click="fetchSources"
+            ref="menuRef"
+            label="Actions"
+            :disabled="anyBusy"
           >
-            {{ fetching ? "Fetching..." : "Fetch" }}
-          </button>
-          <button
-            v-if="data && !needsAuth"
-            :disabled="rebuilding"
-            class="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:border-gray-500 hover:text-white disabled:opacity-50"
-            @click="rebuildDigest"
-          >
-            {{ rebuilding ? "Rebuilding..." : "Rebuild" }}
-          </button>
-          <button
-            v-if="data && !needsAuth"
-            :disabled="enriching"
-            class="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:border-gray-500 hover:text-white disabled:opacity-50"
-            @click="enrichComments"
-          >
-            {{ enriching ? "Enriching..." : "Enrich" }}
-          </button>
+            <template #default="{ close }">
+              <button
+                :disabled="fetching"
+                class="flex w-full flex-col px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-50"
+                @click="
+                  close();
+                  runAction(fetchSources);
+                "
+              >
+                <span class="font-medium">{{
+                  fetching ? "Fetching..." : "Fetch Sources"
+                }}</span>
+                <span class="text-xs text-gray-500"
+                  >Pull latest from all RSS/API sources</span
+                >
+              </button>
+              <button
+                :disabled="rebuilding"
+                class="flex w-full flex-col px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-50"
+                @click="
+                  close();
+                  runAction(rebuildDigest);
+                "
+              >
+                <span class="font-medium">{{
+                  rebuilding ? "Rebuilding..." : "Rebuild Digest"
+                }}</span>
+                <span class="text-xs text-gray-500"
+                  >Delete today's digest and regenerate from scratch</span
+                >
+              </button>
+              <button
+                :disabled="rebuilding"
+                class="flex w-full flex-col px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-50"
+                @click="
+                  close();
+                  runAction(appendToDigest);
+                "
+              >
+                <span class="font-medium">{{
+                  rebuilding ? "Appending..." : "Append New Items"
+                }}</span>
+                <span class="text-xs text-gray-500"
+                  >Add unsummarized items to today's digest</span
+                >
+              </button>
+              <button
+                :disabled="enriching"
+                class="flex w-full flex-col px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-50"
+                @click="
+                  close();
+                  runAction(enrichComments);
+                "
+              >
+                <span class="font-medium">{{
+                  enriching ? "Enriching..." : "Enrich Comments"
+                }}</span>
+                <span class="text-xs text-gray-500"
+                  >Fetch and summarize Reddit/HN comments</span
+                >
+              </button>
+            </template>
+          </DropdownMenu>
           <router-link
             to="/"
             class="text-xs text-gray-500 hover:text-white"
