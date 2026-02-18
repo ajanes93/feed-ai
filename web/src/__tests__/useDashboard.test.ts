@@ -240,6 +240,91 @@ describe("useDashboard", () => {
     });
   });
 
+  describe("appendToDigest", () => {
+    it("calls POST /api/summarize with auth header", async () => {
+      const fetchSpy = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve("Appended 3 new items"),
+      });
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const { appendToDigest } = useDashboard();
+      await appendToDigest();
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining("/api/summarize"),
+        expect.objectContaining({
+          method: "POST",
+          headers: { Authorization: "Bearer test-key" },
+        })
+      );
+    });
+
+    it("sets rebuildResult on success", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve("Appended 5 new items"),
+        })
+      );
+
+      const { rebuildResult, rebuildSuccess, appendToDigest } = useDashboard();
+      await appendToDigest();
+
+      expect(rebuildResult.value).toBe("Appended 5 new items");
+      expect(rebuildSuccess.value).toBe(true);
+    });
+
+    it("sets rebuildResult to error on failure", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 500,
+          text: () => Promise.resolve("No new items"),
+        })
+      );
+
+      const { rebuildResult, rebuildSuccess, appendToDigest } = useDashboard();
+      await appendToDigest();
+
+      expect(rebuildResult.value).toBe("No new items");
+      expect(rebuildSuccess.value).toBe(false);
+    });
+
+    it("clears auth on 401", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 401,
+          text: () => Promise.resolve("Unauthorized"),
+        })
+      );
+
+      const { needsAuth, appendToDigest } = useDashboard();
+      await appendToDigest();
+
+      expect(needsAuth.value).toBe(true);
+      expect(sessionStorage.getItem("admin_key")).toBeNull();
+    });
+
+    it("requires auth when no admin key is set", async () => {
+      sessionStorage.clear();
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const { needsAuth, appendToDigest } = useDashboard();
+      await appendToDigest();
+
+      expect(needsAuth.value).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe("rebuildDigest", () => {
     it("calls POST /api/rebuild with auth header", async () => {
       const fetchSpy = vi.fn().mockResolvedValue({

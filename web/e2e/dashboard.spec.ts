@@ -44,7 +44,7 @@ async function mockDashboardApi(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(DASHBOARD_DATA),
-    }),
+    })
   );
 }
 
@@ -53,7 +53,7 @@ const test = base.extend<{ dashboardPage: Page }>({
     // Set admin key in sessionStorage before navigating
     await page.goto("/dashboard");
     await page.evaluate(() =>
-      sessionStorage.setItem("admin_key", "test-admin-key"),
+      sessionStorage.setItem("admin_key", "test-admin-key")
     );
     await mockDashboardApi(page);
     await page.reload();
@@ -65,7 +65,7 @@ test.describe("Dashboard", () => {
   test("shows auth prompt without admin key", async ({ page }) => {
     await page.goto("/dashboard");
     await expect(
-      page.getByText("Enter admin key to access the dashboard"),
+      page.getByText("Enter admin key to access the dashboard")
     ).toBeVisible();
     await expect(page.locator('input[type="password"]')).toBeVisible();
   });
@@ -81,28 +81,19 @@ test.describe("Dashboard", () => {
     await expect(page.getByText("42")).toBeVisible();
   });
 
-  test("renders Rebuild button", async ({ dashboardPage }) => {
+  test("renders Actions menu button", async ({ dashboardPage }) => {
     await expect(
-      dashboardPage.getByRole("button", { name: "Rebuild" }),
+      dashboardPage.getByRole("button", { name: "Actions" })
     ).toBeVisible();
   });
 
-  test("shows Rebuilding state when rebuild is clicked", async ({
-    dashboardPage,
-  }) => {
-    await dashboardPage.route("**/api/rebuild", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "text/plain",
-        body: "Generated digest with 15 items",
-      }),
-    );
+  test("opens Actions menu with all options", async ({ dashboardPage }) => {
+    await dashboardPage.getByRole("button", { name: "Actions" }).click();
 
-    await dashboardPage.getByRole("button", { name: "Rebuild" }).click();
-
-    await expect(
-      dashboardPage.getByText("Generated digest with 15 items"),
-    ).toBeVisible();
+    await expect(dashboardPage.getByText("Fetch Sources")).toBeVisible();
+    await expect(dashboardPage.getByText("Rebuild Digest")).toBeVisible();
+    await expect(dashboardPage.getByText("Append New Items")).toBeVisible();
+    await expect(dashboardPage.getByText("Enrich Comments")).toBeVisible();
   });
 
   test("shows success message after rebuild completes", async ({
@@ -113,13 +104,14 @@ test.describe("Dashboard", () => {
         status: 200,
         contentType: "text/plain",
         body: "Generated digest with 12 items",
-      }),
+      })
     );
 
-    await dashboardPage.getByRole("button", { name: "Rebuild" }).click();
+    await dashboardPage.getByRole("button", { name: "Actions" }).click();
+    await dashboardPage.getByText("Rebuild Digest").click();
 
     await expect(
-      dashboardPage.getByText("Generated digest with 12 items"),
+      dashboardPage.getByText("Generated digest with 12 items")
     ).toBeVisible();
   });
 
@@ -129,12 +121,32 @@ test.describe("Dashboard", () => {
         status: 500,
         contentType: "text/plain",
         body: "No items fetched",
-      }),
+      })
     );
 
-    await dashboardPage.getByRole("button", { name: "Rebuild" }).click();
+    await dashboardPage.getByRole("button", { name: "Actions" }).click();
+    await dashboardPage.getByText("Rebuild Digest").click();
 
     await expect(dashboardPage.getByText("No items fetched")).toBeVisible();
+  });
+
+  test("appends new items to digest via Append action", async ({
+    dashboardPage,
+  }) => {
+    await dashboardPage.route("**/api/summarize", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/plain",
+        body: "Appended 4 new items to digest",
+      })
+    );
+
+    await dashboardPage.getByRole("button", { name: "Actions" }).click();
+    await dashboardPage.getByText("Append New Items").click();
+
+    await expect(
+      dashboardPage.getByText("Appended 4 new items to digest")
+    ).toBeVisible();
   });
 
   test("navigates back to feed via link", async ({ dashboardPage }) => {

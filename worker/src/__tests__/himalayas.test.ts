@@ -7,7 +7,7 @@ const HIMALAYAS_SOURCE = sourceFactory.build({
   id: "himalayas-vue",
   name: "Himalayas Vue",
   type: "api",
-  url: "https://himalayas.app/jobs/api?limit=20&q=vue",
+  url: "https://himalayas.app/jobs/api?limit=20&q=vue&remote=true",
   category: "jobs",
 });
 
@@ -19,6 +19,8 @@ function himalayasResponse(
     description?: string;
     applicationLink?: string;
     pubDate?: number;
+    remote?: boolean;
+    categories?: string[];
   }>
 ) {
   return JSON.stringify({ jobs });
@@ -42,11 +44,12 @@ describe("fetchHimalayas", () => {
         200,
         himalayasResponse([
           {
-            title: "Senior Frontend Engineer",
+            title: "Senior Vue.js Frontend Engineer",
             companyName: "Acme Corp",
-            description: "<p>Vue.js role with <b>TypeScript</b></p>",
+            description: "<p>Remote Vue.js role with <b>TypeScript</b></p>",
             applicationLink: "https://acme.com/apply",
             pubDate: 1738300800,
+            remote: true,
           },
           {
             title: "Vue.js Developer",
@@ -54,6 +57,7 @@ describe("fetchHimalayas", () => {
             excerpt: "Remote Vue position",
             applicationLink: "https://startupx.com/jobs/1",
             pubDate: 1738214400,
+            remote: true,
           },
         ]),
         { headers: { "content-type": "application/json" } }
@@ -62,7 +66,7 @@ describe("fetchHimalayas", () => {
     const items = await fetchHimalayas(HIMALAYAS_SOURCE);
 
     expect(items).toHaveLength(2);
-    expect(items[0].title).toBe("Senior Frontend Engineer — Acme Corp");
+    expect(items[0].title).toBe("Senior Vue.js Frontend Engineer — Acme Corp");
     expect(items[0].link).toBe("https://acme.com/apply");
     expect(items[0].sourceId).toBe("himalayas-vue");
     expect(items[0].content).toContain("Vue.js role with");
@@ -78,10 +82,11 @@ describe("fetchHimalayas", () => {
         200,
         himalayasResponse([
           {
-            title: "Dev",
+            title: "Vue Dev",
             companyName: "Co",
             applicationLink: "https://co.com",
             pubDate: 1738300800,
+            remote: true,
           },
         ]),
         { headers: { "content-type": "application/json" } }
@@ -100,9 +105,10 @@ describe("fetchHimalayas", () => {
         200,
         himalayasResponse([
           {
-            title: "Dev",
+            title: "Vue Dev",
             companyName: "Co",
             applicationLink: "https://co.com",
+            remote: true,
           },
         ]),
         { headers: { "content-type": "application/json" } }
@@ -139,10 +145,11 @@ describe("fetchHimalayas", () => {
 
   it("limits results to 20 items", async () => {
     const manyJobs = Array.from({ length: 25 }, (_, i) => ({
-      title: `Job ${i}`,
+      title: `Vue.js Job ${i}`,
       companyName: `Company ${i}`,
       applicationLink: `https://example.com/${i}`,
       pubDate: 1738300800 + i,
+      remote: true,
     }));
 
     fetchMock
@@ -165,10 +172,11 @@ describe("fetchHimalayas", () => {
         200,
         himalayasResponse([
           {
-            title: "Dev",
+            title: "Vue Dev",
             companyName: "Co",
-            excerpt: "A great Vue.js opportunity",
+            excerpt: "A great remote Vue.js opportunity",
             applicationLink: "https://co.com",
+            remote: true,
           },
         ]),
         { headers: { "content-type": "application/json" } }
@@ -176,6 +184,6 @@ describe("fetchHimalayas", () => {
 
     const items = await fetchHimalayas(HIMALAYAS_SOURCE);
 
-    expect(items[0].content).toBe("A great Vue.js opportunity");
+    expect(items[0].content).toBe("A great remote Vue.js opportunity");
   });
 });

@@ -162,41 +162,46 @@ describe("DashboardView", () => {
     });
   });
 
-  describe("rebuild today button", () => {
-    it("renders Rebuild button when dashboard is loaded", async () => {
+  describe("actions menu", () => {
+    async function openMenu(
+      wrapper: ReturnType<typeof mount<typeof DashboardView>>
+    ) {
+      const actionsBtn = wrapper
+        .findAll("button")
+        .find((b) => b.text().includes("Actions"));
+      expect(actionsBtn).toBeDefined();
+      await actionsBtn!.trigger("click");
+      await nextTick();
+    }
+
+    it("renders Actions menu when dashboard is loaded", async () => {
       const { wrapper } = await render();
-      expect(wrapper.text()).toContain("Rebuild");
+      expect(wrapper.text()).toContain("Actions");
     });
 
-    it("does not render Rebuild button before auth", async () => {
+    it("does not render Actions menu before auth", async () => {
       sessionStorage.clear();
       stubFetchJson(DASHBOARD_DATA);
       const wrapper = mount(DashboardView);
       await flushPromises();
 
-      expect(wrapper.text()).not.toContain("Rebuild");
+      expect(wrapper.text()).not.toContain("Actions");
     });
 
-    it("shows Rebuilding... text while rebuild is in progress", async () => {
+    it("shows menu items when Actions is clicked", async () => {
       const { wrapper } = await render();
+      await openMenu(wrapper);
 
-      // Mock fetch to hang (simulate slow rebuild)
-      vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
-
-      const rebuildBtn = wrapper
-        .findAll("button")
-        .find((b) => b.text().includes("Rebuild"));
-      expect(rebuildBtn).toBeDefined();
-      await rebuildBtn!.trigger("click");
-      await nextTick();
-
-      expect(wrapper.text()).toContain("Rebuilding...");
+      expect(wrapper.text()).toContain("Fetch Sources");
+      expect(wrapper.text()).toContain("Rebuild Digest");
+      expect(wrapper.text()).toContain("Append New Items");
+      expect(wrapper.text()).toContain("Enrich Comments");
     });
 
     it("shows success message after successful rebuild", async () => {
       const { wrapper } = await render();
+      await openMenu(wrapper);
 
-      // First call = rebuild (text response), second call = dashboard refresh (json response)
       let callCount = 0;
       vi.stubGlobal(
         "fetch",
@@ -219,7 +224,7 @@ describe("DashboardView", () => {
 
       const rebuildBtn = wrapper
         .findAll("button")
-        .find((b) => b.text().includes("Rebuild"));
+        .find((b) => b.text().includes("Rebuild Digest"));
       await rebuildBtn!.trigger("click");
       await flushPromises();
 
@@ -228,6 +233,7 @@ describe("DashboardView", () => {
 
     it("shows error message after failed rebuild", async () => {
       const { wrapper } = await render();
+      await openMenu(wrapper);
 
       vi.stubGlobal(
         "fetch",
@@ -240,29 +246,11 @@ describe("DashboardView", () => {
 
       const rebuildBtn = wrapper
         .findAll("button")
-        .find((b) => b.text().includes("Rebuild"));
+        .find((b) => b.text().includes("Rebuild Digest"));
       await rebuildBtn!.trigger("click");
       await flushPromises();
 
       expect(wrapper.text()).toContain("No items fetched");
-    });
-
-    it("disables button while rebuilding", async () => {
-      const { wrapper } = await render();
-
-      vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
-
-      const rebuildBtn = wrapper
-        .findAll("button")
-        .find((b) => b.text().includes("Rebuild"));
-      await rebuildBtn!.trigger("click");
-      await nextTick();
-
-      // Re-find the button after state change
-      const disabledBtn = wrapper
-        .findAll("button")
-        .find((b) => b.text().includes("Rebuilding..."));
-      expect(disabledBtn?.attributes("disabled")).toBeDefined();
     });
   });
 
