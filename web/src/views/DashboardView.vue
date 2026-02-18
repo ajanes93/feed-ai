@@ -29,18 +29,6 @@ const {
   enrichComments,
 } = useDashboard();
 
-const menuRef = ref<InstanceType<typeof DropdownMenu>>();
-
-const anyBusy = ref(false);
-
-function runAction(fn: () => Promise<void>) {
-  menuRef.value?.close();
-  anyBusy.value = true;
-  fn().finally(() => {
-    anyBusy.value = false;
-  });
-}
-
 const keyInput = ref("");
 
 function submitKey() {
@@ -63,9 +51,7 @@ onMounted(fetchDashboard);
         <div class="flex items-center gap-2">
           <DropdownMenu
             v-if="data && !needsAuth"
-            ref="menuRef"
             label="Actions"
-            :disabled="anyBusy"
           >
             <template #default="{ close }">
               <button
@@ -73,7 +59,7 @@ onMounted(fetchDashboard);
                 class="flex w-full flex-col px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-50"
                 @click="
                   close();
-                  runAction(fetchSources);
+                  fetchSources();
                 "
               >
                 <span class="font-medium">{{
@@ -88,7 +74,7 @@ onMounted(fetchDashboard);
                 class="flex w-full flex-col px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-50"
                 @click="
                   close();
-                  runAction(rebuildDigest);
+                  rebuildDigest();
                 "
               >
                 <span class="font-medium">{{
@@ -103,7 +89,7 @@ onMounted(fetchDashboard);
                 class="flex w-full flex-col px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-50"
                 @click="
                   close();
-                  runAction(appendToDigest);
+                  appendToDigest();
                 "
               >
                 <span class="font-medium">{{
@@ -118,7 +104,7 @@ onMounted(fetchDashboard);
                 class="flex w-full flex-col px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-50"
                 @click="
                   close();
-                  runAction(enrichComments);
+                  enrichComments();
                 "
               >
                 <span class="font-medium">{{

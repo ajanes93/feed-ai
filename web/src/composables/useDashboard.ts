@@ -155,7 +155,7 @@ export function useDashboard() {
   const rebuildResult = ref<string | null>(null);
   const rebuildSuccess = ref(false);
 
-  async function rebuildDigest() {
+  async function runRebuildAction(endpoint: string, errorMsg: string) {
     if (!adminKey.value) {
       needsAuth.value = true;
       return;
@@ -166,7 +166,7 @@ export function useDashboard() {
     rebuildSuccess.value = false;
 
     try {
-      const res = await fetch(`/api/rebuild`, {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
@@ -177,58 +177,25 @@ export function useDashboard() {
       }
 
       const text = await res.text();
-      if (!res.ok) {
-        throw new Error(text || "Rebuild failed");
-      }
+      if (!res.ok) throw new Error(text || errorMsg);
 
       rebuildResult.value = text;
       rebuildSuccess.value = true;
       await fetchDashboard();
     } catch (err) {
-      rebuildResult.value =
-        err instanceof Error ? err.message : "Rebuild failed";
+      rebuildResult.value = err instanceof Error ? err.message : errorMsg;
       rebuildSuccess.value = false;
     } finally {
       rebuilding.value = false;
     }
   }
 
-  async function appendToDigest() {
-    if (!adminKey.value) {
-      needsAuth.value = true;
-      return;
-    }
+  function rebuildDigest() {
+    return runRebuildAction("/api/rebuild", "Rebuild failed");
+  }
 
-    rebuilding.value = true;
-    rebuildResult.value = null;
-    rebuildSuccess.value = false;
-
-    try {
-      const res = await fetch(`/api/summarize`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${adminKey.value}` },
-      });
-
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
-
-      const text = await res.text();
-      if (!res.ok) {
-        throw new Error(text || "Append failed");
-      }
-
-      rebuildResult.value = text;
-      rebuildSuccess.value = true;
-      await fetchDashboard();
-    } catch (err) {
-      rebuildResult.value =
-        err instanceof Error ? err.message : "Append failed";
-      rebuildSuccess.value = false;
-    } finally {
-      rebuilding.value = false;
-    }
+  function appendToDigest() {
+    return runRebuildAction("/api/summarize", "Append failed");
   }
 
   async function fetchDashboard() {

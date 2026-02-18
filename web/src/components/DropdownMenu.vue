@@ -22,8 +22,6 @@ function toggle() {
 function close() {
   open.value = false;
 }
-
-defineExpose({ close });
 </script>
 
 <template>
@@ -32,6 +30,7 @@ defineExpose({ close });
     class="relative"
   >
     <button
+      type="button"
       :disabled="disabled"
       class="flex items-center gap-1 rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:border-gray-500 hover:text-white disabled:opacity-50"
       @click="toggle"
