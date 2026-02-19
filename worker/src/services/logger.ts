@@ -1,3 +1,6 @@
+export type { AIUsageEntry } from "@feed-ai/shared/types";
+import type { AIUsageEntry } from "@feed-ai/shared/types";
+
 type LogLevel = "info" | "warn" | "error";
 type LogCategory =
   | "ai"
@@ -14,18 +17,6 @@ interface LogEntry {
   details?: Record<string, unknown>;
   sourceId?: string;
   digestId?: string;
-}
-
-export interface AIUsageEntry {
-  model: string;
-  provider: "gemini" | "anthropic";
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  latencyMs?: number;
-  wasFallback: boolean;
-  error?: string;
-  status: "success" | "rate_limited" | "error";
 }
 
 export async function logEvent(db: D1Database, entry: LogEntry) {

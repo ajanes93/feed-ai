@@ -1,0 +1,32 @@
+{
+  "name": "feed-ai-onequestion",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "lint": "eslint src --fix",
+    "lint:check": "eslint src",
+    "format": "prettier --write src",
+    "format:check": "prettier --check src",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "fast-xml-parser": "^5.3.4",
+    "hono": "^4.7.0",
+    "@feed-ai/shared": "*"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.12.8",
+    "@cloudflare/workers-types": "^4.20241230.0",
+    "@vitest/expect": "~3.2.0",
+    "@vitest/mocker": "~3.2.0",
+    "@vitest/runner": "~3.2.0",
+    "@vitest/spy": "~3.2.0",
+    "@vitest/utils": "~3.2.0",
+    "vitest": "~3.2.0",
+    "wrangler": "^4.0.0"
+  }
+}

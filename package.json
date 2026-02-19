@@ -1,7 +1,7 @@
 {
   "private": true,
   "type": "module",
-  "workspaces": ["shared", "worker", "web", "mcp"],
+  "workspaces": ["shared", "worker", "web", "mcp", "onequestion", "onequestion/web"],
   "scripts": {
     "lint": "npm run lint --workspaces --if-present",
     "lint:check": "npm run lint:check --workspaces --if-present",

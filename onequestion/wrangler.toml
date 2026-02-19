@@ -1,0 +1,19 @@
+name = "feed-ai-onequestion"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+# OQ: 05:30 fetch articles, 06:30 generate daily score
+crons = ["30 5 * * *", "30 6 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "feed-ai"
+database_id = "1b13de90-ca8b-4e8f-aac0-e32e07945060"
+migrations_dir = "migrations"
+
+[observability]
+enabled = true
+
+# ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, ADMIN_KEY — set via Cloudflare dashboard

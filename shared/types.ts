@@ -22,3 +22,15 @@ export interface Digest {
   itemCount: number;
   items: DigestItem[];
 }
+
+export interface AIUsageEntry {
+  model: string;
+  provider: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  latencyMs?: number;
+  wasFallback: boolean;
+  error?: string;
+  status: "success" | "rate_limited" | "error";
+}
