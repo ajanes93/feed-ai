@@ -5,6 +5,7 @@ defineProps<{
   value: string | number;
   label: string;
   highlight?: boolean;
+  highlightClass?: string;
   index?: number;
 }>();
 </script>
@@ -18,7 +19,7 @@ defineProps<{
   >
     <div
       class="text-2xl font-bold"
-      :class="highlight ? 'text-amber-400' : 'text-white'"
+      :class="highlight ? (highlightClass || 'text-amber-400') : 'text-white'"
     >
       {{ value }}
     </div>

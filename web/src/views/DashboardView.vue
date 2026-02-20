@@ -2,10 +2,10 @@
 import { onMounted, ref } from "vue";
 import { motion } from "motion-v";
 import { useDashboard } from "../composables/useDashboard";
-import { timeAgo, formatTokens } from "../utils/formatting";
-import DataTable from "../components/DataTable.vue";
-import StatCard from "../components/StatCard.vue";
-import DropdownMenu from "../components/DropdownMenu.vue";
+import { timeAgo, formatTokens } from "@feed-ai/shared/utils";
+import DataTable from "@feed-ai/shared/components/DataTable";
+import StatCard from "@feed-ai/shared/components/StatCard";
+import DropdownMenu from "@feed-ai/shared/components/DropdownMenu";
 
 const {
   data,

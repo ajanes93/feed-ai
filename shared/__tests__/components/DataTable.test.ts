@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, type ComponentMountingOptions } from "@vue/test-utils";
 import DataTable from "../../components/DataTable.vue";
-import type { RenderOptions } from "../utils";
+
+type RenderOptions = {
+  [K in keyof ComponentMountingOptions<typeof DataTable>]: K extends "props"
+    ? Partial<ComponentMountingOptions<typeof DataTable>["props"]>
+    : ComponentMountingOptions<typeof DataTable>[K];
+};
 
 const TEST_COLUMNS = [
   { key: "name", label: "Name" },
@@ -13,7 +18,7 @@ const TEST_PROPS = {
   rowCount: 1,
 };
 
-const render = (options: RenderOptions<typeof DataTable> = {}) => {
+const render = (options: RenderOptions = {}) => {
   const wrapper = mount(DataTable, {
     ...options,
     props: { ...TEST_PROPS, ...options.props },

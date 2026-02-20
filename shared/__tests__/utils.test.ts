@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { timeAgo, formatTokens } from "../utils/formatting";
+import { timeAgo, formatTokens } from "../utils";
 
 describe("timeAgo", () => {
   let now: number;

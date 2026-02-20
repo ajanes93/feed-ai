@@ -1,108 +1,41 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { motion } from "motion-v";
-import type {
-  OQModelScore,
-  OQModelAgreement,
-  OQHistoryEntry,
-} from "@feed-ai/shared/oq-types";
+import { useDashboard } from "../composables/useDashboard";
+import { timeAgo, formatTokens } from "@feed-ai/shared/utils";
 import { formatModelName } from "../utils/format";
+import DataTable from "@feed-ai/shared/components/DataTable";
+import StatCard from "@feed-ai/shared/components/StatCard";
+import DropdownMenu from "@feed-ai/shared/components/DropdownMenu";
 
-interface DashboardScore {
-  score: number;
-  scoreTechnical: number;
-  scoreEconomic: number;
-  delta: number;
-  analysis: string;
-  capabilityGap?: string;
-  modelScores: OQModelScore[];
-  modelAgreement: OQModelAgreement;
-  modelSpread: number;
-}
+const {
+  data,
+  loading,
+  error,
+  needsAuth,
+  fetching,
+  fetchResult,
+  fetchSuccess,
+  scoring,
+  scoreResult,
+  scoreSuccess,
+  setAdminKey,
+  fetchDashboard,
+  fetchArticles,
+  generateScore,
+} = useDashboard();
 
-const loading = ref(false);
-const error = ref<string | null>(null);
-const needsAuth = ref(false);
-const adminKey = ref("");
 const keyInput = ref("");
-
-const todayScore = ref<DashboardScore | null>(null);
-const history = ref<OQHistoryEntry[]>([]);
-
-const fetching = ref(false);
-const fetchResult = ref("");
-const scoring = ref(false);
-const scoreResult = ref("");
-
-async function loadDashboard() {
-  loading.value = true;
-  error.value = null;
-  try {
-    const [todayRes, historyRes] = await Promise.all([
-      fetch("/api/today"),
-      fetch("/api/history?d=14"),
-    ]);
-    if (todayRes.ok) todayScore.value = await todayRes.json();
-    if (historyRes.ok) history.value = await historyRes.json();
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : "Failed to load";
-  } finally {
-    loading.value = false;
-  }
-}
 
 function submitKey() {
   const trimmed = keyInput.value.trim();
   if (!trimmed) return;
-  adminKey.value = trimmed;
-  needsAuth.value = false;
+  setAdminKey(trimmed);
   keyInput.value = "";
-  loadDashboard();
+  fetchDashboard();
 }
 
-async function fetchArticles() {
-  fetching.value = true;
-  fetchResult.value = "";
-  try {
-    const res = await fetch("/api/fetch", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${adminKey.value}` },
-    });
-    const data = await res.json();
-    fetchResult.value = res.ok
-      ? JSON.stringify(data)
-      : `Error: ${JSON.stringify(data)}`;
-    if (res.status === 401) needsAuth.value = true;
-    await loadDashboard();
-  } catch (e) {
-    fetchResult.value = `Error: ${e instanceof Error ? e.message : String(e)}`;
-  } finally {
-    fetching.value = false;
-  }
-}
-
-async function generateScore() {
-  scoring.value = true;
-  scoreResult.value = "";
-  try {
-    const res = await fetch("/api/score", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${adminKey.value}` },
-    });
-    const data = await res.json();
-    scoreResult.value = res.ok
-      ? JSON.stringify(data)
-      : `Error: ${JSON.stringify(data)}`;
-    if (res.status === 401) needsAuth.value = true;
-    await loadDashboard();
-  } catch (e) {
-    scoreResult.value = `Error: ${e instanceof Error ? e.message : String(e)}`;
-  } finally {
-    scoring.value = false;
-  }
-}
-
-onMounted(loadDashboard);
+onMounted(fetchDashboard);
 </script>
 
 <template>
@@ -111,23 +44,41 @@ onMounted(loadDashboard);
       <!-- Header -->
       <div class="mb-6 flex items-center justify-between">
         <h1 class="text-xl font-semibold text-white">OQ Dashboard</h1>
-        <div class="flex items-center gap-3">
-          <button
-            v-if="!needsAuth && adminKey"
-            :disabled="fetching"
-            class="rounded-lg border border-gray-700 px-3 py-1.5 text-xs text-gray-400 hover:border-gray-500 hover:text-white disabled:opacity-50"
-            @click="fetchArticles"
-          >
-            {{ fetching ? "Fetching..." : "Fetch Articles" }}
-          </button>
-          <button
-            v-if="!needsAuth && adminKey"
-            :disabled="scoring"
-            class="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
-            @click="generateScore"
-          >
-            {{ scoring ? "Scoring..." : "Generate Score" }}
-          </button>
+        <div class="flex items-center gap-2">
+          <DropdownMenu v-if="data && !needsAuth" label="Actions">
+            <template #default="{ close }">
+              <button
+                :disabled="fetching"
+                class="flex w-full flex-col px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-50"
+                @click="
+                  close();
+                  fetchArticles();
+                "
+              >
+                <span class="font-medium">{{
+                  fetching ? "Fetching..." : "Fetch Articles"
+                }}</span>
+                <span class="text-xs text-gray-500"
+                  >Pull latest from all RSS sources</span
+                >
+              </button>
+              <button
+                :disabled="scoring"
+                class="flex w-full flex-col px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-50"
+                @click="
+                  close();
+                  generateScore();
+                "
+              >
+                <span class="font-medium">{{
+                  scoring ? "Scoring..." : "Generate Score"
+                }}</span>
+                <span class="text-xs text-gray-500"
+                  >Run multi-model AI scoring for today</span
+                >
+              </button>
+            </template>
+          </DropdownMenu>
           <router-link to="/" class="text-xs text-gray-500 hover:text-white">
             Public View
           </router-link>
@@ -137,13 +88,23 @@ onMounted(loadDashboard);
       <!-- Action results -->
       <div
         v-if="fetchResult"
-        class="mb-4 rounded-lg border border-green-800 bg-green-950 px-4 py-2 text-sm text-green-300"
+        class="mb-4 rounded-lg border px-4 py-2 text-sm"
+        :class="
+          fetchSuccess
+            ? 'border-green-800 bg-green-950 text-green-300'
+            : 'border-amber-800 bg-amber-950 text-amber-300'
+        "
       >
         {{ fetchResult }}
       </div>
       <div
         v-if="scoreResult"
-        class="mb-4 rounded-lg border border-green-800 bg-green-950 px-4 py-2 text-sm text-green-300"
+        class="mb-4 rounded-lg border px-4 py-2 text-sm"
+        :class="
+          scoreSuccess
+            ? 'border-green-800 bg-green-950 text-green-300'
+            : 'border-amber-800 bg-amber-950 text-amber-300'
+        "
       >
         {{ scoreResult }}
       </div>
@@ -151,7 +112,7 @@ onMounted(loadDashboard);
       <!-- Auth prompt -->
       <div v-if="needsAuth" class="mx-auto max-w-sm py-20">
         <p class="mb-4 text-center text-sm text-gray-400">
-          Enter admin key for write actions
+          Enter admin key to access the dashboard
         </p>
         <form class="flex gap-2" @submit.prevent="submitKey">
           <input
@@ -167,10 +128,13 @@ onMounted(loadDashboard);
             Go
           </button>
         </form>
+        <p v-if="error" class="mt-3 text-center text-sm text-red-400">
+          {{ error }}
+        </p>
       </div>
 
       <!-- Loading -->
-      <div v-if="loading" class="flex justify-center py-20">
+      <div v-else-if="loading" class="flex justify-center py-20">
         <div
           class="h-8 w-8 animate-spin rounded-full border-2 border-gray-600 border-t-white"
         />
@@ -182,182 +146,148 @@ onMounted(loadDashboard);
       </div>
 
       <!-- Dashboard content -->
-      <template v-else-if="todayScore">
+      <template v-else-if="data">
         <!-- Stats row -->
         <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div
-            class="rounded-xl border border-orange-500/20 bg-gray-900 p-4 text-center"
-          >
-            <div class="font-mono text-2xl font-medium text-orange-400">
-              {{ todayScore.score }}
-            </div>
-            <div class="mt-1 text-xs text-gray-500">Today's Score</div>
-          </div>
-          <div
-            class="rounded-xl border border-gray-800 bg-gray-900 p-4 text-center"
-          >
-            <div class="font-mono text-2xl font-medium text-white">
-              {{ todayScore.scoreTechnical }}
-            </div>
-            <div class="mt-1 text-xs text-gray-500">Technical</div>
-          </div>
-          <div
-            class="rounded-xl border border-gray-800 bg-gray-900 p-4 text-center"
-          >
-            <div class="font-mono text-2xl font-medium text-white">
-              {{ todayScore.scoreEconomic }}
-            </div>
-            <div class="mt-1 text-xs text-gray-500">Economic</div>
-          </div>
-          <div
-            class="rounded-xl border border-gray-800 bg-gray-900 p-4 text-center"
-          >
-            <div
-              class="font-mono text-2xl font-medium"
-              :class="{
-                'text-red-400': todayScore.delta > 0,
-                'text-emerald-400': todayScore.delta < 0,
-                'text-gray-500': todayScore.delta === 0,
-              }"
-            >
-              {{ todayScore.delta > 0 ? "+" : "" }}{{ todayScore.delta }}
-            </div>
-            <div class="mt-1 text-xs text-gray-500">Daily Delta</div>
-          </div>
+          <StatCard :value="data.totalScores" label="Total Scores" :index="0" />
+          <StatCard
+            :value="data.totalArticles"
+            label="Total Articles"
+            :index="1"
+          />
+          <StatCard
+            :value="formatTokens(data.ai.totalTokens)"
+            label="Total Tokens"
+            :index="2"
+          />
+          <StatCard
+            :value="data.totalSubscribers"
+            label="Subscribers"
+            :index="3"
+          />
         </div>
 
-        <!-- Analysis -->
+        <!-- AI Usage -->
         <motion.section
           class="mb-6"
           :initial="{ opacity: 0, y: 12 }"
           :animate="{ opacity: 1, y: 0 }"
-          :transition="{ duration: 0.35, delay: 0.1 }"
+          :transition="{ duration: 0.35, delay: 0.15 }"
         >
           <h2
             class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase"
           >
-            Today's Analysis
+            AI Usage
           </h2>
-          <div class="rounded-xl border border-gray-800 bg-gray-900 p-4">
-            <p class="text-sm leading-relaxed text-gray-300">
-              {{ todayScore.analysis }}
-            </p>
-            <div
-              v-if="todayScore.capabilityGap"
-              class="mt-3 border-t border-gray-800 pt-3 text-xs text-gray-500"
+          <DataTable
+            :columns="[
+              { key: 'when', label: 'When' },
+              { key: 'provider', label: 'Provider' },
+              { key: 'model', label: 'Model' },
+              { key: 'in', label: 'In' },
+              { key: 'out', label: 'Out' },
+              { key: 'latency', label: 'Latency' },
+              { key: 'status', label: 'Status' },
+            ]"
+            :row-count="data.ai.recentCalls.length"
+            empty-message="No AI usage recorded yet"
+          >
+            <tr
+              v-for="call in data.ai.recentCalls"
+              :key="call.id"
+              class="border-b border-gray-800/50"
             >
-              {{ todayScore.capabilityGap }}
-            </div>
-          </div>
-        </motion.section>
-
-        <!-- Model Scores -->
-        <motion.section
-          v-if="todayScore.modelScores.length > 0"
-          class="mb-6"
-          :initial="{ opacity: 0, y: 12 }"
-          :animate="{ opacity: 1, y: 0 }"
-          :transition="{ duration: 0.35, delay: 0.2 }"
-        >
-          <h2
-            class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase"
-          >
-            Model Breakdown
-            <span class="ml-2 text-xs font-normal text-gray-600">
-              {{ todayScore.modelAgreement }}
-              · spread:
-              {{ todayScore.modelSpread }}
-            </span>
-          </h2>
-          <div class="grid gap-3 sm:grid-cols-3">
-            <div
-              v-for="model in todayScore.modelScores"
-              :key="model.model"
-              class="rounded-xl border border-gray-800 bg-gray-900 p-4"
-            >
-              <div class="mb-2 flex items-center justify-between">
-                <span class="text-sm font-medium text-white">
-                  {{ formatModelName(model.model) }}
-                </span>
-                <span class="font-mono text-sm text-orange-400">
-                  {{ model.suggested_delta > 0 ? "+" : ""
-                  }}{{ model.suggested_delta }}
-                </span>
-              </div>
-              <p class="text-xs leading-relaxed text-gray-400">
-                {{ model.analysis }}
-              </p>
-            </div>
-          </div>
-        </motion.section>
-
-        <!-- Score History -->
-        <motion.section
-          v-if="history.length > 0"
-          class="mb-6"
-          :initial="{ opacity: 0, y: 12 }"
-          :animate="{ opacity: 1, y: 0 }"
-          :transition="{ duration: 0.35, delay: 0.3 }"
-        >
-          <h2
-            class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase"
-          >
-            Score History (14d)
-          </h2>
-          <div
-            class="overflow-x-auto rounded-xl border border-gray-800 bg-gray-900"
-          >
-            <table class="w-full text-left text-xs">
-              <thead>
-                <tr class="border-b border-gray-800 text-gray-500">
-                  <th class="px-3 py-2 font-medium">Date</th>
-                  <th class="px-3 py-2 font-medium">Score</th>
-                  <th class="px-3 py-2 font-medium">Tech</th>
-                  <th class="px-3 py-2 font-medium">Econ</th>
-                  <th class="px-3 py-2 font-medium">Delta</th>
-                  <th class="px-3 py-2 font-medium">Spread</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="entry in history"
-                  :key="entry.date"
-                  class="border-b border-gray-800/50"
+              <td class="px-3 py-2 text-gray-300">
+                {{ timeAgo(call.createdAt) }}
+              </td>
+              <td class="px-3 py-2">{{ call.provider }}</td>
+              <td class="px-3 py-2 text-xs text-gray-400">
+                {{ formatModelName(call.model) }}
+              </td>
+              <td class="px-3 py-2">
+                {{ formatTokens(call.inputTokens) }}
+              </td>
+              <td class="px-3 py-2">
+                {{ formatTokens(call.outputTokens) }}
+              </td>
+              <td class="px-3 py-2">
+                {{
+                  call.latencyMs
+                    ? `${(call.latencyMs / 1000).toFixed(1)}s`
+                    : "-"
+                }}
+              </td>
+              <td class="px-3 py-2">
+                <span
+                  :class="{
+                    'text-green-400': call.status === 'success',
+                    'text-amber-400': call.status === 'rate_limited',
+                    'text-red-400': call.status === 'error',
+                  }"
                 >
-                  <td class="px-3 py-2 text-gray-300">{{ entry.date }}</td>
-                  <td class="px-3 py-2 font-mono font-medium text-white">
-                    {{ entry.score }}
-                  </td>
-                  <td class="px-3 py-2 font-mono text-gray-400">
-                    {{ entry.scoreTechnical }}
-                  </td>
-                  <td class="px-3 py-2 font-mono text-gray-400">
-                    {{ entry.scoreEconomic }}
-                  </td>
-                  <td
-                    class="px-3 py-2 font-mono"
-                    :class="{
-                      'text-red-400': entry.delta > 0,
-                      'text-emerald-400': entry.delta < 0,
-                      'text-gray-500': entry.delta === 0,
-                    }"
-                  >
-                    {{ entry.delta > 0 ? "+" : "" }}{{ entry.delta }}
-                  </td>
-                  <td class="px-3 py-2 font-mono text-gray-500">
-                    {{ entry.modelSpread }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                  {{ call.status }}
+                </span>
+              </td>
+            </tr>
+          </DataTable>
+        </motion.section>
+
+        <!-- Source Health -->
+        <motion.section
+          class="mb-6"
+          :initial="{ opacity: 0, y: 12 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ duration: 0.35, delay: 0.25 }"
+        >
+          <h2
+            class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase"
+          >
+            Sources
+          </h2>
+          <DataTable
+            :columns="[
+              { key: 'source', label: 'Source' },
+              { key: 'pillar', label: 'Pillar' },
+              { key: 'articles', label: 'Articles' },
+              { key: 'lastFetched', label: 'Last Fetched' },
+            ]"
+            :row-count="data.sources.length"
+            empty-message="No sources tracked"
+          >
+            <tr
+              v-for="source in data.sources"
+              :key="source.sourceName"
+              class="border-b border-gray-800/50"
+            >
+              <td class="px-3 py-2 font-medium text-white">
+                {{ source.sourceName }}
+              </td>
+              <td class="px-3 py-2">
+                <span
+                  :class="{
+                    'text-purple-400': source.pillar === 'capability',
+                    'text-blue-400': source.pillar === 'labour_market',
+                    'text-green-400': source.pillar === 'sentiment',
+                    'text-yellow-400': source.pillar === 'industry',
+                    'text-gray-400': source.pillar === 'barriers',
+                  }"
+                >
+                  {{ source.pillar }}
+                </span>
+              </td>
+              <td class="px-3 py-2">{{ source.articleCount }}</td>
+              <td class="px-3 py-2 text-gray-300">
+                {{ timeAgo(source.lastFetched) }}
+              </td>
+            </tr>
+          </DataTable>
         </motion.section>
 
         <!-- Refresh -->
-        <div class="pb-8 text-center">
+        <div class="text-center">
           <button
             class="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-400 hover:border-gray-500 hover:text-white"
-            @click="loadDashboard"
+            @click="fetchDashboard"
           >
             Refresh
           </button>
