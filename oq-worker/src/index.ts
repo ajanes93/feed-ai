@@ -234,25 +234,21 @@ async function fetchOQArticles(
       for (const item of items) {
         if (!item.title || !item.url) continue;
 
-        try {
-          await db
-            .prepare(
-              "INSERT INTO oq_articles (id, title, url, source, pillar, summary, published_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING"
-            )
-            .bind(
-              crypto.randomUUID(),
-              item.title.slice(0, 500),
-              item.url,
-              source.name,
-              source.pillar,
-              item.summary?.slice(0, 500) ?? null,
-              item.publishedAt ?? yesterday
-            )
-            .run();
-          fetched++;
-        } catch {
-          // Duplicate URL — skip
-        }
+        await db
+          .prepare(
+            "INSERT INTO oq_articles (id, title, url, source, pillar, summary, published_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING"
+          )
+          .bind(
+            crypto.randomUUID(),
+            item.title.slice(0, 500),
+            item.url,
+            source.name,
+            source.pillar,
+            item.summary?.slice(0, 500) ?? null,
+            item.publishedAt ?? yesterday
+          )
+          .run();
+        fetched++;
       }
     } catch (err) {
       errors.push(
@@ -334,20 +330,15 @@ async function generateDailyScore(env: Env): Promise<{
   const today = new Date().toISOString().split("T")[0];
 
   const existing = await env.DB.prepare(
-    "SELECT id FROM oq_scores WHERE date = ?"
+    "SELECT score, delta FROM oq_scores WHERE date = ?"
   )
     .bind(today)
     .first();
 
   if (existing) {
-    const row = await env.DB.prepare(
-      "SELECT score, delta FROM oq_scores WHERE date = ?"
-    )
-      .bind(today)
-      .first();
     return {
-      score: (row?.score as number) ?? 0,
-      delta: (row?.delta as number) ?? 0,
+      score: existing.score as number,
+      delta: existing.delta as number,
       date: today,
       alreadyExists: true,
     };
@@ -355,9 +346,7 @@ async function generateDailyScore(env: Env): Promise<{
 
   const prevRow = await env.DB.prepare(
     "SELECT score, score_technical, score_economic, date FROM oq_scores ORDER BY date DESC LIMIT 1"
-  )
-    .bind()
-    .first();
+  ).first();
 
   const prevScore = (prevRow?.score as number) ?? STARTING_SCORE;
   const prevTechnical =
@@ -366,9 +355,7 @@ async function generateDailyScore(env: Env): Promise<{
 
   const historyRows = await env.DB.prepare(
     "SELECT date, score, delta FROM oq_scores ORDER BY date DESC LIMIT 14"
-  )
-    .bind()
-    .all();
+  ).all();
   const history = historyRows.results
     .map((r) => `${r.date}: ${r.score} (${r.delta > 0 ? "+" : ""}${r.delta})`)
     .join(", ");
@@ -404,48 +391,25 @@ async function generateDailyScore(env: Env): Promise<{
         )
       : 0;
 
-    if (daysSinceLast >= DECAY_THRESHOLD_DAYS) {
-      const decayDelta =
-        prevScore > DECAY_TARGET
-          ? -DECAY_RATE
-          : prevScore < DECAY_TARGET
-            ? DECAY_RATE
-            : 0;
-      const newScore = Math.round(
-        Math.max(5, Math.min(95, prevScore + decayDelta))
-      );
-
-      await saveScore(env.DB, {
-        date: today,
-        score: newScore,
-        scoreTechnical: prevTechnical,
-        scoreEconomic: prevEconomic,
-        delta: decayDelta,
-        analysis: `No significant signals for ${daysSinceLast} days. Score decaying toward baseline (${DECAY_TARGET}).`,
-        signals: "[]",
-        pillarScores: JSON.stringify({
-          capability: 0,
-          labour_market: 0,
-          sentiment: 0,
-          industry: 0,
-          barriers: 0,
-        }),
-        modelScores: "[]",
-        modelAgreement: "partial",
-        modelSpread: 0,
-        promptHash: "decay",
-      });
-
-      return { score: newScore, delta: decayDelta, date: today };
-    }
+    const shouldDecay = daysSinceLast >= DECAY_THRESHOLD_DAYS;
+    const delta = shouldDecay
+      ? prevScore > DECAY_TARGET
+        ? -DECAY_RATE
+        : prevScore < DECAY_TARGET
+          ? DECAY_RATE
+          : 0
+      : 0;
+    const newScore = Math.round(Math.max(5, Math.min(95, prevScore + delta)));
 
     await saveScore(env.DB, {
       date: today,
-      score: prevScore,
+      score: newScore,
       scoreTechnical: prevTechnical,
       scoreEconomic: prevEconomic,
-      delta: 0,
-      analysis: "No new signals today.",
+      delta,
+      analysis: shouldDecay
+        ? `No significant signals for ${daysSinceLast} days. Score decaying toward baseline (${DECAY_TARGET}).`
+        : "No new signals today.",
       signals: "[]",
       pillarScores: JSON.stringify({
         capability: 0,
@@ -457,10 +421,10 @@ async function generateDailyScore(env: Env): Promise<{
       modelScores: "[]",
       modelAgreement: "partial",
       modelSpread: 0,
-      promptHash: "no-articles",
+      promptHash: shouldDecay ? "decay" : "no-articles",
     });
 
-    return { score: prevScore, delta: 0, date: today };
+    return { score: newScore, delta, date: today };
   }
 
   const result = await runScoring({

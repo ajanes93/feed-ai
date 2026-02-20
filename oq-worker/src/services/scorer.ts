@@ -388,12 +388,9 @@ export async function runScoring(
     );
   }
 
-  const modelResults = (await Promise.allSettled(calls))
-    .filter(
-      (r): r is PromiseFulfilledResult<ModelResult> =>
-        r.status === "fulfilled" && r.value !== null
-    )
-    .map((r) => r.value);
+  const modelResults = (await Promise.all(calls)).filter(
+    (r): r is ModelResult => r !== null
+  );
 
   if (modelResults.length === 0) {
     throw new Error("All AI models failed — cannot generate score");
