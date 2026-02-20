@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { OQModelScore, OQModelAgreement } from "@feed-ai/shared/oq-types";
-import { formatModelName } from "../utils/format";
+import { formatModelName } from "@feed-ai/shared/utils";
 
 defineProps<{
   modelAgreement: OQModelAgreement;

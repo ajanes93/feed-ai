@@ -2,8 +2,7 @@
 import { onMounted, ref } from "vue";
 import { motion } from "motion-v";
 import { useDashboard } from "../composables/useDashboard";
-import { timeAgo, formatTokens } from "@feed-ai/shared/utils";
-import { formatModelName } from "../utils/format";
+import { timeAgo, formatTokens, formatModelName } from "@feed-ai/shared/utils";
 import DataTable from "@feed-ai/shared/components/DataTable";
 import StatCard from "@feed-ai/shared/components/StatCard";
 import DropdownMenu from "@feed-ai/shared/components/DropdownMenu";
@@ -45,7 +44,7 @@ onMounted(fetchDashboard);
       <div class="mb-6 flex items-center justify-between">
         <h1 class="text-xl font-semibold text-white">OQ Dashboard</h1>
         <div class="flex items-center gap-2">
-          <DropdownMenu v-if="data && !needsAuth" label="Actions">
+          <DropdownMenu v-if="data && !needsAuth" label="Actions" :disabled="fetching || scoring">
             <template #default="{ close }">
               <button
                 :disabled="fetching"
@@ -157,7 +156,7 @@ onMounted(fetchDashboard);
           />
           <StatCard
             :value="formatTokens(data.ai.totalTokens)"
-            label="Total Tokens"
+            label="Tokens (recent)"
             :index="2"
           />
           <StatCard

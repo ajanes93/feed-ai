@@ -16,6 +16,17 @@
     "build": "true",
     "test": "vitest run"
   },
+  "peerDependencies": {
+    "@formkit/auto-animate": ">=0.8.0",
+    "@vueuse/core": ">=10.0.0",
+    "motion-v": ">=1.0.0",
+    "vue": ">=3.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@formkit/auto-animate": { "optional": true },
+    "@vueuse/core": { "optional": true },
+    "motion-v": { "optional": true }
+  },
   "dependencies": {
     "fishery": "^2.4.0"
   },
