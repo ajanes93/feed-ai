@@ -8,6 +8,12 @@ import type { Env } from "./types";
 import { oqSources } from "./sources";
 import { runScoring } from "./services/scorer";
 import { buildScoringPrompt, hashPrompt } from "./services/prompt";
+import {
+  fetchSanityHarness,
+  buildSanityHarnessArticleSummary,
+} from "./services/sanity-harness";
+import { fetchSWEBenchLeaderboard } from "./services/swe-bench";
+import { fetchFREDData } from "./services/fred";
 
 const STARTING_SCORE = 32;
 const STARTING_TECHNICAL = 25;
@@ -45,6 +51,9 @@ async function adminAuth(
 app.use("/api/fetch", adminAuth);
 app.use("/api/score", adminAuth);
 app.use("/api/admin/*", adminAuth);
+app.use("/api/fetch-sanity", adminAuth);
+app.use("/api/fetch-swebench", adminAuth);
+app.use("/api/fetch-fred", adminAuth);
 
 // --- Admin dashboard ---
 
@@ -233,11 +242,13 @@ app.get("/api/methodology", async (c) => {
     whatWouldChange: {
       to50: [
         "SWE-bench Pro climbing above 50% consistently",
+        "Top SanityHarness agent >85% AND all languages >60%",
         "Multiple Fortune 500 companies reporting 50%+ reduction in engineering headcount",
         "Indeed software job posting index dropping significantly faster than general postings",
       ],
       to70: [
         "AI autonomously shipping and maintaining production systems at multiple companies for 6+ months",
+        "Median SanityHarness agent pass rate >70%",
         "Measurable, sustained decline in software engineering salaries",
         "Major open-source projects primarily maintained by AI agents",
       ],
@@ -245,6 +256,7 @@ app.get("/api/methodology", async (c) => {
         "AI coding tool market contracting",
         "Major failures of AI-generated production code causing regulatory backlash",
         "SWE-bench Pro progress plateauing for 12+ months",
+        "Top SanityHarness agent plateaus or regresses",
         "Debugging AI code consistently taking longer than writing it from scratch",
       ],
     },
@@ -262,6 +274,141 @@ app.post("/api/score", async (c) => {
   const result = await generateDailyScore(c.env);
   return c.json(result);
 });
+
+app.post("/api/fetch-sanity", async (c) => {
+  const result = await fetchAndStoreSanityHarness(c.env.DB);
+  return c.json(result);
+});
+
+app.post("/api/fetch-swebench", async (c) => {
+  const result = await fetchAndStoreSWEBench(c.env.DB);
+  return c.json(result);
+});
+
+app.post("/api/fetch-fred", async (c) => {
+  if (!c.env.FRED_API_KEY) {
+    return c.json({ error: "FRED_API_KEY not configured" }, 500);
+  }
+  const result = await fetchAndStoreFRED(c.env.DB, c.env.FRED_API_KEY);
+  return c.json(result);
+});
+
+// --- External data loading ---
+
+interface ExternalData {
+  sanityHarness?: {
+    topPassRate: number;
+    topAgent: string;
+    topModel: string;
+    medianPassRate: number;
+    languageBreakdown: string;
+  };
+  softwareIndex?: number;
+  generalIndex?: number;
+}
+
+async function loadExternalData(db: D1Database): Promise<ExternalData> {
+  const result: ExternalData = {};
+  try {
+    const rows = await db
+      .prepare(
+        "SELECT key, value FROM oq_external_data WHERE key IN (?, ?, ?)"
+      )
+      .bind("sanity_harness", "swe_bench", "fred_labour")
+      .all();
+
+    for (const row of rows.results) {
+      const data = JSON.parse(row.value as string);
+      if (row.key === "sanity_harness") {
+        result.sanityHarness = {
+          topPassRate: data.topPassRate,
+          topAgent: data.topAgent,
+          topModel: data.topModel,
+          medianPassRate: data.medianPassRate,
+          languageBreakdown: data.languageBreakdown,
+        };
+      } else if (row.key === "fred_labour") {
+        result.softwareIndex = data.softwareIndex;
+        result.generalIndex = data.generalIndex;
+      }
+    }
+  } catch {
+    // Non-critical — external data is optional
+  }
+  return result;
+}
+
+// --- External data fetching ---
+
+async function fetchAndStoreSanityHarness(
+  db: D1Database
+): Promise<{ stored: boolean; topPassRate: number }> {
+  const data = await fetchSanityHarness();
+  const summary = buildSanityHarnessArticleSummary(data);
+  const today = new Date().toISOString().split("T")[0];
+
+  // Store as synthetic article (deduplicate by week)
+  const weekKey = `sanityharness-${today}`;
+  await db
+    .prepare(
+      "INSERT INTO oq_articles (id, title, url, source, pillar, summary, published_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING"
+    )
+    .bind(
+      crypto.randomUUID(),
+      `SanityHarness Agent Benchmark Update — ${today}`,
+      `https://sanityboard.lr7.dev#${weekKey}`,
+      "SanityHarness",
+      "capability",
+      summary,
+      new Date().toISOString()
+    )
+    .run();
+
+  // Store structured data for prompt context
+  await db
+    .prepare(
+      "INSERT OR REPLACE INTO oq_external_data (key, value) VALUES (?, ?)"
+    )
+    .bind("sanity_harness", JSON.stringify(data))
+    .run();
+
+  return { stored: true, topPassRate: data.topPassRate };
+}
+
+async function fetchAndStoreSWEBench(
+  db: D1Database
+): Promise<{ stored: boolean; verified: number; pro: number }> {
+  const data = await fetchSWEBenchLeaderboard();
+
+  await db
+    .prepare(
+      "INSERT OR REPLACE INTO oq_external_data (key, value) VALUES (?, ?)"
+    )
+    .bind("swe_bench", JSON.stringify(data))
+    .run();
+
+  return { stored: true, verified: data.topVerified, pro: data.topPro };
+}
+
+async function fetchAndStoreFRED(
+  db: D1Database,
+  apiKey: string
+): Promise<{ stored: boolean; softwareIndex?: number; generalIndex?: number }> {
+  const data = await fetchFREDData(apiKey);
+
+  await db
+    .prepare(
+      "INSERT OR REPLACE INTO oq_external_data (key, value) VALUES (?, ?)"
+    )
+    .bind("fred_labour", JSON.stringify(data))
+    .run();
+
+  return {
+    stored: true,
+    softwareIndex: data.softwareIndex,
+    generalIndex: data.generalIndex,
+  };
+}
 
 // --- Article fetching ---
 
@@ -486,6 +633,9 @@ async function generateDailyScore(env: Env): Promise<{
     return { score: newScore, delta, date: today };
   }
 
+  // Load external data for prompt context
+  const externalData = await loadExternalData(env.DB);
+
   const result = await runScoring({
     previousScore: prevScore,
     previousTechnical: prevTechnical,
@@ -497,6 +647,9 @@ async function generateDailyScore(env: Env): Promise<{
       gemini: env.GEMINI_API_KEY,
       openai: env.OPENAI_API_KEY,
     },
+    sanityHarness: externalData.sanityHarness,
+    softwareIndex: externalData.softwareIndex,
+    generalIndex: externalData.generalIndex,
   });
 
   for (const usage of result.aiUsages) {
@@ -510,6 +663,9 @@ async function generateDailyScore(env: Env): Promise<{
       economicScore: prevEconomic,
       history,
       articlesByPillar,
+      sanityHarness: externalData.sanityHarness,
+      softwareIndex: externalData.softwareIndex,
+      generalIndex: externalData.generalIndex,
     });
     await env.DB.prepare(
       "INSERT INTO oq_prompt_versions (id, hash, prompt_text) VALUES (?, ?, ?) ON CONFLICT(hash) DO NOTHING"
@@ -635,6 +791,19 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
       (async () => {
+        // Weekly external data fetches (Sundays)
+        const dayOfWeek = new Date().getUTCDay();
+        if (dayOfWeek === 0) {
+          console.log("[oq] Cron: fetching external data (weekly)");
+          await Promise.allSettled([
+            fetchAndStoreSanityHarness(env.DB),
+            fetchAndStoreSWEBench(env.DB),
+            ...(env.FRED_API_KEY
+              ? [fetchAndStoreFRED(env.DB, env.FRED_API_KEY)]
+              : []),
+          ]);
+        }
+
         console.log("[oq] Cron: fetching articles");
         await fetchOQArticles(env.DB);
         console.log("[oq] Cron: generating daily score");

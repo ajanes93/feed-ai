@@ -3,5 +3,6 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   GEMINI_API_KEY?: string;
   OPENAI_API_KEY?: string;
+  FRED_API_KEY?: string;
   ADMIN_KEY: string;
 }

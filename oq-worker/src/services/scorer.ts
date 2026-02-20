@@ -262,6 +262,24 @@ function mergePillarScores(scores: OQModelScore[]): OQPillarScores {
   return result;
 }
 
+function formatModelName(model: string): string {
+  if (model.includes("claude")) return "Claude";
+  if (model.includes("gpt")) return "GPT-4";
+  if (model.includes("gemini")) return "Gemini";
+  return model.split("-")[0];
+}
+
+function deltaVerb(delta: number): string {
+  if (delta > 0.5) return "upgraded the score";
+  if (delta < -0.5) return "downgraded the score";
+  return "held steady";
+}
+
+function firstSentence(text: string): string {
+  const match = text.match(/^[^.!?]+[.!?]/);
+  return match ? match[0].trim() : text.slice(0, 120);
+}
+
 function synthesizeAnalysis(
   scores: OQModelScore[],
   agreement: OQModelAgreement
@@ -269,10 +287,14 @@ function synthesizeAnalysis(
   if (scores.length === 1) return scores[0].analysis;
 
   if (agreement === "disagree") {
-    const parts = scores.map(
-      (s) => `${s.model.split("-")[0].toUpperCase()}: "${s.analysis}"`
-    );
-    return parts.join(" — Meanwhile, ");
+    const parts = scores.map((s) => {
+      const name = formatModelName(s.model);
+      const verb = deltaVerb(s.suggested_delta);
+      const delta = s.suggested_delta > 0 ? `+${s.suggested_delta}` : `${s.suggested_delta}`;
+      const cite = firstSentence(s.analysis);
+      return `${name} ${verb} (${delta}), citing: ${cite}`;
+    });
+    return parts.join(" ");
   }
 
   const claude = scores.find((s) => s.model.includes("claude"));
@@ -317,6 +339,15 @@ interface ScoringInput {
     gemini?: string;
     openai?: string;
   };
+  sanityHarness?: {
+    topPassRate: number;
+    topAgent: string;
+    topModel: string;
+    medianPassRate: number;
+    languageBreakdown: string;
+  };
+  softwareIndex?: number;
+  generalIndex?: number;
 }
 
 const MAX_RETRIES = 3;
@@ -347,6 +378,9 @@ export async function runScoring(
     economicScore: input.previousEconomic,
     history: input.history,
     articlesByPillar: input.articlesByPillar,
+    sanityHarness: input.sanityHarness,
+    softwareIndex: input.softwareIndex,
+    generalIndex: input.generalIndex,
   });
 
   const promptHash = await hashPrompt(prompt);

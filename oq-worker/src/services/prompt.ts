@@ -1,11 +1,22 @@
 import type { OQPillar } from "@feed-ai/shared/oq-types";
 
+interface SanityHarnessContext {
+  topPassRate: number;
+  topAgent: string;
+  topModel: string;
+  medianPassRate: number;
+  languageBreakdown: string;
+}
+
 interface PromptContext {
   currentScore: number;
   technicalScore: number;
   economicScore: number;
   history: string;
   articlesByPillar: Record<OQPillar, string>;
+  sanityHarness?: SanityHarnessContext;
+  softwareIndex?: number;
+  generalIndex?: number;
 }
 
 export function buildScoringPrompt(ctx: PromptContext): string {
@@ -31,11 +42,25 @@ Score history (last 14 days): ${ctx.history}
 Today's articles grouped by pillar:
 
 ## AI Capability Benchmarks (weight: 25%)
-${ctx.articlesByPillar.capability || "No articles today."}
+${
+  ctx.sanityHarness
+    ? `SanityHarness latest data (agent-level benchmarks across 6 languages):
+- Top agent pass rate: ${ctx.sanityHarness.topPassRate}% (${ctx.sanityHarness.topAgent} + ${ctx.sanityHarness.topModel})
+- Median agent pass rate: ${ctx.sanityHarness.medianPassRate}%
+- Language spread (top agent): ${ctx.sanityHarness.languageBreakdown}
+- Note: High pass rates on Go/Rust but low on Dart/Zig indicates narrow competence, not general replacement capability.
+`
+    : ""
+}${ctx.articlesByPillar.capability || "No articles today."}
 
 ## Labour Market Signals (weight: 25%)
 Note: Only flag a labour market AI signal if software job postings are declining FASTER than general postings.
-${ctx.articlesByPillar.labour_market || "No articles today."}
+${
+  ctx.softwareIndex !== undefined && ctx.generalIndex !== undefined
+    ? `Software job postings index: ${ctx.softwareIndex}. General job postings index: ${ctx.generalIndex}.
+`
+    : ""
+}${ctx.articlesByPillar.labour_market || "No articles today."}
 
 ## Developer Sentiment & Adoption (weight: 20%)
 Note: Track the "Maintenance Tax" — if developers report spending more time fixing AI-generated code, that signals augmentation problems, not replacement progress. High adoption of broken AI code = score goes DOWN.
