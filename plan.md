@@ -151,20 +151,23 @@ Static values as a baseline — gap 2 makes them dynamic.
 
 **Problem:** The plan has `{software_index}` and `{general_index}` placeholders for labour market normalization. Without real data, models can't judge if software job declines are AI-specific or macro.
 
-**Two phases:**
+**Changes:**
 
-### Phase 1 — Prompt placeholders + manual input (now)
+### 9a. Prompt integration
 - Add `softwareIndex` and `generalIndex` optional fields to `PromptContext` in `prompt.ts`
 - Update Pillar 2 prompt section: *"Software job postings index: {value}. General job postings index: {value}."* — falls back to "Data not currently available" if absent
-- Add admin endpoint `POST /api/labour-indices` to manually set values
 
-### Phase 2 — FRED API (once API key is approved)
-- Create `oq-worker/src/services/fred.ts`:
-  - Fetch IHLIDXUSTPSOFTDEVE (Indeed Software Dev Postings) series
-  - Fetch ICSA (Initial Claims) or similar general employment series
-  - Parse JSON response, extract latest value
+### 9b. FRED API service (`oq-worker/src/services/fred.ts`)
+- API key is available — add as `FRED_API_KEY` worker secret
+- Fetch IHLIDXUSTPSOFTDEVE (Indeed Software Dev Postings) series
+- Fetch ICSA (Initial Claims) or similar general employment series
+- Parse JSON response, extract latest value
+- Store latest values in D1
+
+### 9c. Cron + admin endpoint
 - Run on weekly cron alongside SanityHarness
 - Auto-populate the prompt context with real values
+- `POST /api/fetch-fred` (admin-only) to trigger manual fetch
 
 ---
 
