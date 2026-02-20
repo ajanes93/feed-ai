@@ -279,6 +279,15 @@ function synthesizeAnalysis(
   return claude?.analysis ?? scores[0].analysis;
 }
 
+export {
+  parseModelResponse,
+  calculateConsensusDelta,
+  calculateModelAgreement,
+  mergeSignals,
+  mergePillarScores,
+  synthesizeAnalysis,
+};
+
 // --- Main scoring pipeline ---
 
 export interface OQScoringResult {

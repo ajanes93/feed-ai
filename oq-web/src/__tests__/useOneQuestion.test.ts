@@ -127,4 +127,89 @@ describe("useOneQuestion", () => {
       body: JSON.stringify({ email: "test@example.com" }),
     });
   });
+
+  it("subscribe sets error status on API failure", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 400 });
+
+    const { subscribe, subscribeStatus } = useOneQuestion();
+    const result = await subscribe("bad@email");
+
+    expect(result).toBe(false);
+    expect(subscribeStatus.value).toBe("error");
+  });
+
+  it("subscribe sets error status on network failure", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("Network error"));
+
+    const { subscribe, subscribeStatus } = useOneQuestion();
+    const result = await subscribe("test@example.com");
+
+    expect(result).toBe(false);
+    expect(subscribeStatus.value).toBe("error");
+  });
+
+  it("deltaFormatted shows negative delta", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          date: "2025-01-15",
+          score: 31,
+          delta: -0.5,
+          analysis: "",
+          signals: [],
+          pillarScores: {},
+          modelScores: [],
+          modelAgreement: "partial",
+          modelSpread: 0,
+        }),
+    });
+
+    const { fetchToday, deltaFormatted, deltaDirection } = useOneQuestion();
+    await fetchToday();
+
+    expect(deltaFormatted.value).toBe("-0.5 from yesterday");
+    expect(deltaDirection.value).toBe("down");
+  });
+
+  it("formattedDate formats date correctly", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          date: "2025-01-15",
+          score: 32,
+          delta: 0,
+          analysis: "",
+          signals: [],
+          pillarScores: {},
+          modelScores: [],
+          modelAgreement: "partial",
+          modelSpread: 0,
+        }),
+    });
+
+    const { fetchToday, formattedDate } = useOneQuestion();
+    await fetchToday();
+
+    expect(formattedDate.value).toBe("15 January 2025");
+  });
+
+  it("fetchHistory silently handles errors", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("Network error"));
+
+    const { history, fetchHistory } = useOneQuestion();
+    await fetchHistory();
+
+    expect(history.value).toEqual([]);
+  });
+
+  it("fetchHistory does not populate on non-ok response", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
+
+    const { history, fetchHistory } = useOneQuestion();
+    await fetchHistory();
+
+    expect(history.value).toEqual([]);
+  });
 });

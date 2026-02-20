@@ -573,7 +573,7 @@ function mapScoreRow(row: Record<string, unknown>) {
 
 // --- Exports ---
 
-export { fetchOQArticles, generateDailyScore };
+export { fetchOQArticles, generateDailyScore, extractFeedItems, stripHtml };
 
 export default {
   fetch: app.fetch,
