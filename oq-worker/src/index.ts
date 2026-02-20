@@ -327,7 +327,12 @@ function stripHtml(text: string): string {
 
 async function generateDailyScore(
   env: Env
-): Promise<{ score: number; delta: number; date: string }> {
+): Promise<{
+  score: number;
+  delta: number;
+  date: string;
+  alreadyExists?: boolean;
+}> {
   const today = new Date().toISOString().split("T")[0];
 
   const existing = await env.DB.prepare(
