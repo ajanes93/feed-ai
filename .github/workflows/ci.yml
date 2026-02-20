@@ -52,6 +52,30 @@ jobs:
       - run: npm test
         working-directory: mcp
 
+  oq-worker-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
+        working-directory: oq-worker
+
+  oq-web-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
+        working-directory: oq-web
+      - run: npx vue-tsc --noEmit
+        working-directory: oq-web
+
   e2e:
     runs-on: ubuntu-latest
     steps:
@@ -69,4 +93,23 @@ jobs:
         with:
           name: playwright-report
           path: web/playwright-report/
+          retention-days: 7
+
+  oq-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx playwright install chromium --with-deps
+        working-directory: oq-web
+      - run: npm run test:e2e
+        working-directory: oq-web
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: oq-playwright-report
+          path: oq-web/playwright-report/
           retention-days: 7

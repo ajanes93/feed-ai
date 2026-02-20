@@ -22,20 +22,28 @@ test.describe("Date navigation", () => {
 
   test("previous button navigates to older digest", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(feedSlide(mockPage).getByText("AI Breakthrough")).toBeVisible();
+    await expect(
+      feedSlide(mockPage).getByText("AI Breakthrough")
+    ).toBeVisible();
 
     await mockPage.getByLabel("Previous digest").click();
-    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(
+      feedSlide(mockPage).getByText("Yesterday Story")
+    ).toBeVisible();
   });
 
   test("navigating to older digest updates the URL", async ({ mockPage }) => {
     const { yesterday } = buildTestData();
 
     await mockPage.goto("/");
-    await expect(feedSlide(mockPage).getByText("AI Breakthrough")).toBeVisible();
+    await expect(
+      feedSlide(mockPage).getByText("AI Breakthrough")
+    ).toBeVisible();
 
     await mockPage.getByLabel("Previous digest").click();
-    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(
+      feedSlide(mockPage).getByText("Yesterday Story")
+    ).toBeVisible();
 
     await expect(mockPage).toHaveURL(new RegExp(yesterday));
   });
@@ -45,7 +53,9 @@ test.describe("Date navigation", () => {
 
     await mockPage.goto(`/digest/${yesterday}`);
 
-    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(
+      feedSlide(mockPage).getByText("Yesterday Story")
+    ).toBeVisible();
   });
 
   test("pull-to-refresh on old digest stays on that digest", async ({
@@ -55,7 +65,9 @@ test.describe("Date navigation", () => {
 
     await mockPage.goto("/");
     await mockPage.getByLabel("Previous digest").click();
-    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(
+      feedSlide(mockPage).getByText("Yesterday Story")
+    ).toBeVisible();
     await expect(mockPage).toHaveURL(new RegExp(yesterday));
 
     // Simulate pull-to-refresh gesture (needs > 25px dead zone + enough for 80px threshold at 0.4 damping)
@@ -77,7 +89,9 @@ test.describe("Date navigation", () => {
     });
 
     // Should still show yesterday's digest, not today's
-    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(
+      feedSlide(mockPage).getByText("Yesterday Story")
+    ).toBeVisible();
     await expect(mockPage).toHaveURL(new RegExp(yesterday));
   });
 
@@ -85,16 +99,22 @@ test.describe("Date navigation", () => {
     const { yesterday } = buildTestData();
 
     await mockPage.goto("/");
-    await expect(feedSlide(mockPage).getByText("AI Breakthrough")).toBeVisible();
+    await expect(
+      feedSlide(mockPage).getByText("AI Breakthrough")
+    ).toBeVisible();
 
     await mockPage.getByLabel("Previous digest").click();
     await expect(mockPage).toHaveURL(new RegExp(yesterday));
-    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(
+      feedSlide(mockPage).getByText("Yesterday Story")
+    ).toBeVisible();
 
     await mockPage.reload();
 
     await expect(mockPage).toHaveURL(new RegExp(yesterday));
-    await expect(feedSlide(mockPage).getByText("Yesterday Story")).toBeVisible();
+    await expect(
+      feedSlide(mockPage).getByText("Yesterday Story")
+    ).toBeVisible();
   });
 });
 

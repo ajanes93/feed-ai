@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./types": "./types.ts",
+    "./oq-types": "./oq-types.ts",
     "./factories": "./factories.ts",
     "./utils": "./utils.ts"
   },

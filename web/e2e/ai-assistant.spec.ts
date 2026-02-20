@@ -8,7 +8,7 @@ async function mockAiApi(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ remaining: 5 }),
-    }),
+    })
   );
 
   await page.route("**/api/ai/chat", (route) =>
@@ -19,7 +19,7 @@ async function mockAiApi(page: Page) {
         text: "## Daily Briefing\n\n**GLM-5** dominates today's headlines with benchmark results surpassing GPT-4o.\n\n- **AI**: Major model release from Zhipu\n- **Dev**: Vue 3.5 brings reactivity improvements",
         remaining: 4,
       }),
-    }),
+    })
   );
 }
 
@@ -51,14 +51,12 @@ test.describe("AI Assistant — Welcome State", () => {
   });
 
   test("shows welcome heading", async ({ mockPage }) => {
-    await expect(
-      mockPage.getByText("What do you want to know?"),
-    ).toBeVisible();
+    await expect(mockPage.getByText("What do you want to know?")).toBeVisible();
   });
 
   test("shows subtitle", async ({ mockPage }) => {
     await expect(
-      mockPage.getByText("AI-powered summaries of your feed."),
+      mockPage.getByText("AI-powered summaries of your feed.")
     ).toBeVisible();
   });
 
@@ -132,9 +130,7 @@ test.describe("AI Assistant — Chat Interaction", () => {
     await mockPage.getByTitle("New conversation").click();
 
     // Should return to welcome state
-    await expect(
-      mockPage.getByText("What do you want to know?"),
-    ).toBeVisible();
+    await expect(mockPage.getByText("What do you want to know?")).toBeVisible();
   });
 });
 
@@ -153,9 +149,7 @@ test.describe("AI Assistant — Navigation", () => {
   test("direct navigation to /ai works", async ({ mockPage }) => {
     await mockAiApi(mockPage);
     await mockPage.goto("/ai");
-    await expect(
-      mockPage.getByText("What do you want to know?"),
-    ).toBeVisible();
+    await expect(mockPage.getByText("What do you want to know?")).toBeVisible();
   });
 });
 
@@ -166,7 +160,7 @@ test.describe("AI Assistant — Error Handling", () => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ remaining: 0 }),
-      }),
+      })
     );
 
     await mockPage.route("**/api/ai/chat", (route) =>
@@ -177,13 +171,11 @@ test.describe("AI Assistant — Error Handling", () => {
           error: "Daily limit reached. Try again tomorrow.",
           remaining: 0,
         }),
-      }),
+      })
     );
 
     await mockPage.goto("/ai");
     // Chips should be disabled when remaining is 0 (but we can still check the UI renders)
-    await expect(
-      mockPage.getByText("What do you want to know?"),
-    ).toBeVisible();
+    await expect(mockPage.getByText("What do you want to know?")).toBeVisible();
   });
 });

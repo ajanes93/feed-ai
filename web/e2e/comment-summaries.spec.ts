@@ -22,12 +22,11 @@ async function mockApiWithComments(page: Page) {
             category: "ai",
             title: "AI Model Breakthrough",
             sourceName: "r/LocalLLaMA",
-            sourceUrl:
-              "https://www.reddit.com/r/LocalLLaMA/comments/abc/post",
+            sourceUrl: "https://www.reddit.com/r/LocalLLaMA/comments/abc/post",
             commentsUrl:
               "https://www.reddit.com/r/LocalLLaMA/comments/abc/post",
           },
-          1,
+          1
         ),
         commentSummary:
           "The community was divided on whether this represents a true breakthrough.",
@@ -41,7 +40,7 @@ async function mockApiWithComments(page: Page) {
           title: "Vue 4 Announced",
           sourceName: "Vue.js Blog",
         },
-        2,
+        2
       ),
       {
         ...buildDigestItem(
@@ -52,7 +51,7 @@ async function mockApiWithComments(page: Page) {
             sourceUrl: "https://example.com/llm-training",
             commentsUrl: "https://news.ycombinator.com/item?id=42345",
           },
-          3,
+          3
         ),
         commentSummary:
           "Commenters noted this could reduce training costs by 50%.",
@@ -68,7 +67,7 @@ async function mockApiWithComments(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(digestList),
-    }),
+    })
   );
 
   await page.route(`**/api/digest/${today}`, (route) =>
@@ -76,7 +75,7 @@ async function mockApiWithComments(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(todayDigest),
-    }),
+    })
   );
 
   await page.route(`**/api/digest/${yesterday}`, (route) =>
@@ -84,7 +83,7 @@ async function mockApiWithComments(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(yesterdayDigest),
-    }),
+    })
   );
 }
 
@@ -100,7 +99,7 @@ test.describe("Comment summaries", () => {
 
     const aiSlide = feedSlide(page, "ai");
     await expect(
-      aiSlide.locator("article").first().getByText("AI Model Breakthrough"),
+      aiSlide.locator("article").first().getByText("AI Model Breakthrough")
     ).toBeVisible();
 
     // Comment toggle button shows stats
@@ -132,13 +131,13 @@ test.describe("Comment summaries", () => {
     // After click, the discussion section should be visible
     await expect(aiSlide.getByText("Discussion").first()).toBeVisible();
     await expect(
-      aiSlide.getByText("AI-generated summary").first(),
+      aiSlide.getByText("AI-generated summary").first()
     ).toBeVisible();
 
     // Click again to collapse
     await toggleBtn.click();
     await expect(
-      aiSlide.getByText("AI-generated summary").first(),
+      aiSlide.getByText("AI-generated summary").first()
     ).not.toBeVisible();
   });
 
@@ -153,7 +152,7 @@ test.describe("Comment summaries", () => {
     await expect(link).toBeVisible();
     await expect(link).toHaveAttribute(
       "href",
-      "https://www.reddit.com/r/LocalLLaMA/comments/abc/post",
+      "https://www.reddit.com/r/LocalLLaMA/comments/abc/post"
     );
     await expect(link).toHaveAttribute("target", "_blank");
   });
@@ -169,20 +168,18 @@ test.describe("Comment summaries", () => {
     // Both comment stats and discussion link should be visible simultaneously
     await expect(firstArticle.getByText("142 comments")).toBeVisible();
     await expect(
-      firstArticle.locator('a:has-text("View discussion")'),
+      firstArticle.locator('a:has-text("View discussion")')
     ).toBeVisible();
   });
 
-  test("no discussion link for items without commentsUrl", async ({
-    page,
-  }) => {
+  test("no discussion link for items without commentsUrl", async ({ page }) => {
     await page.goto("/");
 
     const devSlide = feedSlide(page, "dev");
     await expect(devSlide.getByText("Vue 4 Announced")).toBeVisible();
     // Dev item has no commentsUrl, so no discussion link
     await expect(
-      devSlide.locator('a:has-text("View discussion")'),
+      devSlide.locator('a:has-text("View discussion")')
     ).not.toBeVisible();
   });
 });
