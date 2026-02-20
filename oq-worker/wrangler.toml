@@ -4,8 +4,8 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 [triggers]
-# OQ: 05:30 fetch articles, 06:30 generate daily score
-crons = ["30 5 * * *", "30 6 * * *"]
+# OQ: 05:30 fetch articles + generate daily score (single cron — free plan limit)
+crons = ["30 5 * * *"]
 
 [[d1_databases]]
 binding = "DB"

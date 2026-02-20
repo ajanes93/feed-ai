@@ -578,20 +578,13 @@ export { fetchOQArticles, generateDailyScore, extractFeedItems, stripHtml };
 export default {
   fetch: app.fetch,
 
-  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    const time = new Date(event.scheduledTime);
-    const hour = time.getUTCHours();
-    const minute = time.getUTCMinutes();
-
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
       (async () => {
-        if (hour === 5 && minute === 30) {
-          console.log("[oq] Cron: fetching articles");
-          await fetchOQArticles(env.DB);
-        } else if (hour === 6 && minute === 30) {
-          console.log("[oq] Cron: generating daily score");
-          await generateDailyScore(env);
-        }
+        console.log("[oq] Cron: fetching articles");
+        await fetchOQArticles(env.DB);
+        console.log("[oq] Cron: generating daily score");
+        await generateDailyScore(env);
       })()
     );
   },
