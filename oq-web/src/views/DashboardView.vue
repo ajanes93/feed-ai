@@ -44,7 +44,11 @@ onMounted(fetchDashboard);
       <div class="mb-6 flex items-center justify-between">
         <h1 class="text-xl font-semibold text-white">OQ Dashboard</h1>
         <div class="flex items-center gap-2">
-          <DropdownMenu v-if="data && !needsAuth" label="Actions" :disabled="fetching || scoring">
+          <DropdownMenu
+            v-if="data && !needsAuth"
+            label="Actions"
+            :disabled="fetching || scoring"
+          >
             <template #default="{ close }">
               <button
                 :disabled="fetching"

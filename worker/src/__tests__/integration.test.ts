@@ -1331,7 +1331,7 @@ describe("Cron dispatch: summarize and enrich times", () => {
     expect(logs.results[0].message as string).toContain("fetch ai");
   });
 
-  it("dispatches enrich at 7:05 UTC", async () => {
+  it("dispatches summarize + enrich at 7:00 UTC", async () => {
     const today = new Date().toISOString().split("T")[0];
     // Seed an empty digest so enrichment has something to look at (but no eligible items)
     await seedDigest(
@@ -1341,8 +1341,8 @@ describe("Cron dispatch: summarize and enrich times", () => {
     );
 
     const event = {
-      scheduledTime: new Date("2025-01-28T07:05:00Z").getTime(),
-      cron: "5 7 * * *",
+      scheduledTime: new Date("2025-01-28T07:00:00Z").getTime(),
+      cron: "0 7 * * *",
     };
     const waitUntilPromises: Promise<unknown>[] = [];
     const ctx = {
@@ -1359,11 +1359,11 @@ describe("Cron dispatch: summarize and enrich times", () => {
       "SELECT * FROM error_logs WHERE message LIKE '%Cron triggered%'"
     ).all();
     expect(logs.results.length).toBe(1);
-    expect(logs.results[0].message as string).toContain("7:05 UTC");
-    expect(logs.results[0].message as string).toContain("enrich");
+    expect(logs.results[0].message as string).toContain("7:00 UTC");
+    expect(logs.results[0].message as string).toContain("summarize + enrich");
   });
 
-  it("dispatches enrich at 13:05 UTC", async () => {
+  it("dispatches summarize + enrich at 13:00 UTC", async () => {
     const today = new Date().toISOString().split("T")[0];
     await seedDigest(
       env.DB,
@@ -1372,8 +1372,8 @@ describe("Cron dispatch: summarize and enrich times", () => {
     );
 
     const event = {
-      scheduledTime: new Date("2025-01-28T13:05:00Z").getTime(),
-      cron: "5 13 * * *",
+      scheduledTime: new Date("2025-01-28T13:00:00Z").getTime(),
+      cron: "0 13 * * *",
     };
     const waitUntilPromises: Promise<unknown>[] = [];
     const ctx = {
@@ -1390,7 +1390,7 @@ describe("Cron dispatch: summarize and enrich times", () => {
       "SELECT * FROM error_logs WHERE message LIKE '%Cron triggered%'"
     ).all();
     expect(logs.results.length).toBe(1);
-    expect(logs.results[0].message as string).toContain("13:05 UTC");
-    expect(logs.results[0].message as string).toContain("enrich");
+    expect(logs.results[0].message as string).toContain("13:00 UTC");
+    expect(logs.results[0].message as string).toContain("summarize + enrich");
   });
 });
