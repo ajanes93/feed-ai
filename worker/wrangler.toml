@@ -5,8 +5,9 @@ compatibility_flags = ["nodejs_compat"]
 
 [triggers]
 # 3 fetch→summarize→enrich cycles. Fetches split by category (minute offsets):
-#   :00 AI, :05 Dev, :10 Jobs+Sport | +1h summarize | +1h05 enrich
-crons = ["0 6,12,17 * * *", "5 6,12,17 * * *", "10 6,12,17 * * *", "0 7,13,18 * * *", "5 7,13,18 * * *"]
+#   :00 AI, :05 Dev, :10 Jobs+Sport | +1h summarize+enrich
+# 4 crons (free plan limit = 5; oq-worker uses 1)
+crons = ["0 6,12,17 * * *", "5 6,12,17 * * *", "10 6,12,17 * * *", "0 7,13,18 * * *"]
 
 [[d1_databases]]
 binding = "DB"

@@ -1333,29 +1333,24 @@ export default {
   fetch: app.fetch,
 
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    // Each cron does ONE thing to stay under Cloudflare subrequest limits.
     // Three fetch→summarize→enrich cycles per day:
-    //   6/12/17 :00/:05/:10 fetch (by category) | 7/13/18 summarize | 7:05/13:05/18:05 enrich
+    //   6/12/17 :00/:05/:10 fetch (by category) | 7/13/18 summarize + enrich
+    // Fetch split by category to stay under subrequest limits.
+    // Summarize + enrich merged into one cron (free plan limit = 5).
     const time = new Date(event.scheduledTime);
     const hour = time.getUTCHours();
     const minute = time.getUTCMinutes();
 
     ctx.waitUntil(
       (async () => {
-        if (minute === 5 && (hour === 7 || hour === 13 || hour === 18)) {
+        if (minute === 0 && (hour === 7 || hour === 13 || hour === 18)) {
           await logEvent(env.DB, {
             level: "info",
             category: "digest",
-            message: `Cron triggered at ${hour}:${String(minute).padStart(2, "0")} UTC — enrich comments`,
-          });
-          await runAllEnrichment(env);
-        } else if (minute === 0 && (hour === 7 || hour === 13 || hour === 18)) {
-          await logEvent(env.DB, {
-            level: "info",
-            category: "digest",
-            message: `Cron triggered at ${hour}:00 UTC — summarize`,
+            message: `Cron triggered at ${hour}:00 UTC — summarize + enrich`,
           });
           await summarizeNewItems(env);
+          await runAllEnrichment(env);
         } else if (hour === 6 || hour === 12 || hour === 17) {
           // Fetch split by category: :00 AI, :05 Dev, :10 Jobs+Sport
           const fetchCategories: Record<number, Source["category"][]> = {
