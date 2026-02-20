@@ -45,8 +45,8 @@ CREATE TABLE IF NOT EXISTS oq_prompt_versions (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
--- AI usage tracking (shared table schema)
-CREATE TABLE IF NOT EXISTS ai_usage (
+-- AI usage tracking (OQ-specific)
+CREATE TABLE IF NOT EXISTS oq_ai_usage (
   id TEXT PRIMARY KEY,
   model TEXT NOT NULL,
   provider TEXT NOT NULL,

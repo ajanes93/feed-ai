@@ -1,3 +1,4 @@
+export type { AIUsageEntry } from "@feed-ai/shared/types";
 import type { AIUsageEntry } from "@feed-ai/shared/types";
 
 type LogLevel = "info" | "warn" | "error";

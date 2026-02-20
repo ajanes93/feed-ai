@@ -3,7 +3,7 @@ import type { Context } from "hono";
 import { cors } from "hono/cors";
 import { XMLParser } from "fast-xml-parser";
 import type { OQPillar } from "@feed-ai/shared/oq-types";
-import { recordAIUsage } from "../../worker/src/services/logger";
+import type { AIUsageEntry } from "@feed-ai/shared/types";
 import type { Env } from "./types";
 import { oqSources } from "./sources";
 import { runScoring } from "./services/scorer";
@@ -108,7 +108,11 @@ app.post("/api/subscribe", async (c) => {
   const body = await c.req.json<{ email: string }>();
   const email = body.email?.trim().toLowerCase();
 
-  if (!email || !email.includes("@") || email.length > 254) {
+  if (
+    !email ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+    email.length > 254
+  ) {
     return c.json({ error: "Invalid email" }, 400);
   }
 
@@ -235,7 +239,7 @@ async function fetchOQArticles(
       for (const item of items) {
         if (!item.title || !item.url) continue;
 
-        await db
+        const result = await db
           .prepare(
             "INSERT INTO oq_articles (id, title, url, source, pillar, summary, published_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING"
           )
@@ -249,7 +253,7 @@ async function fetchOQArticles(
             item.publishedAt ?? yesterday
           )
           .run();
-        fetched++;
+        if (result.meta.changes > 0) fetched++;
       }
     } catch (err) {
       errors.push(
@@ -482,6 +486,30 @@ async function generateDailyScore(env: Env): Promise<{
 }
 
 // --- D1 helpers ---
+
+async function recordAIUsage(db: D1Database, usage: AIUsageEntry) {
+  try {
+    await db
+      .prepare(
+        "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        crypto.randomUUID(),
+        usage.model,
+        usage.provider,
+        usage.inputTokens ?? null,
+        usage.outputTokens ?? null,
+        usage.totalTokens ?? null,
+        usage.latencyMs ?? null,
+        usage.wasFallback ? 1 : 0,
+        usage.error ?? null,
+        usage.status
+      )
+      .run();
+  } catch (err) {
+    console.error("Failed to record AI usage:", err);
+  }
+}
 
 interface ScoreInsert {
   date: string;
