@@ -1,10 +1,10 @@
 # One Question — Gap Fill Plan
 
-Seven items to bring the implementation in line with the plan. Ordered by implementation sequence.
+Eleven items to bring the implementation in line with the plan. Ordered by implementation sequence.
 
 ---
 
-## 1. OG meta tags
+## 1. OG meta tags (static)
 
 **Problem:** `oq-web/index.html` has no OG tags. Critical for Show HN launch and social sharing.
 
@@ -15,11 +15,23 @@ Seven items to bring the implementation in line with the plan. Ordered by implem
 - `twitter:card` — "summary_large_image"
 - Standard `<meta name="description">` tag
 
-Static values for v1. Dynamic OG tags (today's actual score) would require a Worker HTML rewriter — skip for now.
+Static values as a baseline — gap 2 makes them dynamic.
 
 ---
 
-## 2. "What Would Move This Score?" section on the public page
+## 2. Dynamic OG tags via HTMLRewriter
+
+**Problem:** Static OG tags show a hardcoded score. Cloudflare Workers has `HTMLRewriter` built in — we can inject today's actual score into the meta tags on each request.
+
+**Changes:**
+- In the Worker that serves the SPA (`oq-worker` or a Pages `_worker.js`), add an `HTMLRewriter` pass on HTML responses
+- Rewrite `og:title` content to include today's score from D1 (e.g. "Will AI Replace Software Engineers? Today: 34%")
+- Rewrite `og:description` to include the day's analysis snippet
+- Cache the D1 lookup (score changes once/day) so this adds negligible latency
+
+---
+
+## 3. "What Would Move This Score?" section on the public page
 
 **Problem:** The data exists in `/api/methodology` but nothing renders it on the public page. The plan says this should be "displayed prominently" as a signal of intellectual honesty.
 
@@ -30,7 +42,21 @@ Static values for v1. Dynamic OG tags (today's actual score) would require a Wor
 
 ---
 
-## 3. Capability Gap as a structured headline component
+## 4. Methodology page
+
+**Problem:** The `/api/methodology` endpoint exists but there's no rendered page. The plan calls for a dedicated methodology page explaining the scoring system, sources, and calibration rules.
+
+**Changes:**
+- Create `oq-web/src/views/OQMethodologyView.vue`:
+  - Fetch from `/api/methodology`
+  - Render: scoring pillars with weights, source list, calibration rules, "What Would Move" scenarios
+  - Same dark theme styling as the main page
+- Add route `/methodology` to the Vue router
+- Add a link to methodology from the main page footer or header
+
+---
+
+## 5. Capability Gap as a structured headline component
 
 **Problem:** Currently renders as a plain text paragraph. The plan envisions this as *the* headline metric — "Verified 80% vs Pro 23%" — with visual weight.
 
@@ -43,7 +69,7 @@ Static values for v1. Dynamic OG tags (today's actual score) would require a Wor
 
 ---
 
-## 4. Narrative model disagreement quotes
+## 6. Narrative model disagreement quotes
 
 **Problem:** When models disagree, the plan says to quote them like a panel of experts — e.g. *"GPT-4 upgraded the score citing X, but Claude downgraded it, pointing to Y."* Currently `synthesizeAnalysis()` concatenates raw analyses with " — Meanwhile, " which reads poorly.
 
@@ -55,24 +81,24 @@ Static values for v1. Dynamic OG tags (today's actual score) would require a Wor
 
 ---
 
-## 5. SanityHarness integration (Pillar 1)
+## 7. SanityHarness integration (Pillar 1)
 
-**Problem:** The plan now includes SanityHarness (sanityboard.lr7.dev) as a Pillar 1 data source. It benchmarks AI coding *agents* (not just models) across 6 languages, measuring the full agent loop. This is closer to "can AI do the job" than SWE-bench.
+**Problem:** The plan includes SanityHarness (sanityboard.lr7.dev) as a Pillar 1 data source. It benchmarks AI coding *agents* (not just models) across 6 languages, measuring the full agent loop. Closer to "can AI do the job" than SWE-bench.
 
 **Changes:**
 
-### 5a. Scraper service (`oq-worker/src/services/sanity-harness.ts`)
+### 7a. Scraper service (`oq-worker/src/services/sanity-harness.ts`)
 - Fetch the leaderboard page (static HTML)
 - Extract top 10 rows: agent name, model, overall pass rate, per-language breakdown
 - Calculate: top pass rate, median pass rate, language spread
 - Return structured data
 
-### 5b. Store as synthetic article
+### 7b. Store as synthetic article
 - On the weekly cron (or a separate weekly trigger), run the scraper
 - Insert into `oq_articles` as a Pillar 1 synthetic article with a structured summary containing the key metrics
 - Deduplicate by date (one entry per week)
 
-### 5c. Update the scoring prompt (`oq-worker/src/services/prompt.ts`)
+### 7c. Update the scoring prompt (`oq-worker/src/services/prompt.ts`)
 - Add SanityHarness context to the Pillar 1 section:
   ```
   SanityHarness latest data (agent-level benchmarks across 6 languages):
@@ -84,30 +110,65 @@ Static values for v1. Dynamic OG tags (today's actual score) would require a Wor
   ```
 - Add optional `sanityHarness` field to `PromptContext`
 
-### 5d. Update "What Would Move" scenarios
+### 7d. Update "What Would Move" scenarios
 - Add to methodology endpoint and WhatWouldChange component:
   - **Up:** Top agent >85% AND all languages >60%
   - **Up significantly:** Median agent >70%
   - **Down:** Top agent plateaus or regresses
 
-### 5e. Add admin endpoint
+### 7e. Add admin endpoint
 - `POST /api/fetch-sanity` (admin-only) to trigger manual scrape
 - Also integrate into the existing cron (weekly check, e.g. Sundays)
 
 ---
 
-## 6. Prompt FRED/Indeed index placeholders
+## 8. SWE-bench leaderboard scraping (Pillar 1)
 
-**Problem:** The plan's prompt has `{software_index}` and `{general_index}` placeholders for Pillar 2 labour market normalization. Without these, models can't judge if software job declines are AI-specific or macro.
+**Problem:** SWE-bench Verified vs Pro is *the* central capability gap metric in the prompt, but the values are currently hardcoded. We should scrape the leaderboard to keep them current.
 
-**Changes to `oq-worker/src/services/prompt.ts`:**
-- Add `softwareIndex` and `generalIndex` optional fields to `PromptContext`
-- Update Pillar 2 prompt section: *"Software job postings index: {value}. General job postings index: {value}."* — falls back to "Data not currently available" if absent
-- No FRED API integration yet — values can be set manually via the scoring input or added later
+**Changes:**
+
+### 8a. Scraper service (`oq-worker/src/services/swe-bench.ts`)
+- Fetch the SWE-bench leaderboard page
+- Extract top scores for both Verified and Pro tracks
+- Return: top Verified %, top Pro %, top model names, date
+
+### 8b. Store + inject into prompt
+- Store latest values in D1 (a simple key-value row or a dedicated table)
+- On each scoring run, inject current Verified/Pro numbers into the prompt instead of hardcoded "~80%" / "~23%"
+- Update the Capability Gap section of the prompt dynamically
+
+### 8c. Feed into the Capability Gap component (gap 5)
+- Pass real Verified/Pro numbers to the frontend instead of relying on free-text `capabilityGap` strings
+
+### 8d. Admin endpoint
+- `POST /api/fetch-swebench` (admin-only) to trigger manual scrape
+- Also integrate into cron (weekly)
 
 ---
 
-## 7. Seed historical data script
+## 9. FRED API integration (Pillar 2)
+
+**Problem:** The plan has `{software_index}` and `{general_index}` placeholders for labour market normalization. Without real data, models can't judge if software job declines are AI-specific or macro.
+
+**Two phases:**
+
+### Phase 1 — Prompt placeholders + manual input (now)
+- Add `softwareIndex` and `generalIndex` optional fields to `PromptContext` in `prompt.ts`
+- Update Pillar 2 prompt section: *"Software job postings index: {value}. General job postings index: {value}."* — falls back to "Data not currently available" if absent
+- Add admin endpoint `POST /api/labour-indices` to manually set values
+
+### Phase 2 — FRED API (once API key is approved)
+- Create `oq-worker/src/services/fred.ts`:
+  - Fetch IHLIDXUSTPSOFTDEVE (Indeed Software Dev Postings) series
+  - Fetch ICSA (Initial Claims) or similar general employment series
+  - Parse JSON response, extract latest value
+- Run on weekly cron alongside SanityHarness
+- Auto-populate the prompt context with real values
+
+---
+
+## 10. Seed historical data script
 
 **Problem:** The trend chart requires `history.length > 1` to render. On launch day there's only a single-day seed fallback — the chart is empty.
 
@@ -121,25 +182,28 @@ Static values for v1. Dynamic OG tags (today's actual score) would require a Wor
 
 ---
 
-## What I'm NOT including
+## 11. Favicon
 
-Explicit skips from the plan or low-priority for v1:
+**Problem:** No favicon set. Minor but noticeable.
 
-- **FRED API / BLS real integration** — Complex auth, rate limits. Gap 6 just prepares the prompt. Add when live.
-- **SWE-bench leaderboard scraping** — Third-party HTML that may change. Add manually or via admin endpoint.
-- **Dynamic OG tags** — Requires Worker HTML rewriter for today's score. Revisit if traction.
-- **Methodology page** — The plan mentions a dedicated page. The endpoint exists; a rendered page can be added later with minimal effort.
+**Changes:**
+- Add a simple orange "?" favicon (SVG inline in `index.html` or a small .ico file)
+- Add `<link rel="icon">` to `index.html`
 
 ---
 
 ## Implementation order
 
-1. OG meta tags (~5 min)
-2. What Would Move This Score component + composable update (~30 min)
-3. Capability Gap structured component (~30 min)
-4. Narrative model disagreement (~20 min)
-5. SanityHarness scraper + prompt + admin endpoint (~1 hr)
-6. FRED/Indeed prompt placeholders (~10 min)
-7. Seed history script (~15 min)
+1. OG meta tags — static (5 min)
+2. Dynamic OG tags — HTMLRewriter (30 min)
+3. What Would Move This Score component (30 min)
+4. Methodology page (30 min)
+5. Capability Gap structured component (30 min)
+6. Narrative model disagreement (20 min)
+7. SanityHarness scraper + prompt + admin endpoint (1 hr)
+8. SWE-bench scraper + prompt integration (45 min)
+9. FRED Phase 1 — prompt placeholders + manual endpoint (15 min)
+10. Seed history script (15 min)
+11. Favicon (5 min)
 
 Then: run lint, format, tests, commit, push.
