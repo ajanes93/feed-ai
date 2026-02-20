@@ -92,10 +92,8 @@ export function useOneQuestion() {
   });
 
   const deltaDirection = computed(() => {
-    if (!today.value) return "neutral";
-    if (today.value.delta > 0) return "up";
-    if (today.value.delta < 0) return "down";
-    return "neutral";
+    if (!today.value || today.value.delta === 0) return "neutral";
+    return today.value.delta > 0 ? "up" : "down";
   });
 
   return {

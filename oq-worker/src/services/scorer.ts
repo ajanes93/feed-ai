@@ -217,7 +217,6 @@ function calculateConsensusDelta(scores: OQModelScore[]): number {
   if (scores.length === 0) return 0;
   if (scores.length === 1) return scores[0].suggested_delta;
 
-  // Map by model prefix
   let total = 0;
   let weightSum = 0;
   for (const score of scores) {
@@ -230,7 +229,7 @@ function calculateConsensusDelta(scores: OQModelScore[]): number {
     weightSum += w;
   }
 
-  return weightSum > 0 ? total / weightSum : 0;
+  return total / weightSum;
 }
 
 function calculateModelAgreement(scores: OQModelScore[]): {
@@ -277,11 +276,9 @@ function mergePillarScores(scores: OQModelScore[]): OQPillarScores {
 
   for (const pillar of pillars) {
     const values = scores.map((s) => s.pillar_scores[pillar]).filter(Boolean);
-    result[pillar] =
-      values.length > 0
-        ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) /
-          10
-        : 0;
+    const avg =
+      values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    result[pillar] = Math.round(avg * 10) / 10;
   }
 
   return result;
@@ -293,15 +290,13 @@ function synthesizeAnalysis(
 ): string {
   if (scores.length === 1) return scores[0].analysis;
 
-  if (agreement === "disagree" && scores.length >= 2) {
-    // Quote models against each other
+  if (agreement === "disagree") {
     const parts = scores.map(
       (s) => `${s.model.split("-")[0].toUpperCase()}: "${s.analysis}"`
     );
     return parts.join(" — Meanwhile, ");
   }
 
-  // Use the highest-weighted model's analysis (Claude if available)
   const claude = scores.find((s) => s.model.includes("claude"));
   return claude?.analysis ?? scores[0].analysis;
 }
@@ -369,9 +364,7 @@ export async function runScoring(
 
   const promptHash = await hashPrompt(prompt);
 
-  // Call models in parallel
   const calls: Promise<ModelResult | null>[] = [];
-  const modelNames: string[] = [];
 
   if (input.apiKeys.anthropic) {
     calls.push(
@@ -379,7 +372,6 @@ export async function runScoring(
         callClaude(prompt, input.apiKeys.anthropic!)
       )
     );
-    modelNames.push("Claude");
   }
   if (input.apiKeys.openai) {
     calls.push(
@@ -387,7 +379,6 @@ export async function runScoring(
         callOpenAI(prompt, input.apiKeys.openai!)
       )
     );
-    modelNames.push("GPT-4");
   }
   if (input.apiKeys.gemini) {
     calls.push(
@@ -395,25 +386,21 @@ export async function runScoring(
         callGemini(prompt, input.apiKeys.gemini!)
       )
     );
-    modelNames.push("Gemini");
   }
 
-  const results = await Promise.allSettled(calls);
-  const modelResults: ModelResult[] = [];
-  const aiUsages: AIUsageEntry[] = [];
-
-  for (const result of results) {
-    if (result.status === "fulfilled" && result.value) {
-      modelResults.push(result.value);
-      aiUsages.push(result.value.usage);
-    }
-  }
+  const modelResults = (await Promise.allSettled(calls))
+    .filter(
+      (r): r is PromiseFulfilledResult<ModelResult> =>
+        r.status === "fulfilled" && r.value !== null
+    )
+    .map((r) => r.value);
 
   if (modelResults.length === 0) {
     throw new Error("All AI models failed — cannot generate score");
   }
 
   const scores = modelResults.map((r) => r.parsed);
+  const aiUsages = modelResults.map((r) => r.usage);
 
   // Consensus calculation
   const consensusDelta = calculateConsensusDelta(scores);

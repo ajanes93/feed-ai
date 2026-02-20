@@ -34,15 +34,6 @@ const fetchResult = ref("");
 const scoring = ref(false);
 const scoreResult = ref("");
 
-function submitKey() {
-  const trimmed = keyInput.value.trim();
-  if (!trimmed) return;
-  adminKey.value = trimmed;
-  needsAuth.value = false;
-  keyInput.value = "";
-  loadDashboard();
-}
-
 async function loadDashboard() {
   loading.value = true;
   error.value = null;
@@ -58,6 +49,15 @@ async function loadDashboard() {
   } finally {
     loading.value = false;
   }
+}
+
+function submitKey() {
+  const trimmed = keyInput.value.trim();
+  if (!trimmed) return;
+  adminKey.value = trimmed;
+  needsAuth.value = false;
+  keyInput.value = "";
+  loadDashboard();
 }
 
 async function adminAction(
@@ -85,13 +85,8 @@ async function adminAction(
   }
 }
 
-function fetchArticles() {
-  adminAction("fetch", fetching, fetchResult);
-}
-
-function generateScore() {
-  adminAction("score", scoring, scoreResult);
-}
+const fetchArticles = () => adminAction("fetch", fetching, fetchResult);
+const generateScore = () => adminAction("score", scoring, scoreResult);
 
 onMounted(loadDashboard);
 </script>

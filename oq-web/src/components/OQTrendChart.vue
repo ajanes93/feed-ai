@@ -11,7 +11,6 @@ const SVG_HEIGHT = 200;
 const PADDING = 20;
 
 const chartData = computed(() => {
-  // History comes newest first — reverse for chart
   const entries = [...props.history].reverse();
   if (entries.length < 2) return null;
 
@@ -20,33 +19,29 @@ const chartData = computed(() => {
   const maxScore = Math.min(100, Math.max(...scores) + 10);
   const range = maxScore - minScore || 1;
 
-  const points = entries.map((entry, i) => {
-    const x = PADDING + (i / (entries.length - 1)) * (SVG_WIDTH - PADDING * 2);
-    const y =
+  const points = entries.map((entry, i) => ({
+    x: PADDING + (i / (entries.length - 1)) * (SVG_WIDTH - PADDING * 2),
+    y:
       SVG_HEIGHT -
       PADDING -
-      ((entry.score - minScore) / range) * (SVG_HEIGHT - PADDING * 2);
-    return { x, y, entry };
-  });
+      ((entry.score - minScore) / range) * (SVG_HEIGHT - PADDING * 2),
+    entry,
+  }));
 
   const linePath = points
     .map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`)
     .join(" ");
 
-  const areaPath =
-    linePath +
-    ` L${points[points.length - 1].x},${SVG_HEIGHT} L${points[0].x},${SVG_HEIGHT} Z`;
+  const areaPath = `${linePath} L${points[points.length - 1].x},${SVG_HEIGHT} L${points[0].x},${SVG_HEIGHT} Z`;
 
-  // Date labels
-  const labels: { x: number; text: string }[] = [];
   const labelCount = Math.min(5, entries.length);
-  for (let i = 0; i < labelCount; i++) {
+  const labels = Array.from({ length: labelCount }, (_, i) => {
     const idx =
       i === labelCount - 1
         ? entries.length - 1
         : Math.floor((i / (labelCount - 1)) * (entries.length - 1));
     const date = new Date(entries[idx].date + "T12:00:00Z");
-    labels.push({
+    return {
       x: points[idx].x,
       text:
         i === labelCount - 1
@@ -55,12 +50,10 @@ const chartData = computed(() => {
               day: "numeric",
               month: "short",
             }),
-    });
-  }
+    };
+  });
 
-  const lastPoint = points[points.length - 1];
-
-  return { linePath, areaPath, lastPoint, labels };
+  return { linePath, areaPath, lastPoint: points[points.length - 1], labels };
 });
 
 const gridLines = computed(() => {

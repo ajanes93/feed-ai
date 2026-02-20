@@ -325,9 +325,7 @@ function stripHtml(text: string): string {
 
 // --- Daily score generation ---
 
-async function generateDailyScore(
-  env: Env
-): Promise<{
+async function generateDailyScore(env: Env): Promise<{
   score: number;
   delta: number;
   date: string;
@@ -584,16 +582,16 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<void> {
     .run();
 }
 
-function safeJsonParse(value: unknown): unknown {
-  if (typeof value !== "string") return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
-
 function mapScoreRow(row: Record<string, unknown>) {
+  const parseJson = (val: unknown) => {
+    if (typeof val !== "string") return val;
+    try {
+      return JSON.parse(val);
+    } catch {
+      return val;
+    }
+  };
+
   return {
     id: row.id,
     date: row.date,
@@ -602,9 +600,9 @@ function mapScoreRow(row: Record<string, unknown>) {
     scoreEconomic: row.score_economic,
     delta: row.delta,
     analysis: row.analysis,
-    signals: safeJsonParse(row.signals),
-    pillarScores: safeJsonParse(row.pillar_scores),
-    modelScores: safeJsonParse(row.model_scores),
+    signals: parseJson(row.signals),
+    pillarScores: parseJson(row.pillar_scores),
+    modelScores: parseJson(row.model_scores),
     modelAgreement: row.model_agreement,
     modelSpread: row.model_spread,
     capabilityGap: row.capability_gap,
