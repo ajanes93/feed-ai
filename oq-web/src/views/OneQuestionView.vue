@@ -28,7 +28,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-[100dvh] overflow-y-auto bg-gray-950 text-gray-100">
+  <div class="h-[100dvh] overflow-y-auto bg-gray-950 text-gray-100">
     <!-- Ambient glow -->
     <div
       class="pointer-events-none fixed top-[-30%] left-1/2 z-0 h-[600px] w-[800px] -translate-x-1/2"
