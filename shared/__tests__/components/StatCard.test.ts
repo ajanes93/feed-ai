@@ -1,14 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, type ComponentMountingOptions } from "@vue/test-utils";
 import StatCard from "../../components/StatCard.vue";
-import type { RenderOptions } from "../utils";
+
+type RenderOptions = {
+  [K in keyof ComponentMountingOptions<typeof StatCard>]: K extends "props"
+    ? Partial<ComponentMountingOptions<typeof StatCard>["props"]>
+    : ComponentMountingOptions<typeof StatCard>[K];
+};
 
 const TEST_PROPS = {
   value: "42",
   label: "Total Digests",
 };
 
-const render = (options: RenderOptions<typeof StatCard> = {}) => {
+const render = (options: RenderOptions = {}) => {
   const wrapper = mount(StatCard, {
     ...options,
     props: { ...TEST_PROPS, ...options.props },

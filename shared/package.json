@@ -7,9 +7,34 @@
     "./types": "./types.ts",
     "./oq-types": "./oq-types.ts",
     "./factories": "./factories.ts",
-    "./utils": "./utils.ts"
+    "./utils": "./utils.ts",
+    "./components/DropdownMenu": "./components/DropdownMenu.vue",
+    "./components/StatCard": "./components/StatCard.vue",
+    "./components/DataTable": "./components/DataTable.vue"
+  },
+  "scripts": {
+    "build": "true",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@formkit/auto-animate": ">=0.8.0",
+    "@vueuse/core": ">=10.0.0",
+    "motion-v": ">=1.0.0",
+    "vue": ">=3.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@formkit/auto-animate": { "optional": true },
+    "@vueuse/core": { "optional": true },
+    "motion-v": { "optional": true }
   },
   "dependencies": {
     "fishery": "^2.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.4",
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^20.4.0",
+    "vitest": "^4.0.18",
+    "vue": "^3.5.0"
   }
 }

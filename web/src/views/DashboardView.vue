@@ -2,10 +2,10 @@
 import { onMounted, ref } from "vue";
 import { motion } from "motion-v";
 import { useDashboard } from "../composables/useDashboard";
-import { timeAgo, formatTokens } from "../utils/formatting";
-import DataTable from "../components/DataTable.vue";
-import StatCard from "../components/StatCard.vue";
-import DropdownMenu from "../components/DropdownMenu.vue";
+import { timeAgo, formatTokens, formatModelName } from "@feed-ai/shared/utils";
+import DataTable from "@feed-ai/shared/components/DataTable";
+import StatCard from "@feed-ai/shared/components/StatCard";
+import DropdownMenu from "@feed-ai/shared/components/DropdownMenu";
 
 const {
   data,
@@ -274,7 +274,7 @@ onMounted(fetchDashboard);
               </td>
               <td class="px-3 py-2">{{ call.provider }}</td>
               <td class="px-3 py-2 text-xs text-gray-400">
-                {{ call.model.replace(/-.{8,}$/, "") }}
+                {{ formatModelName(call.model) }}
               </td>
               <td class="px-3 py-2">
                 {{ formatTokens(call.inputTokens) }}

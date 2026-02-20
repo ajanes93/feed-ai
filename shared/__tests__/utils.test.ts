@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { timeAgo, formatTokens } from "../utils/formatting";
+import { timeAgo, formatTokens, formatModelName } from "../utils";
 
 describe("timeAgo", () => {
   let now: number;
@@ -58,5 +58,27 @@ describe("formatTokens", () => {
 
   it("returns 0 as string", () => {
     expect(formatTokens(0)).toBe("0");
+  });
+});
+
+describe("formatModelName", () => {
+  it("formats claude model names", () => {
+    expect(formatModelName("claude-sonnet-4-5-20250929")).toBe("Claude");
+    expect(formatModelName("claude-opus")).toBe("Claude");
+  });
+
+  it("formats gpt model names", () => {
+    expect(formatModelName("gpt-4o")).toBe("GPT-4");
+    expect(formatModelName("gpt-4-turbo")).toBe("GPT-4");
+  });
+
+  it("formats gemini model names", () => {
+    expect(formatModelName("gemini-2.0-flash")).toBe("Gemini");
+    expect(formatModelName("gemini-pro")).toBe("Gemini");
+  });
+
+  it("returns unknown model names as-is", () => {
+    expect(formatModelName("llama-3")).toBe("llama-3");
+    expect(formatModelName("unknown")).toBe("unknown");
   });
 });
