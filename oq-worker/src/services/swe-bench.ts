@@ -30,8 +30,9 @@ export function parseSWEBenchHtml(html: string): SWEBenchData {
   let topPro = 0;
   let topProModel = "Unknown";
 
-  // Try to find Verified scores section
-  const verifiedSection = extractSection(html, "verified", "lite");
+  // Try to find Verified scores section (fall back to "lite" if "verified" not found)
+  const verifiedSection =
+    extractSection(html, "verified") ?? extractSection(html, "lite");
   if (verifiedSection) {
     const top = extractTopScore(verifiedSection);
     if (top) {
@@ -54,8 +55,7 @@ export function parseSWEBenchHtml(html: string): SWEBenchData {
   if (topVerified === 0 && topPro === 0) {
     const scores = extractAllScores(html);
     if (scores.length > 0) {
-      topVerified = scores[0].score;
-      topVerifiedModel = scores[0].model;
+      topVerified = scores[0];
     }
   }
 
@@ -68,26 +68,17 @@ export function parseSWEBenchHtml(html: string): SWEBenchData {
   };
 }
 
-function extractSection(
-  html: string,
-  ...keywords: string[]
-): string | null {
-  // Find a section containing the keywords
-  for (const keyword of keywords) {
-    const idx = html.toLowerCase().indexOf(keyword.toLowerCase());
-    if (idx === -1) continue;
-    // Grab surrounding context (up to 5000 chars after)
-    return html.slice(idx, idx + 5000);
-  }
-  return null;
+function extractSection(html: string, keyword: string): string | null {
+  const idx = html.toLowerCase().indexOf(keyword.toLowerCase());
+  if (idx === -1) return null;
+  return html.slice(idx, idx + 5000);
 }
 
 function extractTopScore(
   section: string
 ): { score: number; model: string } | null {
   // Look for patterns like "XX.X" near a model name in table rows
-  const rowPattern =
-    /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   let match;
   let bestScore = 0;
   let bestModel = "Unknown";
@@ -116,18 +107,13 @@ function extractTopScore(
   return bestScore > 0 ? { score: bestScore, model: bestModel } : null;
 }
 
-function extractAllScores(
-  html: string
-): { score: number; model: string }[] {
-  const results: { score: number; model: string }[] = [];
+function extractAllScores(html: string): number[] {
+  const results: number[] = [];
   const pattern = /(\d{1,3}\.\d{1,2})\s*%/g;
   let match;
   while ((match = pattern.exec(html)) !== null) {
     const score = parseFloat(match[1]);
-    if (score > 10 && score <= 100) {
-      results.push({ score, model: "Unknown" });
-    }
+    if (score > 10 && score <= 100) results.push(score);
   }
-  results.sort((a, b) => b.score - a.score);
-  return results;
+  return results.sort((a, b) => b - a);
 }

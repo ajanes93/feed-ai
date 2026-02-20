@@ -12,8 +12,11 @@ async function getScore(api: Fetcher): Promise<typeof cachedScore> {
   try {
     const res = await api.fetch(new Request("https://api/api/today"));
     if (!res.ok) return null;
-    const data = (await res.json()) as { score: number; analysis: string };
-    cachedScore = { score: data.score, analysis: data.analysis };
+    const { score, analysis } = (await res.json()) as {
+      score: number;
+      analysis: string;
+    };
+    cachedScore = { score, analysis };
     cacheTime = Date.now();
     return cachedScore;
   } catch {

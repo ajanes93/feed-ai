@@ -78,8 +78,7 @@ export function parseSanityHarnessHtml(html: string): SanityHarnessData {
 
   const top = entries[0];
   const medianIdx = Math.floor(entries.length / 2);
-  const medianPassRate =
-    Math.round(entries[medianIdx].overall * 10) / 10;
+  const medianPassRate = Math.round(entries[medianIdx].overall * 10) / 10;
 
   // Build language breakdown string for top agent
   const langParts = Object.entries(top.languages)
@@ -132,17 +131,12 @@ function extractLanguages(html: string): string[] {
 export function buildSanityHarnessArticleSummary(
   data: SanityHarnessData
 ): string {
-  return [
-    `SanityHarness agent benchmark update:`,
-    `Top agent: ${data.topAgent} (${data.topModel}) at ${data.topPassRate}% overall pass rate.`,
-    `Median agent pass rate: ${data.medianPassRate}%.`,
-    `Language breakdown (top agent): ${data.languageBreakdown}.`,
+  const note =
     data.topPassRate > 85
-      ? "Note: Top agent exceeding 85% — strong signal."
+      ? " Note: Top agent exceeding 85% — strong signal."
       : data.topPassRate < 50
-        ? "Note: Top agent below 50% — agents still struggling."
-        : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+        ? " Note: Top agent below 50% — agents still struggling."
+        : "";
+
+  return `SanityHarness agent benchmark update: Top agent: ${data.topAgent} (${data.topModel}) at ${data.topPassRate}% overall pass rate. Median agent pass rate: ${data.medianPassRate}%. Language breakdown (top agent): ${data.languageBreakdown}.${note}`;
 }

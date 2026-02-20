@@ -287,14 +287,12 @@ function synthesizeAnalysis(
   if (scores.length === 1) return scores[0].analysis;
 
   if (agreement === "disagree") {
-    const parts = scores.map((s) => {
-      const name = formatModelName(s.model);
-      const verb = deltaVerb(s.suggested_delta);
-      const delta = s.suggested_delta > 0 ? `+${s.suggested_delta}` : `${s.suggested_delta}`;
-      const cite = firstSentence(s.analysis);
-      return `${name} ${verb} (${delta}), citing: ${cite}`;
-    });
-    return parts.join(" ");
+    return scores
+      .map((s) => {
+        const sign = s.suggested_delta > 0 ? "+" : "";
+        return `${formatModelName(s.model)} ${deltaVerb(s.suggested_delta)} (${sign}${s.suggested_delta}), citing: ${firstSentence(s.analysis)}`;
+      })
+      .join(" ");
   }
 
   const claude = scores.find((s) => s.model.includes("claude"));
@@ -420,34 +418,27 @@ export async function runScoring(
   const scores = modelResults.map((r) => r.parsed);
   const aiUsages = modelResults.map((r) => r.usage);
 
+  // Dampen a raw delta: clamp to ±cap, multiply by 0.3, round to 1dp
+  const dampen = (raw: number, cap = 1.2) =>
+    Math.round(Math.max(-cap, Math.min(cap, raw * 0.3)) * 10) / 10;
+
   // Consensus calculation
   const consensusDelta = calculateConsensusDelta(scores);
-  const clampedDelta = Math.max(-4, Math.min(4, consensusDelta));
-  const dampened = clampedDelta * 0.3;
-  const finalDelta =
-    Math.round(Math.max(-1.2, Math.min(1.2, dampened)) * 10) / 10;
+  const preDampened = Math.max(-4, Math.min(4, consensusDelta));
+  const finalDelta = dampen(preDampened, 1.2);
 
   // Calculate sub-score deltas
-  const avgTechnicalDelta =
-    scores.reduce((sum, s) => sum + s.technical_delta, 0) / scores.length;
-  const avgEconomicDelta =
-    scores.reduce((sum, s) => sum + s.economic_delta, 0) / scores.length;
+  const avg = (fn: (s: OQModelScore) => number) =>
+    scores.reduce((sum, s) => sum + fn(s), 0) / scores.length;
+  const techDelta = dampen(avg((s) => s.technical_delta));
+  const econDelta = dampen(avg((s) => s.economic_delta));
 
-  const techDelta =
-    Math.round(Math.max(-1.2, Math.min(1.2, avgTechnicalDelta * 0.3)) * 10) /
-    10;
-  const econDelta =
-    Math.round(Math.max(-1.2, Math.min(1.2, avgEconomicDelta * 0.3)) * 10) / 10;
+  const clampScore = (prev: number, delta: number) =>
+    Math.round(Math.max(5, Math.min(95, prev + delta)));
 
-  const newScore = Math.round(
-    Math.max(5, Math.min(95, input.previousScore + finalDelta))
-  );
-  const newTechnical = Math.round(
-    Math.max(5, Math.min(95, input.previousTechnical + techDelta))
-  );
-  const newEconomic = Math.round(
-    Math.max(5, Math.min(95, input.previousEconomic + econDelta))
-  );
+  const newScore = clampScore(input.previousScore, finalDelta);
+  const newTechnical = clampScore(input.previousTechnical, techDelta);
+  const newEconomic = clampScore(input.previousEconomic, econDelta);
 
   const { agreement, spread } = calculateModelAgreement(scores);
   const signals = mergeSignals(scores);

@@ -311,22 +311,14 @@ async function loadExternalData(db: D1Database): Promise<ExternalData> {
   const result: ExternalData = {};
   try {
     const rows = await db
-      .prepare(
-        "SELECT key, value FROM oq_external_data WHERE key IN (?, ?, ?)"
-      )
-      .bind("sanity_harness", "swe_bench", "fred_labour")
+      .prepare("SELECT key, value FROM oq_external_data WHERE key IN (?, ?)")
+      .bind("sanity_harness", "fred_labour")
       .all();
 
     for (const row of rows.results) {
       const data = JSON.parse(row.value as string);
       if (row.key === "sanity_harness") {
-        result.sanityHarness = {
-          topPassRate: data.topPassRate,
-          topAgent: data.topAgent,
-          topModel: data.topModel,
-          medianPassRate: data.medianPassRate,
-          languageBreakdown: data.languageBreakdown,
-        };
+        result.sanityHarness = data;
       } else if (row.key === "fred_labour") {
         result.softwareIndex = data.softwareIndex;
         result.generalIndex = data.generalIndex;
@@ -340,6 +332,20 @@ async function loadExternalData(db: D1Database): Promise<ExternalData> {
 
 // --- External data fetching ---
 
+async function storeExternalData(
+  db: D1Database,
+  key: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any
+): Promise<void> {
+  await db
+    .prepare(
+      "INSERT OR REPLACE INTO oq_external_data (key, value) VALUES (?, ?)"
+    )
+    .bind(key, JSON.stringify(data))
+    .run();
+}
+
 async function fetchAndStoreSanityHarness(
   db: D1Database
 ): Promise<{ stored: boolean; topPassRate: number }> {
@@ -347,8 +353,7 @@ async function fetchAndStoreSanityHarness(
   const summary = buildSanityHarnessArticleSummary(data);
   const today = new Date().toISOString().split("T")[0];
 
-  // Store as synthetic article (deduplicate by week)
-  const weekKey = `sanityharness-${today}`;
+  // Store as synthetic article (deduplicate by day)
   await db
     .prepare(
       "INSERT INTO oq_articles (id, title, url, source, pillar, summary, published_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING"
@@ -356,7 +361,7 @@ async function fetchAndStoreSanityHarness(
     .bind(
       crypto.randomUUID(),
       `SanityHarness Agent Benchmark Update — ${today}`,
-      `https://sanityboard.lr7.dev#${weekKey}`,
+      `https://sanityboard.lr7.dev#sanityharness-${today}`,
       "SanityHarness",
       "capability",
       summary,
@@ -364,14 +369,7 @@ async function fetchAndStoreSanityHarness(
     )
     .run();
 
-  // Store structured data for prompt context
-  await db
-    .prepare(
-      "INSERT OR REPLACE INTO oq_external_data (key, value) VALUES (?, ?)"
-    )
-    .bind("sanity_harness", JSON.stringify(data))
-    .run();
-
+  await storeExternalData(db, "sanity_harness", data);
   return { stored: true, topPassRate: data.topPassRate };
 }
 
@@ -379,14 +377,7 @@ async function fetchAndStoreSWEBench(
   db: D1Database
 ): Promise<{ stored: boolean; verified: number; pro: number }> {
   const data = await fetchSWEBenchLeaderboard();
-
-  await db
-    .prepare(
-      "INSERT OR REPLACE INTO oq_external_data (key, value) VALUES (?, ?)"
-    )
-    .bind("swe_bench", JSON.stringify(data))
-    .run();
-
+  await storeExternalData(db, "swe_bench", data);
   return { stored: true, verified: data.topVerified, pro: data.topPro };
 }
 
@@ -395,14 +386,7 @@ async function fetchAndStoreFRED(
   apiKey: string
 ): Promise<{ stored: boolean; softwareIndex?: number; generalIndex?: number }> {
   const data = await fetchFREDData(apiKey);
-
-  await db
-    .prepare(
-      "INSERT OR REPLACE INTO oq_external_data (key, value) VALUES (?, ?)"
-    )
-    .bind("fred_labour", JSON.stringify(data))
-    .run();
-
+  await storeExternalData(db, "fred_labour", data);
   return {
     stored: true,
     softwareIndex: data.softwareIndex,
