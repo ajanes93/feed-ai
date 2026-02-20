@@ -1,8 +1,9 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { cors } from "hono/cors";
 import { XMLParser } from "fast-xml-parser";
 import type { OQPillar } from "@feed-ai/shared/oq-types";
-import type { AIUsageEntry } from "@feed-ai/shared/types";
+import { recordAIUsage } from "../../worker/src/services/logger";
 import type { Env } from "./types";
 import { oqSources } from "./sources";
 import { runScoring } from "./services/scorer";
@@ -31,18 +32,18 @@ function isAuthorized(authHeader: string, adminKey?: string): boolean {
   return crypto.subtle.timingSafeEqual(aBuf, bBuf);
 }
 
-app.use("/api/fetch", async (c, next) => {
+async function adminAuth(
+  c: Context<{ Bindings: Env }>,
+  next: () => Promise<void>
+) {
   if (!isAuthorized(c.req.header("authorization") ?? "", c.env.ADMIN_KEY)) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   return next();
-});
-app.use("/api/score", async (c, next) => {
-  if (!isAuthorized(c.req.header("authorization") ?? "", c.env.ADMIN_KEY)) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
-  return next();
-});
+}
+
+app.use("/api/fetch", adminAuth);
+app.use("/api/score", adminAuth);
 
 // --- Public endpoints ---
 
@@ -482,30 +483,6 @@ async function generateDailyScore(env: Env): Promise<{
 
 // --- D1 helpers ---
 
-async function recordAIUsage(db: D1Database, usage: AIUsageEntry) {
-  try {
-    await db
-      .prepare(
-        "INSERT INTO ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      )
-      .bind(
-        crypto.randomUUID(),
-        usage.model,
-        usage.provider,
-        usage.inputTokens ?? null,
-        usage.outputTokens ?? null,
-        usage.totalTokens ?? null,
-        usage.latencyMs ?? null,
-        usage.wasFallback ? 1 : 0,
-        usage.error ?? null,
-        usage.status
-      )
-      .run();
-  } catch (err) {
-    console.error("Failed to record AI usage:", err);
-  }
-}
-
 interface ScoreInsert {
   date: string;
   score: number;
@@ -547,15 +524,6 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<void> {
 }
 
 function mapScoreRow(row: Record<string, unknown>) {
-  const parseJson = (val: unknown) => {
-    if (typeof val !== "string") return val;
-    try {
-      return JSON.parse(val);
-    } catch {
-      return val;
-    }
-  };
-
   return {
     id: row.id,
     date: row.date,
@@ -564,9 +532,9 @@ function mapScoreRow(row: Record<string, unknown>) {
     scoreEconomic: row.score_economic,
     delta: row.delta,
     analysis: row.analysis,
-    signals: parseJson(row.signals),
-    pillarScores: parseJson(row.pillar_scores),
-    modelScores: parseJson(row.model_scores),
+    signals: JSON.parse(row.signals as string),
+    pillarScores: JSON.parse(row.pillar_scores as string),
+    modelScores: JSON.parse(row.model_scores as string),
     modelAgreement: row.model_agreement,
     modelSpread: row.model_spread,
     capabilityGap: row.capability_gap,

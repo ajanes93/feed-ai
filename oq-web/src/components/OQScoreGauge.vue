@@ -11,16 +11,14 @@ const animatedScore = ref(0);
 const showBar = ref(false);
 
 onMounted(() => {
-  const duration = 1800;
   const start = performance.now();
-
   const tick = (now: number) => {
-    const progress = Math.min((now - start) / duration, 1);
-    const eased = 1 - Math.pow(1 - progress, 3);
-    animatedScore.value = Math.round(eased * props.score);
+    const progress = Math.min((now - start) / 1800, 1);
+    animatedScore.value = Math.round(
+      (1 - Math.pow(1 - progress, 3)) * props.score
+    );
     if (progress < 1) requestAnimationFrame(tick);
   };
-
   requestAnimationFrame(tick);
   setTimeout(() => (showBar.value = true), 300);
 });

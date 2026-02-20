@@ -40,19 +40,14 @@ async function callGemini(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new ModelError("gemini-2.0-flash", "gemini", latencyMs, body);
+    throw new Error(`gemini-2.0-flash error: ${body.slice(0, 200)}`);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) {
-    throw new ModelError(
-      "gemini-2.0-flash",
-      "gemini",
-      latencyMs,
-      "Empty response"
-    );
+    throw new Error("gemini-2.0-flash error: Empty response");
   }
 
   const tokenMeta = data?.usageMetadata;
@@ -88,12 +83,7 @@ async function callClaude(
 
   const content = response.content[0];
   if (!content || content.type !== "text") {
-    throw new ModelError(
-      "claude-sonnet-4-5-20250929",
-      "anthropic",
-      latencyMs,
-      "Empty response"
-    );
+    throw new Error("claude-sonnet-4-5-20250929 error: Empty response");
   }
 
   const parsed = parseModelResponse(content.text, "claude-sonnet-4-5-20250929");
@@ -136,14 +126,14 @@ async function callOpenAI(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new ModelError("gpt-4o", "openai", latencyMs, body);
+    throw new Error(`gpt-4o error: ${body.slice(0, 200)}`);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = await res.json();
   const text = data?.choices?.[0]?.message?.content;
   if (!text) {
-    throw new ModelError("gpt-4o", "openai", latencyMs, "Empty response");
+    throw new Error("gpt-4o error: Empty response");
   }
 
   const parsed = parseModelResponse(text, "gpt-4o");
@@ -164,17 +154,6 @@ async function callOpenAI(
 }
 
 // --- Parsing ---
-
-class ModelError extends Error {
-  constructor(
-    public model: string,
-    public provider: string,
-    public latencyMs: number,
-    public detail: string
-  ) {
-    super(`${model} error: ${detail.slice(0, 200)}`);
-  }
-}
 
 function parseModelResponse(text: string, model: string): OQModelScore {
   const cleaned = text
@@ -275,9 +254,8 @@ function mergePillarScores(scores: OQModelScore[]): OQPillarScores {
   const result = {} as OQPillarScores;
 
   for (const pillar of pillars) {
-    const values = scores.map((s) => s.pillar_scores[pillar]).filter(Boolean);
-    const avg =
-      values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    const values = scores.map((s) => s.pillar_scores[pillar]);
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
     result[pillar] = Math.round(avg * 10) / 10;
   }
 

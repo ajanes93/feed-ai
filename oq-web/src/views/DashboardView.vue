@@ -60,33 +60,47 @@ function submitKey() {
   loadDashboard();
 }
 
-async function adminAction(
-  path: string,
-  loadingRef: { value: boolean },
-  resultRef: { value: string }
-) {
-  loadingRef.value = true;
-  resultRef.value = "";
+async function fetchArticles() {
+  fetching.value = true;
+  fetchResult.value = "";
   try {
-    const res = await fetch(`/api/${path}`, {
+    const res = await fetch("/api/fetch", {
       method: "POST",
       headers: { Authorization: `Bearer ${adminKey.value}` },
     });
     const data = await res.json();
-    resultRef.value = res.ok
+    fetchResult.value = res.ok
       ? JSON.stringify(data)
       : `Error: ${JSON.stringify(data)}`;
     if (res.status === 401) needsAuth.value = true;
     await loadDashboard();
   } catch (e) {
-    resultRef.value = `Error: ${e instanceof Error ? e.message : String(e)}`;
+    fetchResult.value = `Error: ${e instanceof Error ? e.message : String(e)}`;
   } finally {
-    loadingRef.value = false;
+    fetching.value = false;
   }
 }
 
-const fetchArticles = () => adminAction("fetch", fetching, fetchResult);
-const generateScore = () => adminAction("score", scoring, scoreResult);
+async function generateScore() {
+  scoring.value = true;
+  scoreResult.value = "";
+  try {
+    const res = await fetch("/api/score", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${adminKey.value}` },
+    });
+    const data = await res.json();
+    scoreResult.value = res.ok
+      ? JSON.stringify(data)
+      : `Error: ${JSON.stringify(data)}`;
+    if (res.status === 401) needsAuth.value = true;
+    await loadDashboard();
+  } catch (e) {
+    scoreResult.value = `Error: ${e instanceof Error ? e.message : String(e)}`;
+  } finally {
+    scoring.value = false;
+  }
+}
 
 onMounted(loadDashboard);
 </script>
