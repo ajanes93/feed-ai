@@ -8,6 +8,13 @@ interface SanityHarnessContext {
   languageBreakdown: string;
 }
 
+interface SWEBenchContext {
+  topVerified: number;
+  topVerifiedModel: string;
+  topPro: number;
+  topProModel: string;
+}
+
 interface PromptContext {
   currentScore: number;
   technicalScore: number;
@@ -15,6 +22,7 @@ interface PromptContext {
   history: string;
   articlesByPillar: Record<OQPillar, string>;
   sanityHarness?: SanityHarnessContext;
+  sweBench?: SWEBenchContext;
   softwareIndex?: number;
   generalIndex?: number;
 }
@@ -30,8 +38,8 @@ non-technical stakeholders, and maintaining software over time.
 A human engineer is no longer needed.
 
 KEY FRAMING: The central metric is the "Capability Gap":
-- SWE-bench Verified (curated open-source): ~80%
-- SWE-bench Pro (private enterprise code): ~23%
+- SWE-bench Verified (curated open-source): ${ctx.sweBench ? `${ctx.sweBench.topVerified}% (${ctx.sweBench.topVerifiedModel})` : "~80%"}
+- SWE-bench Pro (private enterprise code): ${ctx.sweBench ? `${ctx.sweBench.topPro}% (${ctx.sweBench.topProModel})` : "~23%"}
 This gap is the story. Movement in Pro matters far more than Verified.
 
 Current score: ${ctx.currentScore}/100

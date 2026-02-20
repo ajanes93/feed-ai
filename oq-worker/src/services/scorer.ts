@@ -277,7 +277,8 @@ function deltaVerb(delta: number): string {
 
 function firstSentence(text: string): string {
   const match = text.match(/^[^.!?]+[.!?]/);
-  return match ? match[0].trim() : text.slice(0, 120);
+  if (match) return match[0].trim();
+  return text.length > 120 ? text.slice(0, 120) + "..." : text;
 }
 
 function synthesizeAnalysis(
@@ -344,6 +345,12 @@ interface ScoringInput {
     medianPassRate: number;
     languageBreakdown: string;
   };
+  sweBench?: {
+    topVerified: number;
+    topVerifiedModel: string;
+    topPro: number;
+    topProModel: string;
+  };
   softwareIndex?: number;
   generalIndex?: number;
 }
@@ -377,6 +384,7 @@ export async function runScoring(
     history: input.history,
     articlesByPillar: input.articlesByPillar,
     sanityHarness: input.sanityHarness,
+    sweBench: input.sweBench,
     softwareIndex: input.softwareIndex,
     generalIndex: input.generalIndex,
   });

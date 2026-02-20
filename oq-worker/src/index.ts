@@ -192,6 +192,7 @@ app.post("/api/subscribe", async (c) => {
 });
 
 app.get("/api/methodology", async (c) => {
+  const externalData = await loadExternalData(c.env.DB);
   const prompt = buildScoringPrompt({
     currentScore: 0,
     technicalScore: 0,
@@ -234,8 +235,10 @@ app.get("/api/methodology", async (c) => {
     startingScore: STARTING_SCORE,
     currentPromptHash: hash,
     capabilityGap: {
-      verified: "~80%",
-      pro: "~23%",
+      verified: externalData.sweBench
+        ? `${externalData.sweBench.topVerified}%`
+        : "~80%",
+      pro: externalData.sweBench ? `${externalData.sweBench.topPro}%` : "~23%",
       description:
         "The gap between SWE-bench Verified (curated open-source) and Pro (private enterprise) is the central metric.",
     },
@@ -276,21 +279,45 @@ app.post("/api/score", async (c) => {
 });
 
 app.post("/api/fetch-sanity", async (c) => {
-  const result = await fetchAndStoreSanityHarness(c.env.DB);
-  return c.json(result);
+  try {
+    const result = await fetchAndStoreSanityHarness(c.env.DB);
+    return c.json(result);
+  } catch (err) {
+    return c.json(
+      {
+        error:
+          err instanceof Error ? err.message : "SanityHarness fetch failed",
+      },
+      500
+    );
+  }
 });
 
 app.post("/api/fetch-swebench", async (c) => {
-  const result = await fetchAndStoreSWEBench(c.env.DB);
-  return c.json(result);
+  try {
+    const result = await fetchAndStoreSWEBench(c.env.DB);
+    return c.json(result);
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "SWE-bench fetch failed" },
+      500
+    );
+  }
 });
 
 app.post("/api/fetch-fred", async (c) => {
   if (!c.env.FRED_API_KEY) {
-    return c.json({ error: "FRED_API_KEY not configured" }, 500);
+    return c.json({ error: "FRED_API_KEY not configured" }, 503);
   }
-  const result = await fetchAndStoreFRED(c.env.DB, c.env.FRED_API_KEY);
-  return c.json(result);
+  try {
+    const result = await fetchAndStoreFRED(c.env.DB, c.env.FRED_API_KEY);
+    return c.json(result);
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "FRED fetch failed" },
+      500
+    );
+  }
 });
 
 // --- External data loading ---
@@ -303,6 +330,12 @@ interface ExternalData {
     medianPassRate: number;
     languageBreakdown: string;
   };
+  sweBench?: {
+    topVerified: number;
+    topVerifiedModel: string;
+    topPro: number;
+    topProModel: string;
+  };
   softwareIndex?: number;
   generalIndex?: number;
 }
@@ -311,14 +344,16 @@ async function loadExternalData(db: D1Database): Promise<ExternalData> {
   const result: ExternalData = {};
   try {
     const rows = await db
-      .prepare("SELECT key, value FROM oq_external_data WHERE key IN (?, ?)")
-      .bind("sanity_harness", "fred_labour")
+      .prepare("SELECT key, value FROM oq_external_data WHERE key IN (?, ?, ?)")
+      .bind("sanity_harness", "swe_bench", "fred_labour")
       .all();
 
     for (const row of rows.results) {
       const data = JSON.parse(row.value as string);
       if (row.key === "sanity_harness") {
         result.sanityHarness = data;
+      } else if (row.key === "swe_bench") {
+        result.sweBench = data;
       } else if (row.key === "fred_labour") {
         result.softwareIndex = data.softwareIndex;
         result.generalIndex = data.generalIndex;
@@ -632,6 +667,7 @@ async function generateDailyScore(env: Env): Promise<{
       openai: env.OPENAI_API_KEY,
     },
     sanityHarness: externalData.sanityHarness,
+    sweBench: externalData.sweBench,
     softwareIndex: externalData.softwareIndex,
     generalIndex: externalData.generalIndex,
   });
@@ -648,6 +684,7 @@ async function generateDailyScore(env: Env): Promise<{
       history,
       articlesByPillar,
       sanityHarness: externalData.sanityHarness,
+      sweBench: externalData.sweBench,
       softwareIndex: externalData.softwareIndex,
       generalIndex: externalData.generalIndex,
     });
@@ -745,6 +782,14 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<void> {
     .run();
 }
 
+function safeJsonParse(value: unknown, fallback: unknown = []) {
+  try {
+    return JSON.parse(value as string);
+  } catch {
+    return fallback;
+  }
+}
+
 function mapScoreRow(row: Record<string, unknown>) {
   return {
     id: row.id,
@@ -754,9 +799,9 @@ function mapScoreRow(row: Record<string, unknown>) {
     scoreEconomic: row.score_economic,
     delta: row.delta,
     analysis: row.analysis,
-    signals: JSON.parse(row.signals as string),
-    pillarScores: JSON.parse(row.pillar_scores as string),
-    modelScores: JSON.parse(row.model_scores as string),
+    signals: safeJsonParse(row.signals, []),
+    pillarScores: safeJsonParse(row.pillar_scores, {}),
+    modelScores: safeJsonParse(row.model_scores, []),
     modelAgreement: row.model_agreement,
     modelSpread: row.model_spread,
     capabilityGap: row.capability_gap,
