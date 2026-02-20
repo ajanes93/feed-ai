@@ -45,7 +45,7 @@ const chartData = computed(() => {
       i === labelCount - 1
         ? entries.length - 1
         : Math.floor((i / (labelCount - 1)) * (entries.length - 1));
-    const date = new Date(entries[idx].date + "T12:00:00");
+    const date = new Date(entries[idx].date + "T12:00:00Z");
     labels.push({
       x: points[idx].x,
       text:

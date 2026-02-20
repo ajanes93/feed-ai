@@ -136,19 +136,14 @@ async function callOpenAI(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new ModelError("gpt-4o", "openai" as "gemini", latencyMs, body);
+    throw new ModelError("gpt-4o", "openai", latencyMs, body);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = await res.json();
   const text = data?.choices?.[0]?.message?.content;
   if (!text) {
-    throw new ModelError(
-      "gpt-4o",
-      "openai" as "gemini",
-      latencyMs,
-      "Empty response"
-    );
+    throw new ModelError("gpt-4o", "openai", latencyMs, "Empty response");
   }
 
   const parsed = parseModelResponse(text, "gpt-4o");
@@ -157,7 +152,7 @@ async function callOpenAI(
     parsed,
     usage: {
       model: "gpt-4o",
-      provider: "openai" as "gemini",
+      provider: "openai",
       inputTokens: data?.usage?.prompt_tokens,
       outputTokens: data?.usage?.completion_tokens,
       totalTokens: data?.usage?.total_tokens,

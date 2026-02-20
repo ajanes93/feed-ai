@@ -1,6 +1,24 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { motion } from "motion-v";
+import type {
+  OQModelScore,
+  OQModelAgreement,
+  OQHistoryEntry,
+} from "@feed-ai/shared/oq-types";
+import { formatModelName } from "../utils/format";
+
+interface DashboardScore {
+  score: number;
+  scoreTechnical: number;
+  scoreEconomic: number;
+  delta: number;
+  analysis: string;
+  capabilityGap?: string;
+  modelScores: OQModelScore[];
+  modelAgreement: OQModelAgreement;
+  modelSpread: number;
+}
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -8,8 +26,8 @@ const needsAuth = ref(false);
 const adminKey = ref("");
 const keyInput = ref("");
 
-const todayScore = ref<Record<string, unknown> | null>(null);
-const history = ref<Array<Record<string, unknown>>>([]);
+const todayScore = ref<DashboardScore | null>(null);
+const history = ref<OQHistoryEntry[]>([]);
 
 const fetching = ref(false);
 const fetchResult = ref("");
@@ -73,14 +91,6 @@ function fetchArticles() {
 
 function generateScore() {
   adminAction("score", scoring, scoreResult);
-}
-
-function modelLabel(model: string): string {
-  if (typeof model !== "string") return String(model);
-  if (model.includes("claude")) return "Claude";
-  if (model.includes("gpt")) return "GPT-4";
-  if (model.includes("gemini")) return "Gemini";
-  return model;
 }
 
 onMounted(loadDashboard);
@@ -178,7 +188,7 @@ onMounted(loadDashboard);
             class="rounded-xl border border-gray-800 bg-gray-900 p-4 text-center"
           >
             <div class="font-mono text-2xl font-medium text-white">
-              {{ todayScore.scoreTechnical ?? todayScore.score_technical }}
+              {{ todayScore.scoreTechnical }}
             </div>
             <div class="mt-1 text-xs text-gray-500">Technical</div>
           </div>
@@ -186,7 +196,7 @@ onMounted(loadDashboard);
             class="rounded-xl border border-gray-800 bg-gray-900 p-4 text-center"
           >
             <div class="font-mono text-2xl font-medium text-white">
-              {{ todayScore.scoreEconomic ?? todayScore.score_economic }}
+              {{ todayScore.scoreEconomic }}
             </div>
             <div class="mt-1 text-xs text-gray-500">Economic</div>
           </div>
@@ -196,13 +206,12 @@ onMounted(loadDashboard);
             <div
               class="font-mono text-2xl font-medium"
               :class="{
-                'text-red-400': (todayScore.delta as number) > 0,
-                'text-emerald-400': (todayScore.delta as number) < 0,
+                'text-red-400': todayScore.delta > 0,
+                'text-emerald-400': todayScore.delta < 0,
                 'text-gray-500': todayScore.delta === 0,
               }"
             >
-              {{ (todayScore.delta as number) > 0 ? "+" : ""
-              }}{{ todayScore.delta }}
+              {{ todayScore.delta > 0 ? "+" : "" }}{{ todayScore.delta }}
             </div>
             <div class="mt-1 text-xs text-gray-500">Daily Delta</div>
           </div>
@@ -225,23 +234,17 @@ onMounted(loadDashboard);
               {{ todayScore.analysis }}
             </p>
             <div
-              v-if="todayScore.capabilityGap || todayScore.capability_gap"
+              v-if="todayScore.capabilityGap"
               class="mt-3 border-t border-gray-800 pt-3 text-xs text-gray-500"
             >
-              {{ todayScore.capabilityGap ?? todayScore.capability_gap }}
+              {{ todayScore.capabilityGap }}
             </div>
           </div>
         </motion.section>
 
         <!-- Model Scores -->
         <motion.section
-          v-if="
-            Array.isArray(todayScore.modelScores ?? todayScore.model_scores) &&
-            (
-              (todayScore.modelScores ??
-                todayScore.model_scores) as Array<unknown>
-            ).length > 0
-          "
+          v-if="todayScore.modelScores.length > 0"
           class="mb-6"
           :initial="{ opacity: 0, y: 12 }"
           :animate="{ opacity: 1, y: 0 }"
@@ -252,24 +255,23 @@ onMounted(loadDashboard);
           >
             Model Breakdown
             <span class="ml-2 text-xs font-normal text-gray-600">
-              {{ todayScore.modelAgreement ?? todayScore.model_agreement }}
+              {{ todayScore.modelAgreement }}
               · spread:
-              {{ todayScore.modelSpread ?? todayScore.model_spread }}
+              {{ todayScore.modelSpread }}
             </span>
           </h2>
           <div class="grid gap-3 sm:grid-cols-3">
             <div
-              v-for="model in (todayScore.modelScores ??
-                todayScore.model_scores) as Array<Record<string, unknown>>"
-              :key="String(model.model)"
+              v-for="model in todayScore.modelScores"
+              :key="model.model"
               class="rounded-xl border border-gray-800 bg-gray-900 p-4"
             >
               <div class="mb-2 flex items-center justify-between">
                 <span class="text-sm font-medium text-white">
-                  {{ modelLabel(String(model.model)) }}
+                  {{ formatModelName(model.model) }}
                 </span>
                 <span class="font-mono text-sm text-orange-400">
-                  {{ (model.suggested_delta as number) > 0 ? "+" : ""
+                  {{ model.suggested_delta > 0 ? "+" : ""
                   }}{{ model.suggested_delta }}
                 </span>
               </div>
@@ -310,7 +312,7 @@ onMounted(loadDashboard);
               <tbody>
                 <tr
                   v-for="entry in history"
-                  :key="String(entry.date)"
+                  :key="entry.date"
                   class="border-b border-gray-800/50"
                 >
                   <td class="px-3 py-2 text-gray-300">{{ entry.date }}</td>
@@ -318,24 +320,23 @@ onMounted(loadDashboard);
                     {{ entry.score }}
                   </td>
                   <td class="px-3 py-2 font-mono text-gray-400">
-                    {{ entry.scoreTechnical ?? entry.score_technical }}
+                    {{ entry.scoreTechnical }}
                   </td>
                   <td class="px-3 py-2 font-mono text-gray-400">
-                    {{ entry.scoreEconomic ?? entry.score_economic }}
+                    {{ entry.scoreEconomic }}
                   </td>
                   <td
                     class="px-3 py-2 font-mono"
                     :class="{
-                      'text-red-400': (entry.delta as number) > 0,
-                      'text-emerald-400': (entry.delta as number) < 0,
+                      'text-red-400': entry.delta > 0,
+                      'text-emerald-400': entry.delta < 0,
                       'text-gray-500': entry.delta === 0,
                     }"
                   >
-                    {{ (entry.delta as number) > 0 ? "+" : ""
-                    }}{{ entry.delta }}
+                    {{ entry.delta > 0 ? "+" : "" }}{{ entry.delta }}
                   </td>
                   <td class="px-3 py-2 font-mono text-gray-500">
-                    {{ entry.modelSpread ?? entry.model_spread }}
+                    {{ entry.modelSpread }}
                   </td>
                 </tr>
               </tbody>

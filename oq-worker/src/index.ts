@@ -337,12 +337,24 @@ async function generateDailyScore(
     .first();
 
   if (existing) {
-    return { score: 0, delta: 0, date: today };
+    const row = await env.DB.prepare(
+      "SELECT score, delta FROM oq_scores WHERE date = ?"
+    )
+      .bind(today)
+      .first();
+    return {
+      score: (row?.score as number) ?? 0,
+      delta: (row?.delta as number) ?? 0,
+      date: today,
+      alreadyExists: true,
+    };
   }
 
   const prevRow = await env.DB.prepare(
     "SELECT score, score_technical, score_economic, date FROM oq_scores ORDER BY date DESC LIMIT 1"
-  ).first();
+  )
+    .bind()
+    .first();
 
   const prevScore = (prevRow?.score as number) ?? STARTING_SCORE;
   const prevTechnical =
@@ -351,7 +363,9 @@ async function generateDailyScore(
 
   const historyRows = await env.DB.prepare(
     "SELECT date, score, delta FROM oq_scores ORDER BY date DESC LIMIT 14"
-  ).all();
+  )
+    .bind()
+    .all();
   const history = historyRows.results
     .map((r) => `${r.date}: ${r.score} (${r.delta > 0 ? "+" : ""}${r.delta})`)
     .join(", ");
@@ -421,6 +435,27 @@ async function generateDailyScore(
 
       return { score: newScore, delta: decayDelta, date: today };
     }
+
+    await saveScore(env.DB, {
+      date: today,
+      score: prevScore,
+      scoreTechnical: prevTechnical,
+      scoreEconomic: prevEconomic,
+      delta: 0,
+      analysis: "No new signals today.",
+      signals: "[]",
+      pillarScores: JSON.stringify({
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      }),
+      modelScores: "[]",
+      modelAgreement: "partial",
+      modelSpread: 0,
+      promptHash: "no-articles",
+    });
 
     return { score: prevScore, delta: 0, date: today };
   }

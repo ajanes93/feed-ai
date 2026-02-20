@@ -1,18 +1,12 @@
 <script setup lang="ts">
 import type { OQModelScore, OQModelAgreement } from "@feed-ai/shared/oq-types";
+import { formatModelName } from "../utils/format";
 
 defineProps<{
   modelAgreement: OQModelAgreement;
   modelSpread: number;
   modelScores: OQModelScore[];
 }>();
-
-function modelLabel(model: string): string {
-  if (model.includes("claude")) return "Claude";
-  if (model.includes("gpt")) return "GPT-4";
-  if (model.includes("gemini")) return "Gemini";
-  return model;
-}
 </script>
 
 <template>
@@ -49,7 +43,7 @@ function modelLabel(model: string): string {
         class="flex items-center justify-between text-xs"
       >
         <span class="font-medium text-gray-400">
-          {{ modelLabel(score.model) }}
+          {{ formatModelName(score.model) }}
         </span>
         <span class="font-mono text-gray-500">
           {{ score.suggested_delta > 0 ? "+" : ""
