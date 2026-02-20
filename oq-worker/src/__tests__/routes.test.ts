@@ -7,6 +7,7 @@ describe("OQ API routes", () => {
     await env.DB.exec("DELETE FROM oq_scores");
     await env.DB.exec("DELETE FROM oq_articles");
     await env.DB.exec("DELETE FROM oq_subscribers");
+    await env.DB.exec("DELETE FROM oq_ai_usage");
   });
 
   describe("GET /api/today", () => {

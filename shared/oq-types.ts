@@ -37,24 +37,6 @@ export interface OQModelScore {
   capability_gap_note?: string;
 }
 
-export interface OQScore {
-  id: string;
-  date: string;
-  score: number;
-  scoreTechnical: number;
-  scoreEconomic: number;
-  delta: number;
-  analysis: string;
-  signals: OQSignal[];
-  pillarScores: OQPillarScores;
-  modelScores: OQModelScore[];
-  modelAgreement: OQModelAgreement;
-  modelSpread: number;
-  capabilityGap?: string;
-  promptHash: string;
-  createdAt?: string;
-}
-
 export interface OQHistoryEntry {
   date: string;
   score: number;
@@ -62,14 +44,4 @@ export interface OQHistoryEntry {
   scoreEconomic: number;
   delta: number;
   modelSpread: number;
-}
-
-export interface OQArticle {
-  id: string;
-  title: string;
-  url: string;
-  source: string;
-  pillar: OQPillar;
-  summary?: string;
-  publishedAt: string;
 }

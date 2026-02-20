@@ -243,7 +243,7 @@ onMounted(async () => {
         >
           Andres Janes
         </a>
-        · Powered by feed-ai · Data refreshed daily at 06:00 UTC
+        · Powered by feed-ai · Data refreshed daily at 06:30 UTC
       </footer>
     </div>
   </div>

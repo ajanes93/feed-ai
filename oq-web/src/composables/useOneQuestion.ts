@@ -76,7 +76,7 @@ export function useOneQuestion() {
 
   const formattedDate = computed(() => {
     if (!today.value) return "";
-    const d = new Date(today.value.date + "T12:00:00Z");
+    const d = new Date(today.value.date + "T00:00:00");
     return d.toLocaleDateString("en-GB", {
       day: "numeric",
       month: "long",

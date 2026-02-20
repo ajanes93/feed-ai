@@ -8,14 +8,6 @@ export interface OQSource {
   type: "rss" | "hn";
 }
 
-export const OQ_PILLAR_WEIGHTS: Record<OQPillar, number> = {
-  capability: 0.25,
-  labour_market: 0.25,
-  sentiment: 0.2,
-  industry: 0.2,
-  barriers: 0.1,
-};
-
 export const oqSources: OQSource[] = [
   // === Pillar 1: AI Capability Benchmarks (25%) ===
   {
