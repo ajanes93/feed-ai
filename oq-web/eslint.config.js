@@ -1,7 +1,7 @@
 import tseslint from "typescript-eslint";
 import eslintConfigPrettier from "eslint-config-prettier";
 import pluginVue from "eslint-plugin-vue";
-import { base } from "../../eslint.config.base.js";
+import { base } from "../eslint.config.base.js";
 
 export default tseslint.config(
   ...base,
