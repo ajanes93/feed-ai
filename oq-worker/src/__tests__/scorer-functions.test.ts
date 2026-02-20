@@ -56,7 +56,13 @@ describe("parseModelResponse", () => {
 
   it("defaults technical_delta to 0 when missing", () => {
     const json = JSON.stringify({
-      pillar_scores: { capability: 0, labour_market: 0, sentiment: 0, industry: 0, barriers: 0 },
+      pillar_scores: {
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
       suggested_delta: 0.1,
       analysis: "Test",
     });
@@ -67,7 +73,13 @@ describe("parseModelResponse", () => {
 
   it("defaults top_signals to empty array when missing", () => {
     const json = JSON.stringify({
-      pillar_scores: { capability: 0, labour_market: 0, sentiment: 0, industry: 0, barriers: 0 },
+      pillar_scores: {
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
       suggested_delta: 0.1,
       analysis: "Test",
     });
@@ -78,7 +90,7 @@ describe("parseModelResponse", () => {
   it("throws on missing pillar_scores", () => {
     const json = JSON.stringify({ suggested_delta: 1, analysis: "Test" });
     expect(() => parseModelResponse(json, "bad-model")).toThrow(
-      "Invalid response structure from bad-model",
+      "Invalid response structure from bad-model"
     );
   });
 
@@ -88,7 +100,7 @@ describe("parseModelResponse", () => {
       analysis: "Test",
     });
     expect(() => parseModelResponse(json, "bad-model")).toThrow(
-      "Invalid response structure",
+      "Invalid response structure"
     );
   });
 
@@ -98,7 +110,7 @@ describe("parseModelResponse", () => {
       suggested_delta: 1,
     });
     expect(() => parseModelResponse(json, "bad-model")).toThrow(
-      "Invalid response structure",
+      "Invalid response structure"
     );
   });
 
@@ -109,8 +121,14 @@ describe("parseModelResponse", () => {
 
 describe("mergeSignals", () => {
   it("deduplicates signals by first 50 chars lowercased", () => {
-    const s1 = oqSignalFactory.build({ text: "AI benchmark improved significantly", impact: 3 });
-    const s2 = oqSignalFactory.build({ text: "AI benchmark improved significantly", impact: 1 });
+    const s1 = oqSignalFactory.build({
+      text: "AI benchmark improved significantly",
+      impact: 3,
+    });
+    const s2 = oqSignalFactory.build({
+      text: "AI benchmark improved significantly",
+      impact: 1,
+    });
     const scores = [
       oqModelScoreFactory.build({ top_signals: [s1] }),
       oqModelScoreFactory.build({ top_signals: [s2] }),
@@ -123,7 +141,10 @@ describe("mergeSignals", () => {
   it("sorts by absolute impact descending", () => {
     const low = oqSignalFactory.build({ text: "Low impact", impact: 1 });
     const high = oqSignalFactory.build({ text: "High impact", impact: 5 });
-    const negative = oqSignalFactory.build({ text: "Negative high", impact: -4 });
+    const negative = oqSignalFactory.build({
+      text: "Negative high",
+      impact: -4,
+    });
     const scores = [
       oqModelScoreFactory.build({ top_signals: [low, high, negative] }),
     ];
@@ -154,10 +175,16 @@ describe("mergePillarScores", () => {
   it("averages pillar scores across models", () => {
     const scores = [
       oqModelScoreFactory.build({
-        pillar_scores: oqPillarScoresFactory.build({ capability: 2, labour_market: 4 }),
+        pillar_scores: oqPillarScoresFactory.build({
+          capability: 2,
+          labour_market: 4,
+        }),
       }),
       oqModelScoreFactory.build({
-        pillar_scores: oqPillarScoresFactory.build({ capability: 4, labour_market: 2 }),
+        pillar_scores: oqPillarScoresFactory.build({
+          capability: 4,
+          labour_market: 2,
+        }),
       }),
     ];
     const result = mergePillarScores(scores);
@@ -200,7 +227,10 @@ describe("synthesizeAnalysis", () => {
 
   it("joins analyses with model labels when models disagree", () => {
     const scores = [
-      oqModelScoreFactory.build({ model: "claude-sonnet", analysis: "Claude thinks X" }),
+      oqModelScoreFactory.build({
+        model: "claude-sonnet",
+        analysis: "Claude thinks X",
+      }),
       oqModelScoreFactory.build({ model: "gpt-4o", analysis: "GPT thinks Y" }),
     ];
     const result = synthesizeAnalysis(scores, "disagree");
@@ -212,7 +242,10 @@ describe("synthesizeAnalysis", () => {
   it("uses Claude analysis when models agree", () => {
     const scores = [
       oqModelScoreFactory.build({ model: "gpt-4o", analysis: "GPT analysis" }),
-      oqModelScoreFactory.build({ model: "claude-sonnet", analysis: "Claude analysis" }),
+      oqModelScoreFactory.build({
+        model: "claude-sonnet",
+        analysis: "Claude analysis",
+      }),
     ];
     expect(synthesizeAnalysis(scores, "agree")).toBe("Claude analysis");
   });
@@ -220,7 +253,10 @@ describe("synthesizeAnalysis", () => {
   it("falls back to first model when no Claude and models agree", () => {
     const scores = [
       oqModelScoreFactory.build({ model: "gpt-4o", analysis: "GPT analysis" }),
-      oqModelScoreFactory.build({ model: "gemini-flash", analysis: "Gemini analysis" }),
+      oqModelScoreFactory.build({
+        model: "gemini-flash",
+        analysis: "Gemini analysis",
+      }),
     ];
     expect(synthesizeAnalysis(scores, "mostly_agree")).toBe("GPT analysis");
   });

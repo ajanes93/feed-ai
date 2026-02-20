@@ -84,7 +84,7 @@ async function mockApi(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(todayData),
-    }),
+    })
   );
 
   await page.route("**/api/history*", (route) =>
@@ -92,7 +92,7 @@ async function mockApi(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(historyData),
-    }),
+    })
   );
 
   await page.route("**/api/subscribe", (route) =>
@@ -100,7 +100,7 @@ async function mockApi(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ ok: true }),
-    }),
+    })
   );
 
   await page.route("**/api/methodology", (route) =>
@@ -112,7 +112,7 @@ async function mockApi(page: Page) {
         formula: { models: [], weights: {} },
         startingScore: 32,
       }),
-    }),
+    })
   );
 }
 

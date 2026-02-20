@@ -5,7 +5,9 @@ test.describe("Pull-to-refresh", () => {
     mockPage,
   }) => {
     await mockPage.goto("/");
-    await expect(feedSlide(mockPage).getByText("AI Breakthrough")).toBeVisible();
+    await expect(
+      feedSlide(mockPage).getByText("AI Breakthrough")
+    ).toBeVisible();
 
     const content = mockPage.getByTestId("pull-content");
 
@@ -28,7 +30,7 @@ test.describe("Pull-to-refresh", () => {
         {
           touches: [{ clientX: x, clientY: y, identifier: 0 }],
           changedTouches: [{ clientX: x, clientY: y, identifier: 0 }],
-        },
+        }
       );
     }
 
@@ -55,14 +57,10 @@ test.describe("Pull-to-refresh", () => {
     await expect(mockPage.getByText(formatted)).toBeVisible();
 
     // Release without reaching threshold — content snaps back
-    await mockPage.dispatchEvent(
-      "[data-testid='pull-content']",
-      "touchend",
-      {
-        touches: [],
-        changedTouches: [{ clientX: x, clientY: 250, identifier: 0 }],
-      },
-    );
+    await mockPage.dispatchEvent("[data-testid='pull-content']", "touchend", {
+      touches: [],
+      changedTouches: [{ clientX: x, clientY: 250, identifier: 0 }],
+    });
 
     // After release, pull indicator should disappear
     await expect(indicator).not.toBeVisible();

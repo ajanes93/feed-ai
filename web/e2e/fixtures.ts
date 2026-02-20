@@ -22,7 +22,7 @@ function buildDigestItem(
     publishedAt: string;
     position: number;
   }> = {},
-  seq = 1,
+  seq = 1
 ) {
   return {
     id: overrides.id ?? `item-${seq}`,
@@ -54,7 +54,7 @@ function buildTestData() {
       buildDigestItem({ category: "dev", title: "TypeScript 6.0" }, 4),
       buildDigestItem(
         { category: "jobs", title: "Senior Engineer at Acme" },
-        5,
+        5
       ),
     ],
   };
@@ -81,7 +81,7 @@ async function mockApi(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(digestList),
-    }),
+    })
   );
 
   await page.route(`**/api/digest/${today}`, (route) =>
@@ -89,7 +89,7 @@ async function mockApi(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(todayDigest),
-    }),
+    })
   );
 
   await page.route(`**/api/digest/${yesterday}`, (route) =>
@@ -97,7 +97,7 @@ async function mockApi(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(yesterdayDigest),
-    }),
+    })
   );
 }
 

@@ -10,7 +10,7 @@ async function mockDashboardApi(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(todayData),
-    }),
+    })
   );
 
   await page.route("**/api/history*", (route) =>
@@ -27,7 +27,7 @@ async function mockDashboardApi(page: Page) {
           modelSpread: 0.4,
         },
       ]),
-    }),
+    })
   );
 
   await page.route("**/api/fetch", (route) => {
@@ -78,9 +78,7 @@ test.describe("Dashboard", () => {
     await mockDashboardApi(page);
     await page.goto("/dashboard");
     await expect(page.getByText("Today's Analysis")).toBeVisible();
-    await expect(
-      page.getByText(/SWE-bench Pro remains at 23%/),
-    ).toBeVisible();
+    await expect(page.getByText(/SWE-bench Pro remains at 23%/)).toBeVisible();
   });
 
   test("renders score history table", async ({ page }) => {
@@ -88,8 +86,12 @@ test.describe("Dashboard", () => {
     await page.goto("/dashboard");
     await expect(page.getByText("Score History (14d)")).toBeVisible();
     // Table headers
-    await expect(page.getByRole("columnheader", { name: "Date" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "Spread" })).toBeVisible();
+    await expect(
+      page.getByRole("columnheader", { name: "Date" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("columnheader", { name: "Spread" })
+    ).toBeVisible();
   });
 
   test("shows model breakdown section", async ({ page }) => {
@@ -122,7 +124,7 @@ test.describe("Dashboard", () => {
         status: 401,
         contentType: "application/json",
         body: JSON.stringify({ error: "Unauthorized" }),
-      }),
+      })
     );
   });
 });

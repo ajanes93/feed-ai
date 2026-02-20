@@ -77,7 +77,7 @@ test.describe("Feed content", () => {
     await mockPage.goto("/");
 
     await expect(
-      feedSlide(mockPage).getByText("Summary for story 1"),
+      feedSlide(mockPage).getByText("Summary for story 1")
     ).toBeVisible();
   });
 
@@ -85,7 +85,10 @@ test.describe("Feed content", () => {
     await mockPage.goto("/");
 
     await expect(
-      feedSlide(mockPage).locator("article").first().getByText("AI", { exact: true }),
+      feedSlide(mockPage)
+        .locator("article")
+        .first()
+        .getByText("AI", { exact: true })
     ).toBeVisible();
   });
 
@@ -93,7 +96,7 @@ test.describe("Feed content", () => {
     await mockPage.goto("/");
 
     await expect(
-      feedSlide(mockPage).locator("article").first().getByText("Test Source"),
+      feedSlide(mockPage).locator("article").first().getByText("Test Source")
     ).toBeVisible();
   });
 
@@ -101,7 +104,7 @@ test.describe("Feed content", () => {
     await mockPage.goto("/");
 
     await expect(
-      feedSlide(mockPage).getByText("This matters for testing").first(),
+      feedSlide(mockPage).getByText("This matters for testing").first()
     ).toBeVisible();
   });
 });

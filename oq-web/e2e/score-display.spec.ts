@@ -4,7 +4,7 @@ test.describe("Score display", () => {
   test("renders the main heading", async ({ mockPage }) => {
     await mockPage.goto("/");
     await expect(
-      mockPage.getByRole("heading", { name: /Will AI replace/i }),
+      mockPage.getByRole("heading", { name: /Will AI replace/i })
     ).toBeVisible();
   });
 
@@ -29,7 +29,7 @@ test.describe("Score display", () => {
   test("shows today's analysis text", async ({ mockPage }) => {
     await mockPage.goto("/");
     await expect(
-      mockPage.getByText(/SWE-bench Pro remains at 23%/),
+      mockPage.getByText(/SWE-bench Pro remains at 23%/)
     ).toBeVisible();
   });
 
@@ -37,7 +37,7 @@ test.describe("Score display", () => {
     await mockPage.goto("/");
     await expect(mockPage.getByText("The Capability Gap")).toBeVisible();
     await expect(
-      mockPage.getByText(/SWE-bench Verified.*SWE-bench Pro/),
+      mockPage.getByText(/SWE-bench Verified.*SWE-bench Pro/)
     ).toBeVisible();
   });
 });
@@ -46,10 +46,10 @@ test.describe("Signals", () => {
   test("renders signal entries", async ({ mockPage }) => {
     await mockPage.goto("/");
     await expect(
-      mockPage.getByText("GPT-5 rumored for Q3 release"),
+      mockPage.getByText("GPT-5 rumored for Q3 release")
     ).toBeVisible();
     await expect(
-      mockPage.getByText(/declining trust in AI code/),
+      mockPage.getByText(/declining trust in AI code/)
     ).toBeVisible();
   });
 
@@ -86,9 +86,7 @@ test.describe("Subscribe", () => {
   test("renders subscribe section", async ({ mockPage }) => {
     await mockPage.goto("/");
     await expect(mockPage.getByText("Get the daily take")).toBeVisible();
-    await expect(
-      mockPage.getByPlaceholder("your@email.com"),
-    ).toBeVisible();
+    await expect(mockPage.getByPlaceholder("your@email.com")).toBeVisible();
   });
 
   test("submits subscription email", async ({ mockPage }) => {
