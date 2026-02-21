@@ -756,6 +756,33 @@ async function generateDailyScore(env: Env): Promise<{
     );
   }
 
+  // Store individual model responses for transparency
+  if (result.modelResponses.length > 0) {
+    await env.DB.batch(
+      result.modelResponses.map((mr) =>
+        env.DB.prepare(
+          "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, input_tokens, output_tokens, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(
+          crypto.randomUUID(),
+          scoreId,
+          mr.model,
+          mr.provider,
+          mr.rawResponse,
+          JSON.stringify(mr.parsed.pillar_scores),
+          mr.parsed.technical_delta,
+          mr.parsed.economic_delta,
+          mr.parsed.suggested_delta,
+          mr.parsed.analysis,
+          JSON.stringify(mr.parsed.top_signals),
+          mr.parsed.capability_gap_note ?? null,
+          mr.inputTokens ?? null,
+          mr.outputTokens ?? null,
+          mr.latencyMs ?? null
+        )
+      )
+    );
+  }
+
   try {
     const prompt = buildScoringPrompt({
       currentScore: prevScore,

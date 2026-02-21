@@ -14,6 +14,7 @@ import type { FREDSeriesTrend } from "./fred";
 
 interface ModelResult {
   parsed: OQModelScore;
+  rawResponse: string;
   usage: AIUsageEntry;
 }
 
@@ -56,6 +57,7 @@ async function callGemini(
 
   return {
     parsed,
+    rawResponse: text,
     usage: {
       model: "gemini-2.0-flash",
       provider: "gemini",
@@ -91,6 +93,7 @@ async function callClaude(
 
   return {
     parsed,
+    rawResponse: content.text,
     usage: {
       model: "claude-sonnet-4-5-20250929",
       provider: "anthropic",
@@ -141,6 +144,7 @@ async function callOpenAI(
 
   return {
     parsed,
+    rawResponse: text,
     usage: {
       model: "gpt-4o",
       provider: "openai",
@@ -312,6 +316,16 @@ export {
 
 // --- Main scoring pipeline ---
 
+export interface OQModelResponse {
+  model: string;
+  provider: string;
+  rawResponse: string;
+  parsed: OQModelScore;
+  inputTokens?: number;
+  outputTokens?: number;
+  latencyMs?: number;
+}
+
 export interface OQScoringResult {
   score: number;
   scoreTechnical: number;
@@ -321,6 +335,7 @@ export interface OQScoringResult {
   signals: OQSignal[];
   pillarScores: OQPillarScores;
   modelScores: OQModelScore[];
+  modelResponses: OQModelResponse[];
   modelAgreement: OQModelAgreement;
   modelSpread: number;
   capabilityGap?: string;
@@ -434,6 +449,15 @@ export async function runScoring(
 
   const scores = modelResults.map((r) => r.parsed);
   const aiUsages = modelResults.map((r) => r.usage);
+  const modelResponses: OQModelResponse[] = modelResults.map((r) => ({
+    model: r.usage.model,
+    provider: r.usage.provider,
+    rawResponse: r.rawResponse,
+    parsed: r.parsed,
+    inputTokens: r.usage.inputTokens,
+    outputTokens: r.usage.outputTokens,
+    latencyMs: r.usage.latencyMs,
+  }));
 
   // Dampen a raw delta: clamp to ±cap, multiply by 0.3, round to 1dp
   const dampen = (raw: number, cap = 1.2) =>
@@ -477,6 +501,7 @@ export async function runScoring(
     signals,
     pillarScores,
     modelScores: scores,
+    modelResponses,
     modelAgreement: agreement,
     modelSpread: Math.round(spread * 10) / 10,
     capabilityGap: gapNotes || undefined,
