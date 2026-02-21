@@ -114,7 +114,7 @@ app.get("/api/admin/dashboard", async (c) => {
 
 app.get("/api/admin/external-history", async (c) => {
   const key = c.req.query("key");
-  const limit = Math.min(parseInt(c.req.query("limit") ?? "90"), 365);
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "90") || 90, 365);
 
   const rows = key
     ? await c.env.DB.prepare(
@@ -140,7 +140,7 @@ app.get("/api/admin/external-history", async (c) => {
 app.get("/api/admin/logs", async (c) => {
   const level = c.req.query("level");
   const category = c.req.query("category");
-  const limit = Math.min(parseInt(c.req.query("limit") ?? "100"), 500);
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "100") || 100, 500);
 
   let sql = "SELECT * FROM oq_logs";
   const conditions: string[] = [];
@@ -342,60 +342,47 @@ app.get("/api/methodology", async (c) => {
 
 // --- Admin endpoints ---
 
-app.post("/api/fetch", async (c) => {
+async function adminHandler(
+  c: Context<{ Bindings: Env }>,
+  action: string,
+  fn: (log: Logger) => Promise<unknown>
+) {
   const log = createLogger(c.env.DB);
-  const result = await fetchOQArticles(c.env.DB);
-  await logAdminAction(c.env.DB, "fetch", "/api/fetch", 200, result, log);
-  return c.json(result);
-});
-
-app.post("/api/score", async (c) => {
-  const log = createLogger(c.env.DB);
-  const result = await generateDailyScore(c.env, log);
-  await logAdminAction(c.env.DB, "score", "/api/score", 200, result, log);
-  return c.json(result);
-});
-
-app.post("/api/fetch-sanity", async (c) => {
-  const log = createLogger(c.env.DB);
+  const endpoint = `/api/${action}`;
   try {
-    const result = await fetchAndStoreSanityHarness(c.env.DB);
-    await logAdminAction(c.env.DB, "fetch-sanity", "/api/fetch-sanity", 200, result, log);
+    const result = await fn(log);
+    await logAdminAction(c.env.DB, action, endpoint, 200, result, log);
     return c.json(result);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "SanityHarness fetch failed";
-    await logAdminAction(c.env.DB, "fetch-sanity", "/api/fetch-sanity", 500, { error: msg }, log);
+    const msg = err instanceof Error ? err.message : String(err);
+    await logAdminAction(c.env.DB, action, endpoint, 500, { error: msg }, log);
     return c.json({ error: msg }, 500);
   }
-});
+}
 
-app.post("/api/fetch-swebench", async (c) => {
-  const log = createLogger(c.env.DB);
-  try {
-    const result = await fetchAndStoreSWEBench(c.env.DB);
-    await logAdminAction(c.env.DB, "fetch-swebench", "/api/fetch-swebench", 200, result, log);
-    return c.json(result);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "SWE-bench fetch failed";
-    await logAdminAction(c.env.DB, "fetch-swebench", "/api/fetch-swebench", 500, { error: msg }, log);
-    return c.json({ error: msg }, 500);
-  }
-});
+app.post("/api/fetch", (c) =>
+  adminHandler(c, "fetch", () => fetchOQArticles(c.env.DB))
+);
 
-app.post("/api/fetch-fred", async (c) => {
+app.post("/api/score", (c) =>
+  adminHandler(c, "score", (log) => generateDailyScore(c.env, log))
+);
+
+app.post("/api/fetch-sanity", (c) =>
+  adminHandler(c, "fetch-sanity", () => fetchAndStoreSanityHarness(c.env.DB))
+);
+
+app.post("/api/fetch-swebench", (c) =>
+  adminHandler(c, "fetch-swebench", () => fetchAndStoreSWEBench(c.env.DB))
+);
+
+app.post("/api/fetch-fred", (c) => {
   if (!c.env.FRED_API_KEY) {
     return c.json({ error: "FRED_API_KEY not configured" }, 503);
   }
-  const log = createLogger(c.env.DB);
-  try {
-    const result = await fetchAndStoreFRED(c.env.DB, c.env.FRED_API_KEY, log);
-    await logAdminAction(c.env.DB, "fetch-fred", "/api/fetch-fred", 200, result, log);
-    return c.json(result);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "FRED fetch failed";
-    await logAdminAction(c.env.DB, "fetch-fred", "/api/fetch-fred", 500, { error: msg }, log);
-    return c.json({ error: msg }, 500);
-  }
+  return adminHandler(c, "fetch-fred", (log) =>
+    fetchAndStoreFRED(c.env.DB, c.env.FRED_API_KEY!, log)
+  );
 });
 
 // --- External data loading ---
@@ -474,13 +461,14 @@ async function loadExternalData(
 
 // --- External data fetching ---
 
+// Same-day deduplication: D1 serializes requests so check-then-insert is safe.
+// If concurrency were possible, a unique index on (key, fetch_date) would be needed.
 async function storeExternalData(
   db: D1Database,
   key: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any
 ): Promise<void> {
-  // Same-day deduplication: skip if we already stored this key today
   const existing = await db
     .prepare(
       "SELECT id FROM oq_external_data_history WHERE key = ? AND date(fetched_at) = date('now') LIMIT 1"
@@ -886,67 +874,88 @@ async function generateDailyScore(
   });
 
   // Link AI usage records to this score (batched)
-  if (result.aiUsages.length > 0) {
-    await env.DB.batch(
-      result.aiUsages.map((usage) =>
-        env.DB.prepare(
-          "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, score_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        ).bind(
-          crypto.randomUUID(),
-          usage.model,
-          usage.provider,
-          usage.inputTokens ?? null,
-          usage.outputTokens ?? null,
-          usage.totalTokens ?? null,
-          usage.latencyMs ?? null,
-          usage.wasFallback ? 1 : 0,
-          usage.error ?? null,
-          usage.status,
-          scoreId
+  try {
+    if (result.aiUsages.length > 0) {
+      await env.DB.batch(
+        result.aiUsages.map((usage) =>
+          env.DB.prepare(
+            "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, score_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          ).bind(
+            crypto.randomUUID(),
+            usage.model,
+            usage.provider,
+            usage.inputTokens ?? null,
+            usage.outputTokens ?? null,
+            usage.totalTokens ?? null,
+            usage.latencyMs ?? null,
+            usage.wasFallback ? 1 : 0,
+            usage.error ?? null,
+            usage.status,
+            scoreId
+          )
         )
-      )
-    );
+      );
+    }
+  } catch (err) {
+    await log?.warn("score", "Failed to save AI usage records", {
+      scoreId,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // Link articles to this score
-  const articleIds = articles.results
-    .map((a) => a.id as string)
-    .filter(Boolean);
-  if (articleIds.length > 0) {
-    await env.DB.batch(
-      articleIds.map((articleId) =>
-        env.DB.prepare(
-          "INSERT INTO oq_score_articles (score_id, article_id) VALUES (?, ?)"
-        ).bind(scoreId, articleId)
-      )
-    );
+  try {
+    const articleIds = articles.results
+      .map((a) => a.id as string)
+      .filter(Boolean);
+    if (articleIds.length > 0) {
+      await env.DB.batch(
+        articleIds.map((articleId) =>
+          env.DB.prepare(
+            "INSERT INTO oq_score_articles (score_id, article_id) VALUES (?, ?)"
+          ).bind(scoreId, articleId)
+        )
+      );
+    }
+  } catch (err) {
+    await log?.warn("score", "Failed to save article linkage", {
+      scoreId,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // Store individual model responses for transparency
-  if (result.modelResponses.length > 0) {
-    await env.DB.batch(
-      result.modelResponses.map((mr) =>
-        env.DB.prepare(
-          "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, input_tokens, output_tokens, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        ).bind(
-          crypto.randomUUID(),
-          scoreId,
-          mr.model,
-          mr.provider,
-          mr.rawResponse,
-          JSON.stringify(mr.parsed.pillar_scores),
-          mr.parsed.technical_delta,
-          mr.parsed.economic_delta,
-          mr.parsed.suggested_delta,
-          mr.parsed.analysis,
-          JSON.stringify(mr.parsed.top_signals),
-          mr.parsed.capability_gap_note ?? null,
-          mr.inputTokens ?? null,
-          mr.outputTokens ?? null,
-          mr.latencyMs ?? null
+  try {
+    if (result.modelResponses.length > 0) {
+      await env.DB.batch(
+        result.modelResponses.map((mr) =>
+          env.DB.prepare(
+            "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, input_tokens, output_tokens, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          ).bind(
+            crypto.randomUUID(),
+            scoreId,
+            mr.model,
+            mr.provider,
+            mr.rawResponse,
+            JSON.stringify(mr.parsed.pillar_scores),
+            mr.parsed.technical_delta,
+            mr.parsed.economic_delta,
+            mr.parsed.suggested_delta,
+            mr.parsed.analysis,
+            JSON.stringify(mr.parsed.top_signals),
+            mr.parsed.capability_gap_note ?? null,
+            mr.inputTokens ?? null,
+            mr.outputTokens ?? null,
+            mr.latencyMs ?? null
+          )
         )
-      )
-    );
+      );
+    }
+  } catch (err) {
+    await log?.warn("score", "Failed to save model responses", {
+      scoreId,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   try {
@@ -1176,7 +1185,7 @@ export default {
         // Idempotency: skip if a successful cron already ran today
         const today = new Date().toISOString().split("T")[0];
         const existingRun = await env.DB.prepare(
-          "SELECT id FROM oq_cron_runs WHERE date(started_at) = ? AND fetch_status = 'success' LIMIT 1"
+          "SELECT id FROM oq_cron_runs WHERE date(started_at) = ? AND fetch_status = 'success' AND score_status = 'success' LIMIT 1"
         )
           .bind(today)
           .first();
