@@ -20,10 +20,12 @@ const {
   scoring,
   scoreResult,
   scoreSuccess,
+  scoreAlreadyExists,
   setAdminKey,
   fetchDashboard,
   fetchArticles,
   generateScore,
+  rescoreScore,
 } = useDashboard();
 
 const keyInput = ref("");
@@ -111,7 +113,17 @@ onMounted(fetchDashboard);
             : 'border-amber-800 bg-amber-950 text-amber-300'
         "
       >
-        {{ scoreResult }}
+        <div class="flex items-center justify-between gap-3">
+          <span>{{ scoreResult }}</span>
+          <button
+            v-if="scoreAlreadyExists"
+            :disabled="scoring"
+            class="shrink-0 rounded border border-amber-700 bg-amber-900/50 px-3 py-1 text-xs font-medium text-amber-200 hover:bg-amber-800 disabled:opacity-50"
+            @click="rescoreScore()"
+          >
+            {{ scoring ? "Regenerating..." : "Force Regenerate" }}
+          </button>
+        </div>
       </div>
 
       <!-- Auth prompt -->

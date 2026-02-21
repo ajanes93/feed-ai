@@ -92,6 +92,7 @@ export function useDashboard() {
   const scoring = ref(false);
   const scoreResult = ref<string | null>(null);
   const scoreSuccess = ref(false);
+  const scoreAlreadyExists = ref(false);
 
   async function generateScore() {
     if (!adminKey.value) {
@@ -102,6 +103,7 @@ export function useDashboard() {
     scoring.value = true;
     scoreResult.value = null;
     scoreSuccess.value = false;
+    scoreAlreadyExists.value = false;
 
     try {
       const res = await fetch("/api/score", {
@@ -119,6 +121,7 @@ export function useDashboard() {
 
       if (body.alreadyExists) {
         scoreResult.value = `Score already exists for ${body.date}: ${body.score} (delta: ${body.delta})`;
+        scoreAlreadyExists.value = true;
       } else {
         scoreResult.value = `Generated score for ${body.date}: ${body.score} (delta: ${body.delta > 0 ? "+" : ""}${body.delta})`;
       }
@@ -127,6 +130,42 @@ export function useDashboard() {
     } catch (err) {
       scoreResult.value =
         err instanceof Error ? err.message : "Score generation failed";
+      scoreSuccess.value = false;
+    } finally {
+      scoring.value = false;
+    }
+  }
+
+  async function rescoreScore() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    scoring.value = true;
+    scoreResult.value = null;
+    scoreSuccess.value = false;
+    scoreAlreadyExists.value = false;
+
+    try {
+      const res = await fetch("/api/rescore", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
+
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Rescore failed");
+
+      scoreResult.value = `Regenerated score for ${body.date}: ${body.score} (delta: ${body.delta > 0 ? "+" : ""}${body.delta})`;
+      scoreSuccess.value = true;
+      await fetchDashboard();
+    } catch (err) {
+      scoreResult.value = err instanceof Error ? err.message : "Rescore failed";
       scoreSuccess.value = false;
     } finally {
       scoring.value = false;
@@ -174,9 +213,11 @@ export function useDashboard() {
     scoring,
     scoreResult,
     scoreSuccess,
+    scoreAlreadyExists,
     setAdminKey,
     fetchDashboard,
     fetchArticles,
     generateScore,
+    rescoreScore,
   };
 }
