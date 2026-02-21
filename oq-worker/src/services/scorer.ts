@@ -348,11 +348,13 @@ interface ScoringInput {
   sweBench?: {
     topVerified: number;
     topVerifiedModel: string;
-    topPro: number;
-    topProModel: string;
+    topBashOnly: number;
+    topBashOnlyModel: string;
   };
   softwareIndex?: number;
+  softwareDate?: string;
   generalIndex?: number;
+  generalDate?: string;
 }
 
 const MAX_RETRIES = 3;
@@ -386,7 +388,9 @@ export async function runScoring(
     sanityHarness: input.sanityHarness,
     sweBench: input.sweBench,
     softwareIndex: input.softwareIndex,
+    softwareDate: input.softwareDate,
     generalIndex: input.generalIndex,
+    generalDate: input.generalDate,
   });
 
   const promptHash = await hashPrompt(prompt);

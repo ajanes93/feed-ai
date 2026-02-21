@@ -130,9 +130,11 @@ onMounted(() => fetchMethodology());
               <div class="text-lg text-gray-700">vs</div>
               <div class="text-center">
                 <div class="text-2xl font-semibold text-orange-500">
-                  {{ methodology.capabilityGap.pro }}
+                  {{ methodology.capabilityGap.bashOnly }}
                 </div>
-                <div class="mt-1 text-[10px] text-gray-600">SWE-bench Pro</div>
+                <div class="mt-1 text-[10px] text-gray-600">
+                  SWE-bench Bash Only
+                </div>
               </div>
             </div>
             <p class="mt-4 text-sm leading-relaxed text-gray-500">

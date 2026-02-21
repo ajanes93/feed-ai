@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineProps<{
   verified: string;
-  pro: string;
+  bashOnly: string;
   note?: string;
 }>();
 </script>
@@ -39,21 +39,21 @@ defineProps<{
         />
       </div>
 
-      <!-- Pro -->
+      <!-- Bash Only -->
       <div class="text-center">
         <div
           class="text-3xl font-semibold tracking-tight text-orange-500 sm:text-4xl"
         >
-          {{ pro }}
+          {{ bashOnly }}
         </div>
         <div class="mt-1 text-[10px] tracking-widest text-gray-600 uppercase">
-          SWE-bench Pro
+          SWE-bench Bash Only
         </div>
       </div>
     </div>
 
     <p class="mt-5 text-center text-xs leading-relaxed text-gray-500">
-      Movement in Pro matters far more than Verified. The gap is the story.
+      Curated benchmarks. Real enterprise engineering is far harder.
     </p>
 
     <p

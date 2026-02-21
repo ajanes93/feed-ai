@@ -15,7 +15,7 @@ interface MethodologyResponse {
   };
   capabilityGap: {
     verified: string;
-    pro: string;
+    bashOnly: string;
     description: string;
   };
   pillars: { name: string; weight: number; key: string }[];

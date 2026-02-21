@@ -234,9 +234,10 @@ describe("synthesizeAnalysis", () => {
       oqModelScoreFactory.build({ model: "gpt-4o", analysis: "GPT thinks Y" }),
     ];
     const result = synthesizeAnalysis(scores, "disagree");
-    expect(result).toContain("CLAUDE");
-    expect(result).toContain("GPT");
-    expect(result).toContain("Meanwhile");
+    expect(result).toContain("Claude");
+    expect(result).toContain("GPT-4");
+    expect(result).toContain("held steady");
+    expect(result).toContain("citing:");
   });
 
   it("uses Claude analysis when models agree", () => {

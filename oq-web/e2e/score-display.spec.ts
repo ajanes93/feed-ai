@@ -29,7 +29,7 @@ test.describe("Score display", () => {
   test("shows today's analysis text", async ({ mockPage }) => {
     await mockPage.goto("/");
     await expect(
-      mockPage.getByText(/SWE-bench Pro remains at 23%/)
+      mockPage.getByText(/SWE-bench Verified: 79\.2%/)
     ).toBeVisible();
   });
 
@@ -37,7 +37,7 @@ test.describe("Score display", () => {
     await mockPage.goto("/");
     await expect(mockPage.getByText("The Capability Gap")).toBeVisible();
     await expect(
-      mockPage.getByText(/SWE-bench Verified.*SWE-bench Pro/)
+      mockPage.getByText(/SWE-bench Verified.*Bash Only/)
     ).toBeVisible();
   });
 });

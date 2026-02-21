@@ -11,8 +11,8 @@ interface SanityHarnessContext {
 interface SWEBenchContext {
   topVerified: number;
   topVerifiedModel: string;
-  topPro: number;
-  topProModel: string;
+  topBashOnly: number;
+  topBashOnlyModel: string;
 }
 
 interface PromptContext {
@@ -24,7 +24,9 @@ interface PromptContext {
   sanityHarness?: SanityHarnessContext;
   sweBench?: SWEBenchContext;
   softwareIndex?: number;
+  softwareDate?: string;
   generalIndex?: number;
+  generalDate?: string;
 }
 
 export function buildScoringPrompt(ctx: PromptContext): string {
@@ -38,9 +40,9 @@ non-technical stakeholders, and maintaining software over time.
 A human engineer is no longer needed.
 
 KEY FRAMING: The central metric is the "Capability Gap":
-- SWE-bench Verified (curated open-source): ${ctx.sweBench ? `${ctx.sweBench.topVerified}% (${ctx.sweBench.topVerifiedModel})` : "~80%"}
-- SWE-bench Pro (private enterprise code): ${ctx.sweBench ? `${ctx.sweBench.topPro}% (${ctx.sweBench.topProModel})` : "~23%"}
-This gap is the story. Movement in Pro matters far more than Verified.
+- SWE-bench Verified (best agent+model, curated open-source): ${ctx.sweBench ? `${ctx.sweBench.topVerified}% (${ctx.sweBench.topVerifiedModel})` : "~79%"}
+- SWE-bench Bash Only (raw model capability, standardized agent): ${ctx.sweBench ? `${ctx.sweBench.topBashOnly}% (${ctx.sweBench.topBashOnlyModel})` : "~77%"}
+These are benchmark scores on curated issues. Real enterprise software engineering is far harder.
 
 Current score: ${ctx.currentScore}/100
 Technical sub-score: ${ctx.technicalScore}/100
@@ -65,7 +67,7 @@ ${
 Note: Only flag a labour market AI signal if software job postings are declining FASTER than general postings.
 ${
   ctx.softwareIndex !== undefined && ctx.generalIndex !== undefined
-    ? `Software job postings index: ${ctx.softwareIndex}. General job postings index: ${ctx.generalIndex}.
+    ? `Indeed Software Dev Postings Index: ${ctx.softwareIndex}${ctx.softwareDate ? ` (as of ${ctx.softwareDate})` : ""}. Initial Claims (general labour): ${ctx.generalIndex}${ctx.generalDate ? ` (as of ${ctx.generalDate})` : ""}.
 `
     : ""
 }${ctx.articlesByPillar.labour_market || "No articles today."}
@@ -102,13 +104,13 @@ Provide your assessment as JSON:
     }
   ],
   "analysis": "<2-3 sentences. Be specific. Reference concrete data. Mention the Capability Gap if relevant. Avoid generic statements.>",
-  "capability_gap_note": "<optional: note if SWE-bench Pro or Verified changed today>"
+  "capability_gap_note": "<optional: note if SWE-bench Verified or Bash Only changed today>"
 }
 
 CALIBRATION RULES:
 - Most days the score should move 0-2 points. 3+ requires landmark news.
 - Distinguish between AI *helping* engineers vs AI *replacing* them.
-- SWE-bench Verified improvements are less meaningful than Pro improvements.
+- High SWE-bench scores on curated bugs ≠ replacing full engineering roles.
 - CEO hype carries less weight than actual headcount data.
 - One company's anecdote doesn't represent the industry.
 - "AI tools adopted more" ≠ "engineers being replaced."

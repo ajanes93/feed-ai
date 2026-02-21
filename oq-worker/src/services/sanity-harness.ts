@@ -31,43 +31,8 @@ export async function fetchSanityHarness(): Promise<SanityHarnessData> {
 }
 
 export function parseSanityHarnessHtml(html: string): SanityHarnessData {
-  const entries: SanityHarnessEntry[] = [];
-
-  const languages = extractLanguages(html);
-
-  // Match all <tr> blocks
-  const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-  let trMatch;
-  while ((trMatch = trPattern.exec(html)) !== null) {
-    const rowHtml = trMatch[1];
-    const cells: string[] = [];
-    let cellMatch;
-    const cellRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-    while ((cellMatch = cellRe.exec(rowHtml)) !== null) {
-      cells.push(cellMatch[1].replace(/<[^>]*>/g, "").trim());
-    }
-
-    // Need at least: agent, model, overall
-    if (cells.length < 3) continue;
-
-    const overall = parseFloat(cells[2]);
-    if (isNaN(overall)) continue;
-
-    const langScores: Record<string, number> = {};
-    for (let i = 3; i < cells.length && i - 3 < languages.length; i++) {
-      const val = parseFloat(cells[i]);
-      if (!isNaN(val)) {
-        langScores[languages[i - 3]] = val;
-      }
-    }
-
-    entries.push({
-      agent: cells[0],
-      model: cells[1],
-      overall,
-      languages: langScores,
-    });
-  }
+  // SanityHarness is a SSR React app — data is in div grid layout, not tables.
+  const entries = parseSSREntries(html);
 
   if (entries.length === 0) {
     throw new Error("SanityHarness: No entries parsed from HTML");
@@ -80,7 +45,6 @@ export function parseSanityHarnessHtml(html: string): SanityHarnessData {
   const medianIdx = Math.floor(entries.length / 2);
   const medianPassRate = Math.round(entries[medianIdx].overall * 10) / 10;
 
-  // Build language breakdown string for top agent
   const langParts = Object.entries(top.languages)
     .map(([lang, pct]) => `${lang}: ${pct}%`)
     .join(", ");
@@ -96,36 +60,64 @@ export function parseSanityHarnessHtml(html: string): SanityHarnessData {
   };
 }
 
-function extractLanguages(html: string): string[] {
-  // Extract language names from table headers
-  const thPattern = /<th[^>]*>([\s\S]*?)<\/th>/gi;
-  const headers: string[] = [];
-  let thMatch;
-  while ((thMatch = thPattern.exec(html)) !== null) {
-    headers.push(thMatch[1].replace(/<[^>]*>/g, "").trim());
+function parseSSREntries(html: string): SanityHarnessEntry[] {
+  const entries: SanityHarnessEntry[] = [];
+
+  // Each leaderboard entry starts with a rank marker like "#1</div>"
+  // Followed by agent name, model, overall score, and pass rate in div columns.
+  const rankPattern = /#(\d+)<\/div>/g;
+  let rankMatch;
+
+  while ((rankMatch = rankPattern.exec(html)) !== null) {
+    const rank = parseInt(rankMatch[1]);
+    const windowStart = rankMatch.index;
+    const windowEnd = Math.min(html.length, windowStart + 5000);
+    const window = html.slice(windowStart, windowEnd);
+
+    // Agent name: first <a> with transition-colors class
+    const agentMatch = window.match(
+      /class="hover:text-indigo-600[^"]*">([\s\S]*?)<\/a>/
+    );
+    const agent = agentMatch
+      ? agentMatch[1].replace(/<[^>]*>/g, "").trim()
+      : `Agent #${rank}`;
+
+    // Model name: <span class="truncate" title="ModelName">
+    const modelMatch = window.match(
+      /<span\s+class="truncate"\s+title="([^"]+)"/
+    );
+    const model = modelMatch ? modelMatch[1] : "Unknown";
+
+    // Overall score: bold monospace number
+    const scoreMatch = window.match(
+      /font-mono text-sm font-bold[^"]*">([\d.]+)<\/span>/
+    );
+    const overall = scoreMatch ? parseFloat(scoreMatch[1]) : 0;
+
+    // Pass rate: emerald-colored percentage
+    const passMatch = window.match(/text-emerald-\d+[^"]*">([\d.]+)%/);
+    const passRate = passMatch ? parseFloat(passMatch[1]) : 0;
+
+    // Language scores from the flight recorder links and language spectrum
+    const languages: Record<string, number> = {};
+    const langPattern =
+      /title="([a-z]+)"[^>]*>[^<]*<\/span>[^<]*<[^>]*>([\d.]+)%/gi;
+    let langMatch;
+    while ((langMatch = langPattern.exec(window)) !== null) {
+      languages[langMatch[1].toLowerCase()] = parseFloat(langMatch[2]);
+    }
+
+    if (overall > 0 || passRate > 0) {
+      entries.push({
+        agent,
+        model,
+        overall: passRate > 0 ? passRate : overall,
+        languages,
+      });
+    }
   }
 
-  // Skip first few columns (rank/agent/model/overall) — rest are languages
-  // Look for known language names
-  const knownLangs = [
-    "Python",
-    "JavaScript",
-    "TypeScript",
-    "Go",
-    "Rust",
-    "Java",
-    "Dart",
-    "Zig",
-    "C",
-    "C++",
-    "Ruby",
-    "Swift",
-  ];
-  const langs = headers.filter((h) =>
-    knownLangs.some((l) => h.toLowerCase().includes(l.toLowerCase()))
-  );
-
-  return langs.length > 0 ? langs : headers.slice(3);
+  return entries;
 }
 
 export function buildSanityHarnessArticleSummary(

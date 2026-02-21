@@ -195,8 +195,8 @@ onMounted(async () => {
           :transition="{ duration: 0.6, delay: 0.3 }"
         >
           <OQCapabilityGap
-            :verified="methodology?.capabilityGap?.verified ?? '~80%'"
-            :pro="methodology?.capabilityGap?.pro ?? '~23%'"
+            :verified="methodology?.capabilityGap?.verified ?? '~79%'"
+            :bash-only="methodology?.capabilityGap?.bashOnly ?? '~77%'"
             :note="today.capabilityGap"
           />
         </motion.section>

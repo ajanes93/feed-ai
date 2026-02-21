@@ -125,7 +125,7 @@ app.get("/api/today", async (c) => {
       scoreEconomic: STARTING_ECONOMIC,
       delta: 0,
       analysis:
-        "Tracking begins today. The Capability Gap between SWE-bench Verified (~80%) and SWE-bench Pro (~23%) tells the real story of where AI stands in software engineering.",
+        "Tracking begins today. SWE-bench Verified: ~79% | Bash Only: ~77%. High scores on curated bugs — real enterprise engineering is far harder.",
       signals: [],
       pillarScores: {
         capability: 0,
@@ -138,7 +138,7 @@ app.get("/api/today", async (c) => {
       modelAgreement: "partial",
       modelSpread: 0,
       capabilityGap:
-        "SWE-bench Verified: ~80% | SWE-bench Pro: ~23% — the gap is the story.",
+        "SWE-bench Verified: ~79% | Bash Only: ~77% — curated benchmarks; real engineering is harder.",
       isSeed: true,
     });
   }
@@ -237,14 +237,16 @@ app.get("/api/methodology", async (c) => {
     capabilityGap: {
       verified: externalData.sweBench
         ? `${externalData.sweBench.topVerified}%`
-        : "~80%",
-      pro: externalData.sweBench ? `${externalData.sweBench.topPro}%` : "~23%",
+        : "~79%",
+      bashOnly: externalData.sweBench
+        ? `${externalData.sweBench.topBashOnly}%`
+        : "~77%",
       description:
-        "The gap between SWE-bench Verified (curated open-source) and Pro (private enterprise) is the central metric.",
+        "SWE-bench scores on curated open-source issues. Real enterprise engineering involves ambiguous requirements, system design, and cross-team coordination.",
     },
     whatWouldChange: {
       to50: [
-        "SWE-bench Pro climbing above 50% consistently",
+        "SWE-bench Verified consistently above 90% with diverse agents",
         "Top SanityHarness agent >85% AND all languages >60%",
         "Multiple Fortune 500 companies reporting 50%+ reduction in engineering headcount",
         "Indeed software job posting index dropping significantly faster than general postings",
@@ -258,7 +260,7 @@ app.get("/api/methodology", async (c) => {
       below20: [
         "AI coding tool market contracting",
         "Major failures of AI-generated production code causing regulatory backlash",
-        "SWE-bench Pro progress plateauing for 12+ months",
+        "SWE-bench Verified progress plateauing for 12+ months",
         "Top SanityHarness agent plateaus or regresses",
         "Debugging AI code consistently taking longer than writing it from scratch",
       ],
@@ -333,11 +335,13 @@ interface ExternalData {
   sweBench?: {
     topVerified: number;
     topVerifiedModel: string;
-    topPro: number;
-    topProModel: string;
+    topBashOnly: number;
+    topBashOnlyModel: string;
   };
   softwareIndex?: number;
+  softwareDate?: string;
   generalIndex?: number;
+  generalDate?: string;
 }
 
 async function loadExternalData(db: D1Database): Promise<ExternalData> {
@@ -356,7 +360,9 @@ async function loadExternalData(db: D1Database): Promise<ExternalData> {
         result.sweBench = data;
       } else if (row.key === "fred_labour") {
         result.softwareIndex = data.softwareIndex;
+        result.softwareDate = data.softwareDate;
         result.generalIndex = data.generalIndex;
+        result.generalDate = data.generalDate;
       }
     }
   } catch {
@@ -410,10 +416,10 @@ async function fetchAndStoreSanityHarness(
 
 async function fetchAndStoreSWEBench(
   db: D1Database
-): Promise<{ stored: boolean; verified: number; pro: number }> {
+): Promise<{ stored: boolean; verified: number; bashOnly: number }> {
   const data = await fetchSWEBenchLeaderboard();
   await storeExternalData(db, "swe_bench", data);
-  return { stored: true, verified: data.topVerified, pro: data.topPro };
+  return { stored: true, verified: data.topVerified, bashOnly: data.topBashOnly };
 }
 
 async function fetchAndStoreFRED(
@@ -669,7 +675,9 @@ async function generateDailyScore(env: Env): Promise<{
     sanityHarness: externalData.sanityHarness,
     sweBench: externalData.sweBench,
     softwareIndex: externalData.softwareIndex,
+    softwareDate: externalData.softwareDate,
     generalIndex: externalData.generalIndex,
+    generalDate: externalData.generalDate,
   });
 
   for (const usage of result.aiUsages) {
@@ -686,7 +694,9 @@ async function generateDailyScore(env: Env): Promise<{
       sanityHarness: externalData.sanityHarness,
       sweBench: externalData.sweBench,
       softwareIndex: externalData.softwareIndex,
+      softwareDate: externalData.softwareDate,
       generalIndex: externalData.generalIndex,
+      generalDate: externalData.generalDate,
     });
     await env.DB.prepare(
       "INSERT INTO oq_prompt_versions (id, hash, prompt_text) VALUES (?, ?, ?) ON CONFLICT(hash) DO NOTHING"

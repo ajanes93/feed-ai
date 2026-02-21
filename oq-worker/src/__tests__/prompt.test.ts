@@ -55,7 +55,7 @@ describe("buildScoringPrompt", () => {
   it("includes capability gap framing", () => {
     const prompt = buildScoringPrompt(defaultContext);
     expect(prompt).toContain("SWE-bench Verified");
-    expect(prompt).toContain("SWE-bench Pro");
+    expect(prompt).toContain("SWE-bench Bash Only");
     expect(prompt).toContain("Capability Gap");
   });
 });

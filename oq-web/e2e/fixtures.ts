@@ -18,7 +18,7 @@ function buildTodayResponse(overrides: Record<string, unknown> = {}) {
     scoreEconomic: 39,
     delta: 0.3,
     analysis:
-      "SWE-bench Pro remains at 23%. No significant movement in AI capability benchmarks this week.",
+      "SWE-bench Verified: 79.2%. Bash Only: 76.8%. No significant movement in AI capability benchmarks this week.",
     signals: [
       oqSignalFactory.build({
         text: "GPT-5 rumored for Q3 release",
@@ -60,7 +60,7 @@ function buildTodayResponse(overrides: Record<string, unknown> = {}) {
     modelAgreement: "agree",
     modelSpread: 0.4,
     capabilityGap:
-      "SWE-bench Verified: ~80% | SWE-bench Pro: ~23% — the gap persists.",
+      "SWE-bench Verified: ~79% | Bash Only: ~77% — curated benchmarks; real engineering is harder.",
     isSeed: false,
     ...overrides,
   };
