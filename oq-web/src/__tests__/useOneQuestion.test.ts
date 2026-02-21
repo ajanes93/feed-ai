@@ -317,6 +317,8 @@ describe("useOneQuestion", () => {
           currentDate: "2026-02-14",
           change4w: -12.1,
         },
+        generalIndex: 215000,
+        generalDate: "2026-02-14",
       },
       whatWouldChange: {
         to50: ["Milestone A"],
@@ -337,6 +339,8 @@ describe("useOneQuestion", () => {
     expect(methodology.value?.capabilityGap.pro).toBe("~46%");
     expect(methodology.value?.sanityHarness?.topPassRate).toBe(72.5);
     expect(methodology.value?.fredData.softwareIndex).toBe(47.3);
+    expect(methodology.value?.fredData.generalIndex).toBe(215000);
+    expect(methodology.value?.fredData.generalDate).toBe("2026-02-14");
   });
 
   it("fetchMethodology silently handles errors", async () => {

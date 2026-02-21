@@ -167,18 +167,16 @@ describe("parseScaleLeaderboard", () => {
     expect(parseScaleLeaderboard("")).toBeNull();
   });
 
-  it("skips scores above 100", () => {
-    // Build HTML with score > 100 — it should be ignored
+  it("skips scores above 100 and picks valid entry", () => {
     const data = [
       { model: "buggy", score: 150 },
       { model: "valid", score: 30 },
     ];
     const html = buildNextHtml(data);
     const result = parseScaleLeaderboard(html);
-    // The valid entry should be picked
-    if (result) {
-      expect(result.score).toBeLessThanOrEqual(100);
-    }
+    expect(result).not.toBeNull();
+    expect(result!.score).toBe(30);
+    expect(result!.model).toBe("valid");
   });
 
   it("handles reversed key order (score before model)", () => {

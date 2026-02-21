@@ -1,4 +1,9 @@
-import { test, expect, buildTodayResponse } from "./fixtures";
+import {
+  test,
+  expect,
+  buildTodayResponse,
+  buildMethodologyResponse,
+} from "./fixtures";
 
 test.describe("Capability Gap section", () => {
   test("renders the Capability Gap heading", async ({ mockPage }) => {
@@ -123,28 +128,7 @@ test.describe("Delta explanation", () => {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          pillars: [],
-          formula: {
-            models: [],
-            weights: {},
-            dampening: 0.3,
-            dailyCap: 1.2,
-            scoreRange: [5, 95],
-            decayTarget: 40,
-          },
-          startingScore: 32,
-          currentPromptHash: "abc",
-          capabilityGap: {
-            verified: "~79%",
-            bashOnly: "~77%",
-            pro: "~46%",
-            description: "desc",
-          },
-          sanityHarness: null,
-          fredData: {},
-          whatWouldChange: { to50: [], to70: [], below20: [] },
-        }),
+        body: JSON.stringify(buildMethodologyResponse()),
       })
     );
 
@@ -154,16 +138,15 @@ test.describe("Delta explanation", () => {
     ).toBeVisible();
   });
 
-  test("does not show delta explanation area when absent", async ({
+  test("does not render delta explanation paragraph when absent", async ({
     mockPage,
   }) => {
     await mockPage.goto("/");
-    // The mock data doesn't include deltaExplanation, so the element should not be rendered
-    // The deltaExplanation is conditionally rendered with v-if
-    const explanations = await mockPage
-      .locator("p")
-      .filter({ hasText: /deltaExplanation/ })
-      .count();
-    expect(explanations).toBe(0);
+    // Default mock data has no deltaExplanation, so the v-if="today.deltaExplanation"
+    // paragraph should not be rendered. Verify by checking the delta indicator area
+    // does not contain any paragraph with explanation-style content.
+    const deltaArea = mockPage.locator(".flex.flex-col.items-start.gap-1");
+    // Only the delta badge should be present — no trailing <p> with explanation text
+    await expect(deltaArea.locator("p")).toHaveCount(0);
   });
 });

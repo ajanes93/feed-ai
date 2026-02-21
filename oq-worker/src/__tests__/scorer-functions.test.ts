@@ -324,6 +324,30 @@ describe("calculateModelAgreement", () => {
     ];
     expect(calculateModelAgreement(scores).spread).toBe(2);
   });
+
+  it("returns mostly_agree at exact boundary spread == 1.0", () => {
+    const scores = [
+      oqModelScoreFactory.build({ suggested_delta: 0 }),
+      oqModelScoreFactory.build({ suggested_delta: 1.0 }),
+    ];
+    expect(calculateModelAgreement(scores).agreement).toBe("mostly_agree");
+  });
+
+  it("returns mostly_agree at exact boundary spread == 2.5", () => {
+    const scores = [
+      oqModelScoreFactory.build({ suggested_delta: 0 }),
+      oqModelScoreFactory.build({ suggested_delta: 2.5 }),
+    ];
+    expect(calculateModelAgreement(scores).agreement).toBe("mostly_agree");
+  });
+
+  it("returns disagree at spread just above 2.5", () => {
+    const scores = [
+      oqModelScoreFactory.build({ suggested_delta: 0 }),
+      oqModelScoreFactory.build({ suggested_delta: 2.6 }),
+    ];
+    expect(calculateModelAgreement(scores).agreement).toBe("disagree");
+  });
 });
 
 describe("parseModelResponse — delta_explanation", () => {
