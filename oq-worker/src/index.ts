@@ -108,6 +108,31 @@ app.get("/api/admin/dashboard", async (c) => {
   });
 });
 
+app.get("/api/admin/external-history", async (c) => {
+  const key = c.req.query("key");
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "90"), 365);
+
+  const rows = key
+    ? await c.env.DB.prepare(
+        "SELECT key, value, fetched_at FROM oq_external_data_history WHERE key = ? ORDER BY fetched_at DESC LIMIT ?"
+      )
+        .bind(key, limit)
+        .all()
+    : await c.env.DB.prepare(
+        "SELECT key, value, fetched_at FROM oq_external_data_history ORDER BY fetched_at DESC LIMIT ?"
+      )
+        .bind(limit)
+        .all();
+
+  return c.json(
+    rows.results.map((row) => ({
+      key: row.key,
+      value: JSON.parse(row.value as string),
+      fetchedAt: row.fetched_at,
+    }))
+  );
+});
+
 // --- Public endpoints ---
 
 app.get("/api/today", async (c) => {
@@ -346,28 +371,32 @@ interface ExternalData {
   generalTrend?: FREDSeriesTrend;
 }
 
+const LATEST_EXTERNAL_SQL =
+  "SELECT value FROM oq_external_data_history WHERE key = ? ORDER BY fetched_at DESC LIMIT 1";
+
 async function loadExternalData(db: D1Database): Promise<ExternalData> {
   const result: ExternalData = {};
   try {
-    const rows = await db
-      .prepare("SELECT key, value FROM oq_external_data WHERE key IN (?, ?, ?)")
-      .bind("sanity_harness", "swe_bench", "fred_labour")
-      .all();
+    const [sanity, swe, fred] = await db.batch([
+      db.prepare(LATEST_EXTERNAL_SQL).bind("sanity_harness"),
+      db.prepare(LATEST_EXTERNAL_SQL).bind("swe_bench"),
+      db.prepare(LATEST_EXTERNAL_SQL).bind("fred_labour"),
+    ]);
 
-    for (const row of rows.results) {
-      const data = JSON.parse(row.value as string);
-      if (row.key === "sanity_harness") {
-        result.sanityHarness = data;
-      } else if (row.key === "swe_bench") {
-        result.sweBench = data;
-      } else if (row.key === "fred_labour") {
-        result.softwareIndex = data.softwareIndex;
-        result.softwareDate = data.softwareDate;
-        result.softwareTrend = data.softwareTrend;
-        result.generalIndex = data.generalIndex;
-        result.generalDate = data.generalDate;
-        result.generalTrend = data.generalTrend;
-      }
+    if (sanity.results[0]) {
+      result.sanityHarness = JSON.parse(sanity.results[0].value as string);
+    }
+    if (swe.results[0]) {
+      result.sweBench = JSON.parse(swe.results[0].value as string);
+    }
+    if (fred.results[0]) {
+      const data = JSON.parse(fred.results[0].value as string);
+      result.softwareIndex = data.softwareIndex;
+      result.softwareDate = data.softwareDate;
+      result.softwareTrend = data.softwareTrend;
+      result.generalIndex = data.generalIndex;
+      result.generalDate = data.generalDate;
+      result.generalTrend = data.generalTrend;
     }
   } catch {
     // Non-critical — external data is optional
@@ -385,9 +414,9 @@ async function storeExternalData(
 ): Promise<void> {
   await db
     .prepare(
-      "INSERT OR REPLACE INTO oq_external_data (key, value) VALUES (?, ?)"
+      "INSERT INTO oq_external_data_history (id, key, value) VALUES (?, ?, ?)"
     )
-    .bind(key, JSON.stringify(data))
+    .bind(crypto.randomUUID(), key, JSON.stringify(data))
     .run();
 }
 
