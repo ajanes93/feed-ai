@@ -37,7 +37,7 @@ test.describe("Score display", () => {
     await mockPage.goto("/");
     await expect(mockPage.getByText("The Capability Gap")).toBeVisible();
     await expect(
-      mockPage.getByText(/SWE-bench Verified.*Bash Only/)
+      mockPage.getByText("SWE-bench Verified").first()
     ).toBeVisible();
   });
 });

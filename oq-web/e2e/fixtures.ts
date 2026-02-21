@@ -74,6 +74,57 @@ function buildHistoryResponse() {
   ];
 }
 
+/** Build mock /api/methodology response */
+function buildMethodologyResponse() {
+  return {
+    pillars: [
+      { name: "AI Capability Benchmarks", weight: 0.25, key: "capability" },
+      { name: "Labour Market Signals", weight: 0.25, key: "labour_market" },
+      {
+        name: "Developer Sentiment & Adoption",
+        weight: 0.2,
+        key: "sentiment",
+      },
+      { name: "Industry & Economic Signals", weight: 0.2, key: "industry" },
+      { name: "Structural Barriers", weight: 0.1, key: "barriers" },
+    ],
+    formula: {
+      models: [
+        "Claude (claude-sonnet-4-5-20250929)",
+        "GPT-4o",
+        "Gemini 2.0 Flash",
+      ],
+      weights: { claude: 0.4, gpt4: 0.3, gemini: 0.3 },
+      dampening: 0.3,
+      dailyCap: 1.2,
+      scoreRange: [5, 95],
+      decayTarget: 40,
+    },
+    startingScore: 32,
+    currentPromptHash: "abc123def456",
+    capabilityGap: {
+      verified: "~79%",
+      bashOnly: "~77%",
+      description:
+        "SWE-bench scores on curated open-source issues. Real enterprise engineering involves ambiguous requirements.",
+    },
+    whatWouldChange: {
+      to50: [
+        "SWE-bench Verified consistently above 90%",
+        "Multiple Fortune 500 companies reporting 50%+ reduction in engineering headcount",
+      ],
+      to70: [
+        "AI autonomously shipping production systems for 6+ months",
+        "Measurable, sustained decline in software engineering salaries",
+      ],
+      below20: [
+        "AI coding tool market contracting",
+        "SWE-bench Verified progress plateauing for 12+ months",
+      ],
+    },
+  };
+}
+
 /** Mock all OQ API routes */
 async function mockApi(page: Page) {
   const todayData = buildTodayResponse();
@@ -107,11 +158,7 @@ async function mockApi(page: Page) {
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        pillars: [],
-        formula: { models: [], weights: {} },
-        startingScore: 32,
-      }),
+      body: JSON.stringify(buildMethodologyResponse()),
     })
   );
 }
@@ -127,5 +174,5 @@ export const test = base.extend<{ mockPage: Page }>({
   },
 });
 
-export { buildTodayResponse, buildHistoryResponse };
+export { buildTodayResponse, buildHistoryResponse, buildMethodologyResponse };
 export { expect } from "@playwright/test";

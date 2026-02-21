@@ -544,7 +544,7 @@ async function enrichDigestComments(
 
   // Record AI usages
   if (aiUsages.length > 0) {
-    await recordAIUsage(env.DB, aiUsages);
+    await Promise.allSettled(aiUsages.map((u) => recordAIUsage(env.DB, u)));
   }
 
   // Log all comment enrichment logs
@@ -705,7 +705,9 @@ export async function summarizeNewItems(env: Env): Promise<Response> {
   // Record AI usages (best-effort — don't block digest on logging failure)
   if (allAiUsages.length > 0) {
     try {
-      await recordAIUsage(env.DB, allAiUsages);
+      await Promise.allSettled(
+        allAiUsages.map((u) => recordAIUsage(env.DB, u))
+      );
     } catch (err) {
       await logEvent(env.DB, {
         level: "warn",
