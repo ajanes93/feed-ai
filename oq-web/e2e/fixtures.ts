@@ -104,9 +104,28 @@ function buildMethodologyResponse() {
     currentPromptHash: "abc123def456",
     capabilityGap: {
       verified: "~79%",
-      bashOnly: "~77%",
+      pro: "~46%",
       description:
         "SWE-bench scores on curated open-source issues. Real enterprise engineering involves ambiguous requirements.",
+    },
+    sanityHarness: {
+      topPassRate: 72.5,
+      topAgent: "Agentless",
+      topModel: "Claude 3.5",
+      medianPassRate: 45,
+      languageBreakdown: "go: 95%, rust: 80%, python: 72%, dart: 30%",
+    },
+    fredData: {
+      softwareIndex: 47.3,
+      softwareDate: "2026-02-14",
+      softwareTrend: {
+        current: 47.3,
+        currentDate: "2026-02-14",
+        change1w: -2.1,
+        change4w: -12.1,
+      },
+      generalIndex: 215000,
+      generalDate: "2026-02-14",
     },
     whatWouldChange: {
       to50: [

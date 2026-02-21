@@ -101,6 +101,69 @@ describe("buildScoringPrompt", () => {
     expect(prompt).toContain("SWE-bench Bash Only");
     expect(prompt).toContain("Capability Gap");
   });
+
+  it("includes SWE-bench Pro in capability gap framing", () => {
+    const prompt = buildScoringPrompt(defaultContext);
+    expect(prompt).toContain("SWE-bench Pro");
+  });
+
+  it("includes SWE-bench Pro score when provided", () => {
+    const prompt = buildScoringPrompt({
+      ...defaultContext,
+      sweBench: {
+        topVerified: 81.5,
+        topVerifiedModel: "Agent-X",
+        topBashOnly: 78.0,
+        topBashOnlyModel: "Model-Y",
+        topPro: 48.2,
+        topProModel: "Pro-Agent",
+      },
+    });
+    expect(prompt).toContain("48.2% (Pro-Agent)");
+    expect(prompt).toContain("81.5% (Agent-X)");
+    expect(prompt).toContain("78% (Model-Y)");
+  });
+
+  it("uses default Pro score when sweBench has no topPro", () => {
+    const prompt = buildScoringPrompt({
+      ...defaultContext,
+      sweBench: {
+        topVerified: 80,
+        topVerifiedModel: "A",
+        topBashOnly: 77,
+        topBashOnlyModel: "B",
+      },
+    });
+    expect(prompt).toContain("~46%");
+  });
+
+  it("includes delta_explanation field in JSON schema", () => {
+    const prompt = buildScoringPrompt(defaultContext);
+    expect(prompt).toContain("delta_explanation");
+  });
+
+  it("includes analysis quality rules", () => {
+    const prompt = buildScoringPrompt(defaultContext);
+    expect(prompt).toContain("ANALYSIS QUALITY RULES");
+    expect(prompt).toContain("at least 2 specific articles");
+  });
+
+  it("includes SanityHarness data when provided", () => {
+    const prompt = buildScoringPrompt({
+      ...defaultContext,
+      sanityHarness: {
+        topPassRate: 72.5,
+        topAgent: "TestAgent",
+        topModel: "TestModel",
+        medianPassRate: 45.0,
+        languageBreakdown: "go: 95%, rust: 80%",
+      },
+    });
+    expect(prompt).toContain("72.5%");
+    expect(prompt).toContain("TestAgent");
+    expect(prompt).toContain("TestModel");
+    expect(prompt).toContain("45%");
+  });
 });
 
 describe("hashPrompt", () => {

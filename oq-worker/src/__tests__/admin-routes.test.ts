@@ -413,7 +413,7 @@ describe("Admin API routes", () => {
       // Should still have capabilityGap with fallback values
       expect(data.capabilityGap).toBeTruthy();
       expect(data.capabilityGap.verified).toBe("~79%");
-      expect(data.capabilityGap.bashOnly).toBe("~77%");
+      expect(data.capabilityGap.pro).toBe("~46%");
     });
   });
 });
