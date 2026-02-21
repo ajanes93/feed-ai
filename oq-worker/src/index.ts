@@ -598,8 +598,15 @@ async function fetchOQArticles(
       const parsed = parser.parse(text);
       const items = extractFeedItems(parsed);
 
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
       for (const item of items) {
         if (!item.title || !item.url) continue;
+
+        // Skip articles older than 7 days to avoid ingesting full archives
+        if (item.publishedAt) {
+          const pubDate = new Date(item.publishedAt);
+          if (!isNaN(pubDate.getTime()) && pubDate < sevenDaysAgo) continue;
+        }
 
         const result = await db
           .prepare(
@@ -693,7 +700,10 @@ function extractFeedItems(parsed: any): FeedItem[] {
 }
 
 function stripHtml(text: string): string {
-  return text.replace(/<[^>]*>/g, "").trim();
+  return text
+    .replace(/<[^>]*>/g, "")
+    .replace(/[\uD800-\uDFFF]/g, "") // Strip unpaired surrogates
+    .trim();
 }
 
 // --- Daily score generation ---
@@ -740,11 +750,12 @@ async function generateDailyScore(
     .map((r) => `${r.date}: ${r.score} (${r.delta > 0 ? "+" : ""}${r.delta})`)
     .join(", ");
 
-  const yesterday = new Date(Date.now() - 86400000).toISOString();
+  const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString();
+  const MAX_PER_PILLAR = 20;
   const articles = await env.DB.prepare(
-    "SELECT id, title, url, source, pillar, summary FROM oq_articles WHERE fetched_at >= ? ORDER BY published_at DESC"
+    "SELECT id, title, url, source, pillar, summary FROM oq_articles WHERE published_at >= ? ORDER BY published_at DESC"
   )
-    .bind(yesterday)
+    .bind(twoDaysAgo)
     .all();
 
   const articlesByPillar: Record<OQPillar, string> = {
@@ -754,13 +765,15 @@ async function generateDailyScore(
     industry: "",
     barriers: "",
   };
+  const pillarCounts: Record<string, number> = {};
 
   for (const article of articles.results) {
     const pillar = article.pillar as OQPillar;
-    if (articlesByPillar[pillar] !== undefined) {
-      articlesByPillar[pillar] +=
-        `- ${article.title}${article.summary ? ` — ${(article.summary as string).slice(0, 200)}` : ""} (${article.source})\n`;
-    }
+    if (articlesByPillar[pillar] === undefined) continue;
+    pillarCounts[pillar] = (pillarCounts[pillar] ?? 0) + 1;
+    if (pillarCounts[pillar] > MAX_PER_PILLAR) continue;
+    articlesByPillar[pillar] +=
+      `- ${article.title}${article.summary ? ` — ${(article.summary as string).slice(0, 200)}` : ""} (${article.source})\n`;
   }
 
   const totalArticles = articles.results.length;
@@ -820,12 +833,12 @@ async function generateDailyScore(
   if (externalData.generalIndex === undefined)
     qualityFlags.push("missing_fred_general");
 
-  const pillarCounts = Object.entries(articlesByPillar).filter(
+  const activePillars = Object.entries(articlesByPillar).filter(
     ([, v]) => v.length > 0
   );
-  if (pillarCounts.length < 5)
+  if (activePillars.length < 5)
     qualityFlags.push(
-      `sparse_pillars:${pillarCounts.map(([k]) => k).join(",")}`
+      `sparse_pillars:${activePillars.map(([k]) => k).join(",")}`
     );
   if (totalArticles < 5)
     qualityFlags.push(`low_article_count:${totalArticles}`);
