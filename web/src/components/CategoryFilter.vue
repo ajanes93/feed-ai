@@ -169,7 +169,7 @@ function onClick(key: string) {
   >
     <!-- Draggable indicator -->
     <div
-      class="absolute top-0 h-full rounded-full bg-white shadow-sm"
+      class="bg-foreground absolute top-0 h-full rounded-full shadow-sm"
       :class="
         dragging || (swipeProgress !== undefined && swipeProgress >= 0)
           ? ''
@@ -183,8 +183,8 @@ function onClick(key: string) {
       :class="[
         'relative z-10 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-200',
         activeCategory === cat.key
-          ? 'text-gray-950'
-          : 'text-gray-400 hover:text-gray-300',
+          ? 'text-background'
+          : 'text-muted-foreground hover:text-foreground/70',
       ]"
       @click="onClick(cat.key)"
     >
@@ -193,7 +193,9 @@ function onClick(key: string) {
         v-if="counts[cat.key]"
         :class="[
           'ml-0.5 transition-colors duration-200',
-          activeCategory === cat.key ? 'text-gray-500' : 'text-gray-600',
+          activeCategory === cat.key
+            ? 'text-muted-foreground'
+            : 'text-muted-foreground/60',
         ]"
       >
         {{ counts[cat.key] }}

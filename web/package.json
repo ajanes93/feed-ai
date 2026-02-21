@@ -19,10 +19,11 @@
     "@feed-ai/shared": "*",
     "@fingerprintjs/fingerprintjs": "^5.0.1",
     "@formkit/auto-animate": "^0.9.0",
-    "@vueuse/core": "^14.1.0",
+    "@vueuse/core": "^14.2.1",
     "dompurify": "^3.3.1",
     "marked": "^17.0.2",
     "motion-v": "^1.10.2",
+    "reka-ui": "^2.8.2",
     "swiper": "^12.1.0",
     "vue": "^3.5.0",
     "vue-router": "^4.6.4"

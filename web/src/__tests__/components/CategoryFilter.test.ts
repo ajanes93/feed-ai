@@ -71,14 +71,16 @@ describe("CategoryFilter", () => {
       const { getButtonByLabel } = render({
         props: { activeCategory: "ai" },
       });
-      expect(getButtonByLabel("AI")!.classes()).toContain("text-gray-950");
+      expect(getButtonByLabel("AI")!.classes()).toContain("text-background");
     });
 
     it("dims inactive category buttons", () => {
       const { getButtonByLabel } = render({
         props: { activeCategory: "ai" },
       });
-      expect(getButtonByLabel("Dev")!.classes()).toContain("text-gray-400");
+      expect(getButtonByLabel("Dev")!.classes()).toContain(
+        "text-muted-foreground"
+      );
     });
   });
 

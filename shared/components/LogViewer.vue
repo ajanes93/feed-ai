@@ -2,7 +2,16 @@
 import { onMounted, watch } from "vue";
 import { useLogs, type LogEntry } from "../composables/useLogs";
 import { timeAgo } from "../utils";
-import DataTable from "./DataTable.vue";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "./ui/table";
 
 const props = defineProps<{
   adminKey: string;
@@ -25,15 +34,18 @@ const {
 
 const levels = ["error", "warn", "info"] as const;
 
-function levelClass(entry: LogEntry) {
-  if (entry.level === "error") return "text-red-400";
-  if (entry.level === "warn") return "text-amber-400";
-  return "text-gray-400";
+function levelVariant(entry: LogEntry): "error" | "warning" | "secondary" {
+  if (entry.level === "error") return "error";
+  if (entry.level === "warn") return "warning";
+  return "secondary";
 }
 
-watch(() => props.adminKey, (key) => {
-  if (key) fetchLogs();
-});
+watch(
+  () => props.adminKey,
+  (key) => {
+    if (key) fetchLogs();
+  },
+);
 
 onMounted(() => {
   if (props.adminKey) fetchLogs();
@@ -44,109 +56,128 @@ onMounted(() => {
   <section>
     <div class="mb-3 flex items-center justify-between">
       <h2
-        class="text-sm font-semibold tracking-wide text-gray-400 uppercase"
+        class="text-sm font-semibold uppercase tracking-wide text-muted-foreground"
       >
         Logs
       </h2>
       <div
         v-if="loading"
-        class="h-4 w-4 animate-spin rounded-full border border-gray-600 border-t-white"
+        class="size-4 animate-spin rounded-full border-2 border-muted border-t-foreground"
       />
     </div>
 
     <!-- Filters -->
-    <div class="mb-3 flex flex-wrap gap-2">
+    <div class="mb-3 flex flex-wrap gap-1.5">
       <!-- Level filters -->
-      <button
-        class="rounded-full border px-2.5 py-0.5 text-xs transition-colors"
-        :class="
-          levelFilter === null
-            ? 'border-gray-500 bg-gray-800 text-white'
-            : 'border-gray-700 text-gray-500 hover:text-gray-300'
-        "
+      <Button
+        :variant="levelFilter === null ? 'secondary' : 'ghost'"
+        size="sm"
+        class="h-7 px-2.5 text-xs"
         @click="setLevel(null)"
       >
         All
-      </button>
-      <button
+      </Button>
+      <Button
         v-for="lv in levels"
         :key="lv"
-        class="rounded-full border px-2.5 py-0.5 text-xs transition-colors"
-        :class="
-          levelFilter === lv
-            ? lv === 'error'
-              ? 'border-red-700 bg-red-950 text-red-300'
-              : lv === 'warn'
-                ? 'border-amber-700 bg-amber-950 text-amber-300'
-                : 'border-gray-500 bg-gray-800 text-white'
-            : 'border-gray-700 text-gray-500 hover:text-gray-300'
-        "
+        :variant="levelFilter === lv ? 'secondary' : 'ghost'"
+        size="sm"
+        class="h-7 px-2.5 text-xs"
         @click="setLevel(lv)"
       >
         {{ lv }}
-      </button>
+      </Button>
 
       <!-- Category separator -->
       <span
         v-if="categories.length > 0"
-        class="border-l border-gray-700 mx-1"
+        class="mx-1 border-l border-border"
       />
 
       <!-- Category filters -->
-      <button
+      <Button
         v-if="categories.length > 0"
-        class="rounded-full border px-2.5 py-0.5 text-xs transition-colors"
-        :class="
-          categoryFilter === null
-            ? 'border-gray-500 bg-gray-800 text-white'
-            : 'border-gray-700 text-gray-500 hover:text-gray-300'
-        "
+        :variant="categoryFilter === null ? 'secondary' : 'ghost'"
+        size="sm"
+        class="h-7 px-2.5 text-xs"
         @click="setCategory(null)"
       >
         all categories
-      </button>
-      <button
+      </Button>
+      <Button
         v-for="cat in categories"
         :key="cat"
-        class="rounded-full border px-2.5 py-0.5 text-xs transition-colors"
-        :class="
-          categoryFilter === cat
-            ? 'border-gray-500 bg-gray-800 text-white'
-            : 'border-gray-700 text-gray-500 hover:text-gray-300'
-        "
+        :variant="categoryFilter === cat ? 'secondary' : 'ghost'"
+        size="sm"
+        class="h-7 px-2.5 text-xs"
         @click="setCategory(cat)"
       >
         {{ cat }}
-      </button>
+      </Button>
     </div>
 
     <!-- Table -->
-    <DataTable
-      :columns="[
-        { key: 'when', label: 'When' },
-        { key: 'level', label: 'Level' },
-        { key: 'category', label: 'Category' },
-        { key: 'message', label: 'Message' },
-      ]"
-      :row-count="logs.length"
-      empty-message="No logs found"
-    >
-      <tr
-        v-for="entry in logs"
-        :key="entry.id"
-        class="border-b border-gray-800/50"
-      >
-        <td class="whitespace-nowrap px-3 py-2 text-gray-300">
-          {{ timeAgo(entry.createdAt) }}
-        </td>
-        <td class="px-3 py-2">
-          <span :class="levelClass(entry)">{{ entry.level }}</span>
-        </td>
-        <td class="px-3 py-2">{{ entry.category }}</td>
-        <td class="max-w-md truncate px-3 py-2 text-gray-300">
-          {{ entry.message }}
-        </td>
-      </tr>
-    </DataTable>
+    <div class="overflow-hidden rounded-xl border border-border bg-card/50">
+      <Table>
+        <TableHeader>
+          <TableRow class="border-border/50 hover:bg-transparent">
+            <TableHead
+              class="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+            >
+              When
+            </TableHead>
+            <TableHead
+              class="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+            >
+              Level
+            </TableHead>
+            <TableHead
+              class="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+            >
+              Category
+            </TableHead>
+            <TableHead
+              class="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+            >
+              Message
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <template v-if="logs.length > 0">
+            <TableRow
+              v-for="entry in logs"
+              :key="entry.id"
+            >
+              <TableCell class="text-muted-foreground">
+                {{ timeAgo(entry.createdAt) }}
+              </TableCell>
+              <TableCell>
+                <Badge :variant="levelVariant(entry)">
+                  {{ entry.level }}
+                </Badge>
+              </TableCell>
+              <TableCell class="text-muted-foreground">
+                {{ entry.category }}
+              </TableCell>
+              <TableCell class="max-w-md truncate text-muted-foreground">
+                {{ entry.message }}
+              </TableCell>
+            </TableRow>
+          </template>
+          <TableRow
+            v-else
+            class="hover:bg-transparent"
+          >
+            <TableCell
+              colspan="4"
+              class="py-8 text-center text-muted-foreground"
+            >
+              No logs found
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </div>
   </section>
 </template>

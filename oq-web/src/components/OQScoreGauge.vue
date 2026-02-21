@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
+import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
 
 const props = defineProps<{
   score: number;
@@ -33,10 +34,10 @@ const barWidth = computed(() => (showBar.value ? `${props.score}%` : "0%"));
       <div
         class="text-center font-mono text-6xl font-medium text-orange-500 sm:min-w-[120px]"
       >
-        {{ animatedScore }}<span class="text-2xl text-gray-600">%</span>
+        {{ animatedScore }}<span class="text-2xl text-muted-foreground">%</span>
       </div>
       <div class="flex w-full flex-1 flex-col gap-2">
-        <div class="h-3 overflow-hidden rounded-full bg-gray-800">
+        <div class="h-3 overflow-hidden rounded-full bg-secondary">
           <div
             class="relative h-full rounded-full transition-all duration-[2000ms] ease-out"
             style="background: linear-gradient(90deg, #f05e23, #ff8c42)"
@@ -48,7 +49,7 @@ const barWidth = computed(() => (showBar.value ? `${props.score}%` : "0%"));
           </div>
         </div>
         <div
-          class="flex justify-between text-[10px] tracking-widest text-gray-600 uppercase"
+          class="flex justify-between text-[10px] tracking-widest text-muted-foreground uppercase"
         >
           <span>Safe for now</span>
           <span>Getting close</span>
@@ -59,18 +60,28 @@ const barWidth = computed(() => (showBar.value ? `${props.score}%` : "0%"));
 
     <!-- Sub-scores -->
     <div class="mt-6 grid grid-cols-2 gap-3">
-      <div class="rounded-xl border border-gray-800 bg-gray-800/30 p-3">
-        <div class="font-mono text-lg font-medium text-gray-200">
-          {{ scoreTechnical }}<span class="text-xs text-gray-600">%</span>
-        </div>
-        <div class="text-[11px] text-gray-500">Technical Feasibility</div>
-      </div>
-      <div class="rounded-xl border border-gray-800 bg-gray-800/30 p-3">
-        <div class="font-mono text-lg font-medium text-gray-200">
-          {{ scoreEconomic }}<span class="text-xs text-gray-600">%</span>
-        </div>
-        <div class="text-[11px] text-gray-500">Economic Replacement</div>
-      </div>
+      <Card class="border-border bg-secondary/30">
+        <CardContent class="p-3">
+          <div class="font-mono text-lg font-medium text-foreground">
+            {{ scoreTechnical
+            }}<span class="text-xs text-muted-foreground">%</span>
+          </div>
+          <div class="text-[11px] text-muted-foreground">
+            Technical Feasibility
+          </div>
+        </CardContent>
+      </Card>
+      <Card class="border-border bg-secondary/30">
+        <CardContent class="p-3">
+          <div class="font-mono text-lg font-medium text-foreground">
+            {{ scoreEconomic
+            }}<span class="text-xs text-muted-foreground">%</span>
+          </div>
+          <div class="text-[11px] text-muted-foreground">
+            Economic Replacement
+          </div>
+        </CardContent>
+      </Card>
     </div>
   </div>
 </template>

@@ -22,7 +22,9 @@ defineProps<{
       class="flex flex-col items-center justify-center py-24 text-center"
     >
       <span class="mb-3 text-4xl">📋</span>
-      <p class="text-sm text-gray-500">No items in this category today</p>
+      <p class="text-muted-foreground text-sm">
+        No items in this category today
+      </p>
     </div>
   </div>
 </template>

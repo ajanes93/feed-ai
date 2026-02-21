@@ -8,11 +8,22 @@
     "./oq-types": "./oq-types.ts",
     "./factories": "./factories.ts",
     "./utils": "./utils.ts",
+    "./lib/utils": "./lib/utils.ts",
     "./logger": "./logger.ts",
     "./components/DropdownMenu": "./components/DropdownMenu.vue",
     "./components/StatCard": "./components/StatCard.vue",
     "./components/DataTable": "./components/DataTable.vue",
     "./components/LogViewer": "./components/LogViewer.vue",
+    "./components/ui/button": "./components/ui/button/index.ts",
+    "./components/ui/table": "./components/ui/table/index.ts",
+    "./components/ui/card": "./components/ui/card/index.ts",
+    "./components/ui/badge": "./components/ui/badge/index.ts",
+    "./components/ui/dropdown-menu": "./components/ui/dropdown-menu/index.ts",
+    "./components/ui/input": "./components/ui/input/index.ts",
+    "./components/ui/separator": "./components/ui/separator/index.ts",
+    "./components/ui/alert": "./components/ui/alert/index.ts",
+    "./components/ui/tooltip": "./components/ui/tooltip/index.ts",
+    "./components/ui/skeleton": "./components/ui/skeleton/index.ts",
     "./composables/useLogs": "./composables/useLogs.ts"
   },
   "scripts": {
@@ -26,12 +37,23 @@
     "vue": ">=3.3.0"
   },
   "peerDependenciesMeta": {
-    "@formkit/auto-animate": { "optional": true },
-    "@vueuse/core": { "optional": true },
-    "motion-v": { "optional": true }
+    "@formkit/auto-animate": {
+      "optional": true
+    },
+    "@vueuse/core": {
+      "optional": true
+    },
+    "motion-v": {
+      "optional": true
+    }
   },
   "dependencies": {
-    "fishery": "^2.4.0"
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "fishery": "^2.4.0",
+    "lucide-vue-next": "0.575.0",
+    "reka-ui": "2.8.2",
+    "tailwind-merge": "3.5.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.4",

@@ -3,6 +3,7 @@ import { ref, computed, useTemplateRef } from "vue";
 import { onLongPress } from "@vueuse/core";
 import { AnimatePresence, motion } from "motion-v";
 import type { DigestItem } from "../types";
+import { Badge } from "@feed-ai/shared/components/ui/badge";
 
 const props = defineProps<{
   item: DigestItem;
@@ -41,25 +42,20 @@ function openLink() {
   window.open(props.item.sourceUrl, "_blank", "noopener,noreferrer");
 }
 
-const categoryStyle: Record<
-  string,
-  { label: string; bg: string; text: string }
-> = {
-  ai: { label: "AI", bg: "bg-purple-500/15", text: "text-purple-400" },
-  dev: { label: "Dev", bg: "bg-blue-500/15", text: "text-blue-400" },
-  jobs: { label: "Jobs", bg: "bg-emerald-500/15", text: "text-emerald-400" },
-  sport: { label: "Sport", bg: "bg-orange-500/15", text: "text-orange-400" },
+const categoryVariant: Record<string, string> = {
+  ai: "bg-purple-500/15 text-purple-400",
+  dev: "bg-blue-500/15 text-blue-400",
+  jobs: "bg-emerald-500/15 text-emerald-400",
+  sport: "bg-orange-500/15 text-orange-400",
 };
 
-const fallbackStyle = {
-  label: "Other",
-  bg: "bg-gray-500/15",
-  text: "text-gray-400",
+const categoryLabel: Record<string, string> = {
+  ai: "AI",
+  dev: "Dev",
+  jobs: "Jobs",
+  sport: "Sport",
+  misc: "Other",
 };
-
-const style = computed(
-  () => categoryStyle[props.item.category] || fallbackStyle
-);
 
 const faviconUrl = computed(() => {
   try {
@@ -86,29 +82,32 @@ function formatDate(iso: string): string {
 <template>
   <motion.article
     ref="card"
-    class="relative rounded-xl border border-gray-800/50 bg-gray-900/60 p-5 transition-colors select-none hover:border-gray-700/50"
+    class="border-border/50 bg-card/60 hover:border-border relative rounded-xl border p-5 transition-colors select-none"
     :press="{ scale: 0.98 }"
     :transition="{ type: 'spring', duration: 0.2, bounce: 0.1 }"
     @contextmenu.prevent
   >
     <!-- Top row: category + time -->
     <div class="mb-3 flex items-center gap-3">
-      <span
+      <Badge
+        variant="outline"
         :class="[
-          'rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wider uppercase',
-          style.bg,
-          style.text,
+          'border-transparent text-[11px] font-semibold tracking-wider uppercase',
+          categoryVariant[item.category] ||
+            'bg-secondary text-secondary-foreground',
         ]"
       >
-        {{ style.label }}
-      </span>
+        {{ categoryLabel[item.category] || item.category }}
+      </Badge>
       <span
         v-if="item.publishedAt"
-        class="text-xs text-gray-500"
+        class="text-muted-foreground text-xs"
       >
         {{ formatDate(item.publishedAt) }}
       </span>
-      <span class="ml-auto flex items-center gap-1.5 text-xs text-gray-500">
+      <span
+        class="text-muted-foreground ml-auto flex items-center gap-1.5 text-xs"
+      >
         <img
           v-if="faviconUrl"
           :src="faviconUrl"
@@ -128,24 +127,24 @@ function formatDate(iso: string): string {
       class="group block"
     >
       <h2
-        class="text-lg leading-snug font-semibold tracking-tight text-white transition-colors group-hover:text-blue-400"
+        class="text-foreground text-lg leading-snug font-semibold tracking-tight transition-colors group-hover:text-blue-400"
       >
         {{ item.title }}
       </h2>
     </a>
 
     <!-- Summary -->
-    <p class="mt-2 text-sm leading-relaxed text-gray-300">
+    <p class="text-muted-foreground mt-2 text-sm leading-relaxed">
       {{ item.summary }}
     </p>
 
     <!-- Why it matters -->
     <div
       v-if="item.whyItMatters"
-      class="mt-3 rounded-lg border border-gray-800/40 bg-gray-800/20 px-3.5 py-2.5"
+      class="border-border/40 bg-accent/20 mt-3 rounded-lg border px-3.5 py-2.5"
     >
-      <p class="text-xs leading-relaxed text-gray-400">
-        <span class="font-medium text-gray-300">Why it matters</span>
+      <p class="text-muted-foreground text-xs leading-relaxed">
+        <span class="text-foreground/80 font-medium">Why it matters</span>
         &mdash; {{ item.whyItMatters }}
       </p>
     </div>
@@ -154,11 +153,11 @@ function formatDate(iso: string): string {
       v-if="item.commentsUrl || item.commentSummary"
       class="mt-3"
     >
-      <div class="flex items-center gap-2 text-xs text-gray-500">
+      <div class="text-muted-foreground flex items-center gap-2 text-xs">
         <!-- Comment count expand/collapse button -->
         <button
           v-if="item.commentSummary"
-          class="flex items-center gap-2 transition-colors hover:text-gray-300"
+          class="hover:text-foreground/80 flex items-center gap-2 transition-colors"
           @click.stop="showComments = !showComments"
         >
           <svg
@@ -229,13 +228,13 @@ function formatDate(iso: string): string {
         v-if="item.commentSummary && showComments"
         class="mt-2 rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-3.5 py-2.5"
       >
-        <p class="text-xs leading-relaxed text-gray-400">
+        <p class="text-muted-foreground text-xs leading-relaxed">
           <span class="font-medium text-indigo-400">Discussion</span>
           &mdash; {{ item.commentSummary }}
         </p>
         <p
           v-if="item.commentSummarySource === 'generated'"
-          class="mt-1 text-[10px] text-gray-600"
+          class="text-muted-foreground/50 mt-1 text-[10px]"
         >
           AI-generated summary
         </p>
@@ -261,19 +260,19 @@ function formatDate(iso: string): string {
             :animate="{ opacity: 1, scale: 1, y: 0 }"
             :exit="{ opacity: 0, scale: 0.95, y: 5 }"
             :transition="{ type: 'spring', duration: 0.25, bounce: 0.15 }"
-            class="mx-6 w-full max-w-xs rounded-2xl border border-gray-700 bg-gray-900/95 p-1 shadow-2xl backdrop-blur-xl"
+            class="border-border bg-popover/95 mx-6 w-full max-w-xs rounded-2xl border p-1 shadow-2xl backdrop-blur-xl"
             @click.stop
           >
-            <p class="truncate px-4 py-2 text-sm text-gray-400">
+            <p class="text-muted-foreground truncate px-4 py-2 text-sm">
               {{ item.title }}
             </p>
             <button
-              class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm text-white hover:bg-gray-800"
+              class="text-foreground hover:bg-accent flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm"
               @click="shareItem"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4 text-gray-400"
+                class="text-muted-foreground h-4 w-4"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -288,12 +287,12 @@ function formatDate(iso: string): string {
               Share
             </button>
             <button
-              class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm text-white hover:bg-gray-800"
+              class="text-foreground hover:bg-accent flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm"
               @click="openLink"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4 text-gray-400"
+                class="text-muted-foreground h-4 w-4"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"

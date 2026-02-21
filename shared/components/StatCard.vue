@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { motion } from "motion-v";
+import { Card } from "./ui/card";
 
 defineProps<{
   value: string | number;
@@ -12,17 +13,22 @@ defineProps<{
 
 <template>
   <motion.div
-    class="rounded-xl border border-gray-800 bg-gray-900 p-4"
     :initial="{ opacity: 0, y: 12 }"
     :animate="{ opacity: 1, y: 0 }"
     :transition="{ duration: 0.35, delay: (index ?? 0) * 0.05 }"
   >
-    <div
-      class="text-2xl font-bold"
-      :class="highlight ? (highlightClass || 'text-amber-400') : 'text-white'"
-    >
-      {{ value }}
-    </div>
-    <div class="text-xs text-gray-400">{{ label }}</div>
+    <Card class="p-5">
+      <div
+        class="text-2xl font-bold tracking-tight"
+        :class="
+          highlight
+            ? highlightClass || 'text-amber-400'
+            : 'text-card-foreground'
+        "
+      >
+        {{ value }}
+      </div>
+      <div class="mt-1 text-xs text-muted-foreground">{{ label }}</div>
+    </Card>
   </motion.div>
 </template>

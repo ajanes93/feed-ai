@@ -26,7 +26,7 @@ const render = (options: RenderOptions<typeof DigestCard> = {}) => {
     wrapper,
     getTitle: () => wrapper.find("h2"),
     getSummary: () => wrapper.find("p.text-sm"),
-    getCategoryBadge: () => wrapper.find("span.rounded-full"),
+    getCategoryBadge: () => wrapper.find("[data-slot='badge']"),
     getLink: () => wrapper.find("a"),
   };
 };
@@ -69,7 +69,11 @@ describe("DigestCard", () => {
       { category: "ai", label: "AI", colorClass: "text-purple-400" },
       { category: "dev", label: "Dev", colorClass: "text-blue-400" },
       { category: "jobs", label: "Jobs", colorClass: "text-emerald-400" },
-      { category: "misc", label: "Other", colorClass: "text-gray-400" },
+      {
+        category: "misc",
+        label: "Other",
+        colorClass: "text-secondary-foreground",
+      },
     ])(
       "renders $label badge for $category category",
       ({ category, label, colorClass }) => {
