@@ -377,21 +377,41 @@ interface ScoringInput {
 
 const MAX_RETRIES = 3;
 
+interface ModelCallResult {
+  result: ModelResult | null;
+  failedUsage?: AIUsageEntry;
+}
+
 async function callModelWithRetry(
   name: string,
+  model: string,
+  provider: string,
   fn: () => Promise<ModelResult>
-): Promise<ModelResult | null> {
+): Promise<ModelCallResult> {
+  let lastError: string | undefined;
+  const start = Date.now();
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      return await fn();
+      return { result: await fn() };
     } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
       console.warn(`${name} attempt ${attempt + 1} failed:`, err);
       if (attempt < MAX_RETRIES - 1) {
         await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
       }
     }
   }
-  return null;
+  return {
+    result: null,
+    failedUsage: {
+      model,
+      provider,
+      latencyMs: Date.now() - start,
+      wasFallback: false,
+      status: "failed",
+      error: lastError,
+    },
+  };
 }
 
 export async function runScoring(
@@ -415,40 +435,51 @@ export async function runScoring(
 
   const promptHash = await hashPrompt(prompt);
 
-  const calls: Promise<ModelResult | null>[] = [];
+  const calls: Promise<ModelCallResult>[] = [];
 
   if (input.apiKeys.anthropic) {
     calls.push(
-      callModelWithRetry("Claude", () =>
-        callClaude(prompt, input.apiKeys.anthropic!)
+      callModelWithRetry(
+        "Claude",
+        "claude-sonnet-4-5-20250929",
+        "anthropic",
+        () => callClaude(prompt, input.apiKeys.anthropic!)
       )
     );
   }
   if (input.apiKeys.openai) {
     calls.push(
-      callModelWithRetry("GPT-4", () =>
+      callModelWithRetry("GPT-4", "gpt-4o", "openai", () =>
         callOpenAI(prompt, input.apiKeys.openai!)
       )
     );
   }
   if (input.apiKeys.gemini) {
     calls.push(
-      callModelWithRetry("Gemini", () =>
+      callModelWithRetry("Gemini", "gemini-2.0-flash", "gemini", () =>
         callGemini(prompt, input.apiKeys.gemini!)
       )
     );
   }
 
-  const modelResults = (await Promise.all(calls)).filter(
-    (r): r is ModelResult => r !== null
-  );
+  const callResults = await Promise.all(calls);
+  const modelResults = callResults
+    .map((r) => r.result)
+    .filter((r): r is ModelResult => r !== null);
+
+  // Collect both successful and failed usage entries
+  const aiUsages: AIUsageEntry[] = [
+    ...modelResults.map((r) => r.usage),
+    ...callResults
+      .filter((r) => r.failedUsage)
+      .map((r) => r.failedUsage as AIUsageEntry),
+  ];
 
   if (modelResults.length === 0) {
     throw new Error("All AI models failed — cannot generate score");
   }
 
   const scores = modelResults.map((r) => r.parsed);
-  const aiUsages = modelResults.map((r) => r.usage);
   const modelResponses: OQModelResponse[] = modelResults.map((r) => ({
     model: r.usage.model,
     provider: r.usage.provider,

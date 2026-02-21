@@ -382,19 +382,31 @@ async function loadExternalData(db: D1Database): Promise<ExternalData> {
     ]);
 
     if (sanity.results[0]) {
-      result.sanityHarness = JSON.parse(sanity.results[0].value as string);
+      try {
+        result.sanityHarness = JSON.parse(sanity.results[0].value as string);
+      } catch (e) {
+        console.error("[oq] corrupt sanity_harness data:", e);
+      }
     }
     if (swe.results[0]) {
-      result.sweBench = JSON.parse(swe.results[0].value as string);
+      try {
+        result.sweBench = JSON.parse(swe.results[0].value as string);
+      } catch (e) {
+        console.error("[oq] corrupt swe_bench data:", e);
+      }
     }
     if (fred.results[0]) {
-      const data = JSON.parse(fred.results[0].value as string);
-      result.softwareIndex = data.softwareIndex;
-      result.softwareDate = data.softwareDate;
-      result.softwareTrend = data.softwareTrend;
-      result.generalIndex = data.generalIndex;
-      result.generalDate = data.generalDate;
-      result.generalTrend = data.generalTrend;
+      try {
+        const data = JSON.parse(fred.results[0].value as string);
+        result.softwareIndex = data.softwareIndex;
+        result.softwareDate = data.softwareDate;
+        result.softwareTrend = data.softwareTrend;
+        result.generalIndex = data.generalIndex;
+        result.generalDate = data.generalDate;
+        result.generalTrend = data.generalTrend;
+      } catch (e) {
+        console.error("[oq] corrupt fred_labour data:", e);
+      }
     }
   } catch (err) {
     console.error(
@@ -413,6 +425,15 @@ async function storeExternalData(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any
 ): Promise<void> {
+  // Same-day deduplication: skip if we already stored this key today
+  const existing = await db
+    .prepare(
+      "SELECT id FROM oq_external_data_history WHERE key = ? AND date(fetched_at) = date('now') LIMIT 1"
+    )
+    .bind(key)
+    .first();
+  if (existing) return;
+
   await db
     .prepare(
       "INSERT INTO oq_external_data_history (id, key, value) VALUES (?, ?, ?)"
@@ -1011,8 +1032,8 @@ async function logCronRun(
         run.error ?? null
       )
       .run();
-  } catch {
-    // Best-effort logging
+  } catch (err) {
+    console.error("[oq] logCronRun failed:", err);
   }
 }
 
@@ -1036,8 +1057,8 @@ async function logAdminAction(
         summary ? JSON.stringify(summary).slice(0, 2000) : null
       )
       .run();
-  } catch {
-    // Best-effort logging
+  } catch (err) {
+    console.error("[oq] logAdminAction failed:", err);
   }
 }
 
@@ -1075,6 +1096,18 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
       (async () => {
+        // Idempotency: skip if a successful cron already ran today
+        const today = new Date().toISOString().split("T")[0];
+        const existingRun = await env.DB.prepare(
+          "SELECT id FROM oq_cron_runs WHERE date(started_at) = ? AND fetch_status = 'success' LIMIT 1"
+        )
+          .bind(today)
+          .first();
+        if (existingRun) {
+          console.log("[oq] Cron: skipping duplicate run for", today);
+          return;
+        }
+
         const runId = crypto.randomUUID();
         const startedAt = new Date().toISOString();
         let fetchStatus = "pending";
@@ -1106,6 +1139,23 @@ export default {
               externalStatus[labels[i]] =
                 r.status === "fulfilled" ? "success" : `failed: ${r.reason}`;
             });
+
+            // Weekly data retention cleanup
+            console.log("[oq] Cron: running data retention cleanup");
+            await env.DB.batch([
+              env.DB.prepare(
+                "DELETE FROM oq_articles WHERE fetched_at < datetime('now', '-90 days')"
+              ),
+              env.DB.prepare(
+                "DELETE FROM oq_fetch_errors WHERE attempted_at < datetime('now', '-30 days')"
+              ),
+              env.DB.prepare(
+                "DELETE FROM oq_cron_runs WHERE started_at < datetime('now', '-90 days')"
+              ),
+              env.DB.prepare(
+                "DELETE FROM oq_admin_actions WHERE created_at < datetime('now', '-90 days')"
+              ),
+            ]);
           }
 
           console.log("[oq] Cron: fetching articles");

@@ -93,12 +93,14 @@ export function buildTrend(
 
 export async function fetchFREDData(apiKey: string): Promise<FREDData> {
   const [softwareObs, generalObs] = await Promise.all([
-    fetchFREDSeries(SOFTWARE_SERIES, apiKey).catch(
-      () => [] as FREDObservation[]
-    ),
-    fetchFREDSeries(GENERAL_SERIES, apiKey).catch(
-      () => [] as FREDObservation[]
-    ),
+    fetchFREDSeries(SOFTWARE_SERIES, apiKey).catch((err) => {
+      console.error(`[oq] FRED ${SOFTWARE_SERIES} failed:`, err);
+      return [] as FREDObservation[];
+    }),
+    fetchFREDSeries(GENERAL_SERIES, apiKey).catch((err) => {
+      console.error(`[oq] FRED ${GENERAL_SERIES} failed:`, err);
+      return [] as FREDObservation[];
+    }),
   ]);
 
   const softwareTrend = buildTrend(softwareObs);
