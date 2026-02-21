@@ -133,7 +133,10 @@ onMounted(async () => {
                   Replacement Likelihood Score
                 </div>
               </div>
-              <div class="flex flex-col items-start gap-1 sm:items-end">
+              <div
+                data-testid="delta-area"
+                class="flex flex-col items-start gap-1 sm:items-end"
+              >
                 <div
                   class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-mono text-xs"
                   :class="{

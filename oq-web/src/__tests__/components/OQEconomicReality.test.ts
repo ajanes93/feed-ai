@@ -77,8 +77,9 @@ describe("OQEconomicReality", () => {
         softwareTrend: { change4w: -5 },
       },
     });
-    const trendEl = wrapper.find(".text-red-400");
+    const trendEl = wrapper.find("[data-testid='software-trend']");
     expect(trendEl.exists()).toBe(true);
+    expect(trendEl.classes()).toContain("text-red-400");
   });
 
   it("applies emerald color for positive trend", () => {
@@ -88,8 +89,9 @@ describe("OQEconomicReality", () => {
         softwareTrend: { change4w: 2 },
       },
     });
-    const trendEl = wrapper.find(".text-emerald-400");
+    const trendEl = wrapper.find("[data-testid='software-trend']");
     expect(trendEl.exists()).toBe(true);
+    expect(trendEl.classes()).toContain("text-emerald-400");
   });
 
   it("renders footer text about investor betting", () => {

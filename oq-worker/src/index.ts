@@ -1100,7 +1100,7 @@ function mapScoreRow(row: Record<string, unknown>) {
     scoreTechnical: row.score_technical,
     scoreEconomic: row.score_economic,
     delta: row.delta,
-    deltaExplanation: row.delta_explanation,
+    deltaExplanation: (row.delta_explanation as string) ?? undefined,
     analysis: row.analysis,
     signals: safeJsonParse(row.signals, []),
     pillarScores: safeJsonParse(row.pillar_scores, {}),

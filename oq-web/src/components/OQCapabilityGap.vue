@@ -65,6 +65,7 @@ defineProps<{
 
     <p
       v-if="note"
+      data-testid="capability-gap-note"
       class="mt-3 rounded-lg bg-orange-500/5 px-3 py-2 text-center text-xs leading-relaxed text-orange-400/80"
     >
       {{ note }}

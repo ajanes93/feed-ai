@@ -75,13 +75,18 @@ function langBg(pct: number): string {
         <div
           v-for="lang in parseLangs(languageBreakdown)"
           :key="lang.lang"
+          data-testid="lang-chip"
           class="flex items-center gap-1.5 rounded-lg bg-gray-800/50 px-2.5 py-1.5"
         >
           <span class="h-1.5 w-1.5 rounded-full" :class="langBg(lang.pct)" />
           <span class="text-xs font-medium capitalize text-gray-400">
             {{ lang.lang }}
           </span>
-          <span class="font-mono text-xs" :class="langColor(lang.pct)">
+          <span
+            data-testid="lang-pct"
+            class="font-mono text-xs"
+            :class="langColor(lang.pct)"
+          >
             {{ lang.pct }}%
           </span>
         </div>

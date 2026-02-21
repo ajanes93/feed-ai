@@ -32,6 +32,7 @@ function trendArrow(val?: number): string {
         <div class="mt-0.5 text-[9px] text-gray-700">vs 100 baseline</div>
         <div
           v-if="softwareTrend?.change4w !== undefined"
+          data-testid="software-trend"
           class="mt-1 font-mono text-[10px]"
           :class="
             (softwareTrend?.change4w ?? 0) < 0

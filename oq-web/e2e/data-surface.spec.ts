@@ -143,10 +143,9 @@ test.describe("Delta explanation", () => {
   }) => {
     await mockPage.goto("/");
     // Default mock data has no deltaExplanation, so the v-if="today.deltaExplanation"
-    // paragraph should not be rendered. Verify by checking the delta indicator area
-    // does not contain any paragraph with explanation-style content.
-    const deltaArea = mockPage.locator(".flex.flex-col.items-start.gap-1");
-    // Only the delta badge should be present — no trailing <p> with explanation text
+    // paragraph should not be rendered.
+    const deltaArea = mockPage.locator("[data-testid='delta-area']");
+    await expect(deltaArea).toBeVisible();
     await expect(deltaArea.locator("p")).toHaveCount(0);
   });
 });

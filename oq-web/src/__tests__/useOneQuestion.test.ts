@@ -339,6 +339,7 @@ describe("useOneQuestion", () => {
     expect(methodology.value?.capabilityGap.pro).toBe("~46%");
     expect(methodology.value?.sanityHarness?.topPassRate).toBe(72.5);
     expect(methodology.value?.fredData.softwareIndex).toBe(47.3);
+    expect(methodology.value?.fredData.softwareTrend?.change4w).toBe(-12.1);
     expect(methodology.value?.fredData.generalIndex).toBe(215000);
     expect(methodology.value?.fredData.generalDate).toBe("2026-02-14");
   });

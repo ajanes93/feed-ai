@@ -39,7 +39,7 @@ describe("OQCapabilityGap", () => {
 
   it("does not render note when not provided", () => {
     const wrapper = mount(OQCapabilityGap, { props: defaultProps });
-    const noteEl = wrapper.find(".bg-orange-500\\/5");
+    const noteEl = wrapper.find("[data-testid='capability-gap-note']");
     expect(noteEl.exists()).toBe(false);
   });
 

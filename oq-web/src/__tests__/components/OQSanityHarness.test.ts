@@ -48,7 +48,7 @@ describe("OQSanityHarness", () => {
 
   it("sorts languages by pass rate descending", () => {
     const wrapper = mount(OQSanityHarness, { props: defaultProps });
-    const chips = wrapper.findAll(".flex.items-center.gap-1\\.5");
+    const chips = wrapper.findAll("[data-testid='lang-chip']");
     // go (95%) should come first, dart (30%) last
     expect(chips[0].text()).toContain("go");
     expect(chips[chips.length - 1].text()).toContain("dart");
@@ -56,7 +56,7 @@ describe("OQSanityHarness", () => {
 
   it("applies emerald color for high pass rates (>=80)", () => {
     const wrapper = mount(OQSanityHarness, { props: defaultProps });
-    const goChip = wrapper.findAll(".font-mono.text-xs").find((el) => {
+    const goChip = wrapper.findAll("[data-testid='lang-pct']").find((el) => {
       return el.text().includes("95%");
     });
     expect(goChip?.classes()).toContain("text-emerald-400");
@@ -64,15 +64,17 @@ describe("OQSanityHarness", () => {
 
   it("applies yellow color for medium pass rates (50-79)", () => {
     const wrapper = mount(OQSanityHarness, { props: defaultProps });
-    const pythonChip = wrapper.findAll(".font-mono.text-xs").find((el) => {
-      return el.text().includes("72%");
-    });
+    const pythonChip = wrapper
+      .findAll("[data-testid='lang-pct']")
+      .find((el) => {
+        return el.text().includes("72%");
+      });
     expect(pythonChip?.classes()).toContain("text-yellow-400");
   });
 
   it("applies red color for low pass rates (<50)", () => {
     const wrapper = mount(OQSanityHarness, { props: defaultProps });
-    const dartChip = wrapper.findAll(".font-mono.text-xs").find((el) => {
+    const dartChip = wrapper.findAll("[data-testid='lang-pct']").find((el) => {
       return el.text().includes("30%");
     });
     expect(dartChip?.classes()).toContain("text-red-400");
