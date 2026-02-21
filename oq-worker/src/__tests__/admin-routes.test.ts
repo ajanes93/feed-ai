@@ -25,6 +25,7 @@ describe("Admin API routes", () => {
       { method: "POST", url: "/api/fetch-sanity" },
       { method: "POST", url: "/api/fetch-swebench" },
       { method: "POST", url: "/api/fetch-fred" },
+      { method: "POST", url: "/api/rescore" },
     ];
 
     for (const { method, url } of protectedEndpoints) {
@@ -386,6 +387,123 @@ describe("Admin API routes", () => {
         "SELECT COUNT(*) as cnt FROM oq_external_data_history WHERE key = 'sanity_harness'"
       ).first();
       expect(rows!.cnt).toBe(1);
+    });
+  });
+
+  // --- Rescore (force-regenerate) ---
+
+  describe("POST /api/rescore", () => {
+    it("deletes existing score and regenerates", async () => {
+      const today = new Date().toISOString().split("T")[0];
+
+      // Seed an existing score for today
+      await env.DB.prepare(
+        "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, prompt_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+        .bind(
+          "old-score-id",
+          today,
+          35,
+          28,
+          40,
+          0.5,
+          "Old analysis",
+          "[]",
+          "{}",
+          "[]",
+          "partial",
+          0.3,
+          "old-hash"
+        )
+        .run();
+
+      // Seed linked rows
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO oq_score_articles (score_id, article_id) VALUES (?, ?)"
+        ).bind("old-score-id", "art-1"),
+        env.DB.prepare(
+          "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(
+          "mr-1",
+          "old-score-id",
+          "claude",
+          "anthropic",
+          "{}",
+          "{}",
+          0,
+          0,
+          0,
+          "a",
+          "[]"
+        ),
+        env.DB.prepare(
+          "INSERT INTO oq_ai_usage (id, model, provider, status, score_id) VALUES (?, ?, ?, ?, ?)"
+        ).bind("au-1", "claude", "anthropic", "success", "old-score-id"),
+      ]);
+
+      // Verify the old score exists
+      const before = await env.DB.prepare(
+        "SELECT id FROM oq_scores WHERE date = ?"
+      )
+        .bind(today)
+        .first();
+      expect(before?.id).toBe("old-score-id");
+
+      const res = await SELF.fetch("http://localhost/api/rescore", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.date).toBe(today);
+
+      // Old score should be gone, new one present
+      const oldScore = await env.DB.prepare(
+        "SELECT id FROM oq_scores WHERE id = 'old-score-id'"
+      ).first();
+      expect(oldScore).toBeNull();
+
+      // Linked rows should be cleaned up
+      const linkedArticles = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM oq_score_articles WHERE score_id = 'old-score-id'"
+      ).first();
+      expect(linkedArticles!.cnt).toBe(0);
+
+      const linkedResponses = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM oq_model_responses WHERE score_id = 'old-score-id'"
+      ).first();
+      expect(linkedResponses!.cnt).toBe(0);
+
+      const linkedUsage = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM oq_ai_usage WHERE score_id = 'old-score-id'"
+      ).first();
+      expect(linkedUsage!.cnt).toBe(0);
+
+      // Rescore log entry should exist
+      const logs = await env.DB.prepare(
+        "SELECT * FROM oq_logs WHERE category = 'rescore'"
+      ).all();
+      expect(logs.results.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("works when no existing score", async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const res = await SELF.fetch("http://localhost/api/rescore", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.date).toBe(today);
+
+      // A new score should exist (no-articles/decay path)
+      const score = await env.DB.prepare(
+        "SELECT * FROM oq_scores WHERE date = ?"
+      )
+        .bind(today)
+        .first();
+      expect(score).not.toBeNull();
     });
   });
 
