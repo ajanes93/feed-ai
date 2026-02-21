@@ -602,11 +602,8 @@ async function fetchOQArticles(
       for (const item of items) {
         if (!item.title || !item.url) continue;
 
-        // Skip articles older than 3 days to avoid ingesting full archives
-        if (item.publishedAt) {
-          const pubDate = new Date(item.publishedAt);
-          if (!isNaN(pubDate.getTime()) && pubDate < threeDaysAgo) continue;
-        }
+        const pubDate = new Date(item.publishedAt ?? "");
+        if (!isNaN(pubDate.getTime()) && pubDate < threeDaysAgo) continue;
 
         const result = await db
           .prepare(
@@ -702,7 +699,7 @@ function extractFeedItems(parsed: any): FeedItem[] {
 function stripHtml(text: string): string {
   return text
     .replace(/<[^>]*>/g, "")
-    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "")
+    .toWellFormed()
     .trim();
 }
 
@@ -751,30 +748,32 @@ async function generateDailyScore(
     .join(", ");
 
   const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString();
-  const MAX_PER_PILLAR = 20;
   const articles = await env.DB.prepare(
     "SELECT id, title, url, source, pillar, summary FROM oq_articles WHERE published_at >= ? ORDER BY published_at DESC"
   )
     .bind(twoDaysAgo)
     .all();
 
-  const articlesByPillar: Record<OQPillar, string> = {
-    capability: "",
-    labour_market: "",
-    sentiment: "",
-    industry: "",
-    barriers: "",
-  };
-  const pillarCounts: Record<string, number> = {};
-
-  for (const article of articles.results) {
-    const pillar = article.pillar as OQPillar;
-    if (articlesByPillar[pillar] === undefined) continue;
-    pillarCounts[pillar] = (pillarCounts[pillar] ?? 0) + 1;
-    if (pillarCounts[pillar] > MAX_PER_PILLAR) continue;
-    articlesByPillar[pillar] +=
-      `- ${article.title}${article.summary ? ` — ${(article.summary as string).slice(0, 200)}` : ""} (${article.source})\n`;
-  }
+  const pillars: OQPillar[] = [
+    "capability",
+    "labour_market",
+    "sentiment",
+    "industry",
+    "barriers",
+  ];
+  const articlesByPillar = Object.fromEntries(
+    pillars.map((pillar) => [
+      pillar,
+      articles.results
+        .filter((a) => a.pillar === pillar)
+        .slice(0, 20)
+        .map(
+          (a) =>
+            `- ${a.title}${a.summary ? ` — ${(a.summary as string).slice(0, 200)}` : ""} (${a.source})\n`
+        )
+        .join(""),
+    ])
+  ) as Record<OQPillar, string>;
 
   const totalArticles = articles.results.length;
   if (totalArticles === 0) {
