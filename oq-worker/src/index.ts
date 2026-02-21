@@ -54,6 +54,7 @@ async function adminAuth(
 
 app.use("/api/fetch", adminAuth);
 app.use("/api/score", adminAuth);
+app.use("/api/rescore", adminAuth);
 app.use("/api/admin/*", adminAuth);
 app.use("/api/fetch-sanity", adminAuth);
 app.use("/api/fetch-swebench", adminAuth);
@@ -384,6 +385,38 @@ app.post("/api/fetch", (c) =>
 
 app.post("/api/score", (c) =>
   adminHandler(c, "score", (log) => generateDailyScore(c.env, log))
+);
+
+app.post("/api/rescore", (c) =>
+  adminHandler(c, "rescore", async (log) => {
+    const today = new Date().toISOString().split("T")[0];
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM oq_scores WHERE date = ?"
+    )
+      .bind(today)
+      .first();
+    if (existing) {
+      await c.env.DB.batch([
+        c.env.DB.prepare(
+          "DELETE FROM oq_score_articles WHERE score_id = ?"
+        ).bind(existing.id),
+        c.env.DB.prepare(
+          "DELETE FROM oq_model_responses WHERE score_id = ?"
+        ).bind(existing.id),
+        c.env.DB.prepare("DELETE FROM oq_ai_usage WHERE score_id = ?").bind(
+          existing.id
+        ),
+        c.env.DB.prepare("DELETE FROM oq_scores WHERE id = ?").bind(
+          existing.id
+        ),
+      ]);
+      await log.info("rescore", "Deleted existing score for regeneration", {
+        date: today,
+        deletedScoreId: existing.id,
+      });
+    }
+    return generateDailyScore(c.env, log);
+  })
 );
 
 app.post("/api/fetch-sanity", (c) =>
@@ -1286,6 +1319,17 @@ export default {
           fetchErrors = fetchResult.errors;
 
           if (fetchErrors.length > 0) {
+            for (const fe of fetchErrors) {
+              await cronLog.warn(
+                "fetch",
+                `Source ${fe.sourceId}: ${fe.message}`,
+                {
+                  sourceId: fe.sourceId,
+                  errorType: fe.errorType,
+                  httpStatus: fe.httpStatus,
+                }
+              );
+            }
             await persistFetchErrors(env.DB, fetchErrors, cronLog);
           }
 

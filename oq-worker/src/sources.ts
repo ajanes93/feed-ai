@@ -12,8 +12,8 @@ export const oqSources: OQSource[] = [
   // === Pillar 1: AI Capability Benchmarks (25%) ===
   {
     id: "oq-anthropic",
-    name: "Anthropic Blog",
-    url: "https://www.anthropic.com/blog/rss",
+    name: "Anthropic Research",
+    url: "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_research.xml",
     pillar: "capability",
     type: "rss",
   },
@@ -161,7 +161,7 @@ export const oqSources: OQSource[] = [
   {
     id: "oq-mckinsey",
     name: "McKinsey Insights",
-    url: "https://www.mckinsey.com/featured-insights/feed",
+    url: "https://www.mckinsey.com/insights/rss",
     pillar: "barriers",
     type: "rss",
   },
