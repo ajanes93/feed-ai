@@ -1,23 +1,19 @@
 import { env, fetchMock, SELF } from "cloudflare:test";
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import {
+  cleanAllTables,
+  buildSanityHtml,
+  mockSanityHarness,
+  mockSanityHarnessError,
+} from "./helpers";
 
 const AUTH_HEADERS = {
   Authorization: "Bearer test-admin-key",
 };
 
 describe("Admin API routes", () => {
-  beforeEach(async () => {
-    await env.DB.exec("DELETE FROM oq_scores");
-    await env.DB.exec("DELETE FROM oq_articles");
-    await env.DB.exec("DELETE FROM oq_subscribers");
-    await env.DB.exec("DELETE FROM oq_ai_usage");
-    await env.DB.exec("DELETE FROM oq_external_data_history");
-    await env.DB.exec("DELETE FROM oq_model_responses");
-    await env.DB.exec("DELETE FROM oq_score_articles");
-    await env.DB.exec("DELETE FROM oq_cron_runs");
-    await env.DB.exec("DELETE FROM oq_fetch_errors");
-    await env.DB.exec("DELETE FROM oq_logs");
-  });
+  beforeEach(() => cleanAllTables());
+  afterEach(() => fetchMock.deactivate());
 
   // --- Auth coverage ---
 
@@ -332,13 +328,7 @@ describe("Admin API routes", () => {
 
   describe("adminHandler error handling", () => {
     it("returns 500 and logs error when fetch-sanity fails", async () => {
-      // Mock the sanity board to return 500 so fetchSanityHarness throws
-      fetchMock.activate();
-      fetchMock.disableNetConnect();
-      fetchMock
-        .get("https://sanityboard.lr7.dev")
-        .intercept({ method: "GET", path: "/" })
-        .reply(500, "Internal Server Error");
+      mockSanityHarnessError(500);
 
       const res = await SELF.fetch("http://localhost/api/fetch-sanity", {
         method: "POST",
@@ -346,16 +336,13 @@ describe("Admin API routes", () => {
       });
       expect(res.status).toBe(500);
       const data = await res.json();
-      expect(data.error).toBeTruthy();
+      expect(data.error).toContain("HTTP 500");
 
-      // Verify adminHandler logged the error
       const logs = await env.DB.prepare(
         "SELECT * FROM oq_logs WHERE category = 'admin' AND level = 'error'"
       ).all();
-      expect(logs.results.length).toBeGreaterThanOrEqual(1);
+      expect(logs.results).toHaveLength(1);
       expect(logs.results[0].message).toContain("fetch-sanity failed");
-
-      fetchMock.deactivate();
     });
 
     it("returns 503 when FRED_API_KEY not configured", async () => {
@@ -372,31 +359,33 @@ describe("Admin API routes", () => {
   // --- External data dedup ---
 
   describe("storeExternalData same-day dedup", () => {
-    it("does not create duplicate rows on same day", async () => {
-      // Insert a row for today
-      await env.DB.prepare(
-        "INSERT INTO oq_external_data_history (id, key, value) VALUES (?, ?, ?)"
-      )
-        .bind("e1", "sanity_harness", '{"topPassRate":42}')
-        .run();
+    it("does not create duplicate rows when called twice on the same day", async () => {
+      const html = buildSanityHtml([
+        { rank: 1, agent: "Agent1", model: "GPT-4", score: 45, passRate: 42 },
+        { rank: 2, agent: "Agent2", model: "Claude", score: 30, passRate: 28 },
+      ]);
 
-      // Attempt fetch-sanity again — even if the fetch itself fails,
-      // the dedup check happens before the external fetch for the DB path.
-      // Instead, test dedup directly via SQL (matching the function's logic).
-      const existing = await env.DB.prepare(
-        "SELECT id FROM oq_external_data_history WHERE key = ? AND date(fetched_at) = date('now') LIMIT 1"
-      )
-        .bind("sanity_harness")
-        .first();
-      expect(existing).not.toBeNull();
+      // First call — stores data
+      mockSanityHarness(html);
+      const res1 = await SELF.fetch("http://localhost/api/fetch-sanity", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      expect(res1.status).toBe(200);
+      fetchMock.deactivate();
 
-      // Inserting a second row would violate the dedup logic
-      // The storeExternalData function checks and returns early
-      // Simulate by checking that the count stays at 1
-      const count = await env.DB.prepare(
-        "SELECT COUNT(*) as cnt FROM oq_external_data_history WHERE key = 'sanity_harness' AND date(fetched_at) = date('now')"
+      // Second call — storeExternalData should short-circuit
+      mockSanityHarness(html);
+      const res2 = await SELF.fetch("http://localhost/api/fetch-sanity", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      expect(res2.status).toBe(200);
+
+      const rows = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM oq_external_data_history WHERE key = 'sanity_harness'"
       ).first();
-      expect(count!.cnt).toBe(1);
+      expect(rows!.cnt).toBe(1);
     });
   });
 

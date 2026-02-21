@@ -1111,6 +1111,18 @@ async function logCronRun(
   }
 }
 
+export async function findCompletedCronRun(
+  db: D1Database,
+  date: string
+): Promise<{ id: string } | null> {
+  return db
+    .prepare(
+      "SELECT id FROM oq_cron_runs WHERE date(started_at) = ? AND fetch_status = 'success' AND score_status = 'success' LIMIT 1"
+    )
+    .bind(date)
+    .first();
+}
+
 async function persistFetchErrors(
   db: D1Database,
   errors: FetchError[],
@@ -1153,11 +1165,7 @@ export default {
 
         // Idempotency: skip if a successful cron already ran today
         const today = new Date().toISOString().split("T")[0];
-        const existingRun = await env.DB.prepare(
-          "SELECT id FROM oq_cron_runs WHERE date(started_at) = ? AND fetch_status = 'success' AND score_status = 'success' LIMIT 1"
-        )
-          .bind(today)
-          .first();
+        const existingRun = await findCompletedCronRun(env.DB, today);
         if (existingRun) {
           await log.info("cron", "Skipping duplicate run", { date: today });
           return;

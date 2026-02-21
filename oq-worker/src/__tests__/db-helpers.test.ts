@@ -1,12 +1,10 @@
 import { env } from "cloudflare:test";
 import { describe, it, expect, beforeEach } from "vitest";
+import { cleanAllTables } from "./helpers";
+import { findCompletedCronRun } from "../index";
 
 describe("Schema constraints", () => {
-  beforeEach(async () => {
-    await env.DB.exec("DELETE FROM oq_scores");
-    await env.DB.exec("DELETE FROM oq_score_articles");
-    await env.DB.exec("DELETE FROM oq_cron_runs");
-  });
+  beforeEach(() => cleanAllTables());
 
   describe("oq_scores unique date", () => {
     it("rejects duplicate dates", async () => {
@@ -87,11 +85,7 @@ describe("Schema constraints", () => {
         )
         .run();
 
-      const existing = await env.DB.prepare(
-        "SELECT id FROM oq_cron_runs WHERE date(started_at) = ? AND fetch_status = 'success' AND score_status = 'success' LIMIT 1"
-      )
-        .bind(today)
-        .first();
+      const existing = await findCompletedCronRun(env.DB, today);
       expect(existing).not.toBeNull();
     });
 
@@ -110,11 +104,7 @@ describe("Schema constraints", () => {
         )
         .run();
 
-      const existing = await env.DB.prepare(
-        "SELECT id FROM oq_cron_runs WHERE date(started_at) = ? AND fetch_status = 'success' AND score_status = 'success' LIMIT 1"
-      )
-        .bind(today)
-        .first();
+      const existing = await findCompletedCronRun(env.DB, today);
       expect(existing).toBeNull();
     });
 
@@ -132,11 +122,7 @@ describe("Schema constraints", () => {
         .run();
 
       const today = new Date().toISOString().split("T")[0];
-      const existing = await env.DB.prepare(
-        "SELECT id FROM oq_cron_runs WHERE date(started_at) = ? AND fetch_status = 'success' AND score_status = 'success' LIMIT 1"
-      )
-        .bind(today)
-        .first();
+      const existing = await findCompletedCronRun(env.DB, today);
       expect(existing).toBeNull();
     });
   });

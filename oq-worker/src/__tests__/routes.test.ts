@@ -1,20 +1,9 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, it, expect, beforeEach } from "vitest";
+import { cleanAllTables } from "./helpers";
 
 describe("OQ API routes", () => {
-  beforeEach(async () => {
-    // Clean tables
-    await env.DB.exec("DELETE FROM oq_scores");
-    await env.DB.exec("DELETE FROM oq_articles");
-    await env.DB.exec("DELETE FROM oq_subscribers");
-    await env.DB.exec("DELETE FROM oq_ai_usage");
-    await env.DB.exec("DELETE FROM oq_external_data_history");
-    await env.DB.exec("DELETE FROM oq_model_responses");
-    await env.DB.exec("DELETE FROM oq_score_articles");
-    await env.DB.exec("DELETE FROM oq_cron_runs");
-    await env.DB.exec("DELETE FROM oq_fetch_errors");
-    await env.DB.exec("DELETE FROM oq_logs");
-  });
+  beforeEach(() => cleanAllTables());
 
   describe("GET /api/today", () => {
     it("returns seed data when no score exists", async () => {

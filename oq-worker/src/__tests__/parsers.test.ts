@@ -5,38 +5,9 @@ import {
   type SanityHarnessData,
 } from "../services/sanity-harness";
 import { parseSWEBenchHtml } from "../services/swe-bench";
+import { buildSanityHtml } from "./helpers";
 
 describe("SanityHarness parser", () => {
-  function buildSanityHtml(
-    entries: {
-      rank: number;
-      agent: string;
-      model: string;
-      score: number;
-      passRate: number;
-      languages?: Record<string, number>;
-    }[]
-  ): string {
-    return entries
-      .map((e) => {
-        const langHtml = Object.entries(e.languages ?? {})
-          .map(
-            ([lang, pct]) =>
-              `<span title="${lang}"><span>${lang}</span></span><span>${pct}%</span>`
-          )
-          .join("");
-        return `
-          <div>#${e.rank}</div>
-          <a class="hover:text-indigo-600 transition-colors">${e.agent}</a>
-          <span class="truncate" title="${e.model}">${e.model}</span>
-          <span class="font-mono text-sm font-bold">${e.score}</span>
-          <span class="text-emerald-500">${e.passRate}%</span>
-          ${langHtml}
-        `;
-      })
-      .join("\n");
-  }
-
   it("parses entries from SSR HTML", () => {
     const html = buildSanityHtml([
       {
