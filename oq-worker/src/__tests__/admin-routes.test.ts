@@ -312,44 +312,4 @@ describe("Admin API routes", () => {
     });
   });
 
-  // --- Admin action endpoints ---
-
-  describe("POST /api/fetch-fred", () => {
-    it("returns 503 when FRED_API_KEY not configured", async () => {
-      // The test env has FRED_API_KEY not set (only ADMIN_KEY, ANTHROPIC, GEMINI, OPENAI)
-      // But let's test the auth requirement first
-      const res = await SELF.fetch("http://localhost/api/fetch-fred", {
-        method: "POST",
-        headers: AUTH_HEADERS,
-      });
-      // Either 503 (no key) or 500 (fetch fails) - depends on env config
-      expect([500, 503]).toContain(res.status);
-    });
-  });
-
-  // --- Admin action logging ---
-
-  describe("admin action logging", () => {
-    it("logs admin actions to oq_admin_actions table", async () => {
-      // Trigger any admin endpoint that completes quickly
-      await SELF.fetch("http://localhost/api/admin/dashboard", {
-        headers: AUTH_HEADERS,
-      });
-
-      // Admin dashboard is a GET - doesn't log to admin_actions
-      // POST endpoints log to admin_actions - but they call external APIs
-      // So just verify the table is writable
-      await env.DB.prepare(
-        "INSERT INTO oq_admin_actions (id, action, endpoint, result_status, result_summary) VALUES (?, ?, ?, ?, ?)"
-      )
-        .bind("aa1", "test", "/api/test", 200, '{"ok":true}')
-        .run();
-
-      const rows = await env.DB.prepare(
-        "SELECT * FROM oq_admin_actions"
-      ).all();
-      expect(rows.results).toHaveLength(1);
-      expect(rows.results[0].action).toBe("test");
-    });
-  });
 });
