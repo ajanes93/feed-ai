@@ -1,4 +1,4 @@
-import { env, SELF } from "cloudflare:test";
+import { env, fetchMock, SELF } from "cloudflare:test";
 import { describe, it, expect, beforeEach } from "vitest";
 
 const AUTH_HEADERS = {
@@ -331,8 +331,15 @@ describe("Admin API routes", () => {
   // --- adminHandler error branch ---
 
   describe("adminHandler error handling", () => {
-    it("returns 500 with error message when fetch-sanity fails (network)", async () => {
-      // fetch-sanity calls fetchSanityHarness which does fetch() — will fail in test env
+    it("returns 500 and logs error when fetch-sanity fails", async () => {
+      // Mock the sanity board to return 500 so fetchSanityHarness throws
+      fetchMock.activate();
+      fetchMock.disableNetConnect();
+      fetchMock
+        .get("https://sanityboard.lr7.dev")
+        .intercept({ method: "GET", path: "/" })
+        .reply(500, "Internal Server Error");
+
       const res = await SELF.fetch("http://localhost/api/fetch-sanity", {
         method: "POST",
         headers: AUTH_HEADERS,
@@ -341,12 +348,14 @@ describe("Admin API routes", () => {
       const data = await res.json();
       expect(data.error).toBeTruthy();
 
-      // Verify error was logged via Logger
+      // Verify adminHandler logged the error
       const logs = await env.DB.prepare(
         "SELECT * FROM oq_logs WHERE category = 'admin' AND level = 'error'"
       ).all();
       expect(logs.results.length).toBeGreaterThanOrEqual(1);
-      expect(logs.results[0].message).toContain("fetch-sanity");
+      expect(logs.results[0].message).toContain("fetch-sanity failed");
+
+      fetchMock.deactivate();
     });
 
     it("returns 503 when FRED_API_KEY not configured", async () => {
