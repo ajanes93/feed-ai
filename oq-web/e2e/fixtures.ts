@@ -104,7 +104,6 @@ function buildMethodologyResponse() {
     currentPromptHash: "abc123def456",
     capabilityGap: {
       verified: "~79%",
-      bashOnly: "~77%",
       pro: "~46%",
       description:
         "SWE-bench scores on curated open-source issues. Real enterprise engineering involves ambiguous requirements.",

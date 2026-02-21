@@ -34,7 +34,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (!data) return response;
 
   const ogTitle = `Will AI Replace Software Engineers? Today: ${data.score}%`;
-  const ogDesc = `Three AI models read the signals daily. The Capability Gap: ~79% on benchmarks, ~46% on real code. ${data.analysis.slice(0, 140)}`;
+  const ogDesc = `Three AI models read the signals daily. The Capability Gap: ~79% on benchmarks, ~46% on real code. ${data.analysis.slice(0, 100)}`;
 
   return new HTMLRewriter()
     .on("title", {

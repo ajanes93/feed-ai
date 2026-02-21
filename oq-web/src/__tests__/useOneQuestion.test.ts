@@ -220,6 +220,8 @@ describe("useOneQuestion", () => {
         Promise.resolve({
           date: "2025-01-15",
           score: 33,
+          scoreTechnical: 26,
+          scoreEconomic: 39,
           delta: 0.3,
           deltaExplanation: "SWE-bench Verified rose 2 points.",
           analysis: "Analysis",
@@ -266,6 +268,8 @@ describe("useOneQuestion", () => {
         Promise.resolve({
           date: "2025-01-15",
           score: 33,
+          scoreTechnical: 26,
+          scoreEconomic: 39,
           delta: 0,
           analysis: "",
           signals: [],
@@ -298,7 +302,6 @@ describe("useOneQuestion", () => {
       currentPromptHash: "abc123",
       capabilityGap: {
         verified: "~79%",
-        bashOnly: "~77%",
         pro: "~46%",
         description: "SWE-bench scores",
       },

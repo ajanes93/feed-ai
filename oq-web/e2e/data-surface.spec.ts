@@ -19,9 +19,8 @@ test.describe("Capability Gap section", () => {
 
   test("displays gap indicator", async ({ mockPage }) => {
     await mockPage.goto("/");
-    // The word "gap" should be visible in the gap indicator
     await expect(
-      mockPage.locator("span", { hasText: /^gap$/i }).first()
+      mockPage.locator("[data-testid='gap-indicator']")
     ).toBeVisible();
   });
 

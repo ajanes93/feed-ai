@@ -1,5 +1,7 @@
 <script setup lang="ts">
-defineProps<{
+import { computed } from "vue";
+
+const props = defineProps<{
   topPassRate: number;
   topAgent: string;
   topModel: string;
@@ -7,16 +9,16 @@ defineProps<{
   languageBreakdown: string;
 }>();
 
-function parseLangs(breakdown: string): { lang: string; pct: number }[] {
-  return breakdown
+const langs = computed(() =>
+  props.languageBreakdown
     .split(",")
     .map((s) => {
       const m = s.trim().match(/^(\w+):\s*([\d.]+)%?$/);
       return m ? { lang: m[1], pct: parseFloat(m[2]) } : null;
     })
     .filter((x): x is { lang: string; pct: number } => x !== null)
-    .sort((a, b) => b.pct - a.pct);
-}
+    .sort((a, b) => b.pct - a.pct)
+);
 
 function langColor(pct: number): string {
   if (pct >= 80) return "text-emerald-400";
@@ -73,7 +75,7 @@ function langBg(pct: number): string {
       </div>
       <div class="flex flex-wrap gap-2">
         <div
-          v-for="lang in parseLangs(languageBreakdown)"
+          v-for="lang in langs"
           :key="lang.lang"
           data-testid="lang-chip"
           class="flex items-center gap-1.5 rounded-lg bg-gray-800/50 px-2.5 py-1.5"

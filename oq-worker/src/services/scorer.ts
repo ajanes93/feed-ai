@@ -185,7 +185,10 @@ function parseModelResponse(text: string, model: string): OQModelScore {
     suggested_delta: parsed.suggested_delta,
     analysis: parsed.analysis,
     top_signals: (parsed.top_signals ?? []) as OQSignal[],
-    delta_explanation: parsed.delta_explanation,
+    delta_explanation:
+      typeof parsed.delta_explanation === "string"
+        ? parsed.delta_explanation.slice(0, 200)
+        : undefined,
     capability_gap_note: parsed.capability_gap_note,
   };
 }

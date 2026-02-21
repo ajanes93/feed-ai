@@ -60,7 +60,7 @@ A human engineer is no longer needed.
 KEY FRAMING: The central metric is the "Capability Gap":
 - SWE-bench Verified (best agent+model, curated open-source): ${ctx.sweBench ? `${ctx.sweBench.topVerified}% (${ctx.sweBench.topVerifiedModel})` : "~79%"}
 - SWE-bench Bash Only (raw model capability, standardized agent): ${ctx.sweBench ? `${ctx.sweBench.topBashOnly}% (${ctx.sweBench.topBashOnlyModel})` : "~77%"}
-- SWE-bench Pro (private codebases, harder problems): ${ctx.sweBench?.topPro ? `${ctx.sweBench.topPro}% (${ctx.sweBench.topProModel})` : "~46%"}
+- SWE-bench Pro (private codebases, harder problems): ${ctx.sweBench?.topPro != null && ctx.sweBench.topPro > 0 ? `${ctx.sweBench.topPro}% (${ctx.sweBench.topProModel})` : "~46%"}
 The gap between Verified (~79%) and Pro (~46%) IS the story. Curated open-source benchmarks flatter AI capabilities. Private codebases expose the real gap.
 
 Current score: ${ctx.currentScore}/100

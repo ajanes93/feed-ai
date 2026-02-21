@@ -39,7 +39,6 @@ export interface MethodologyResponse {
   };
   capabilityGap: {
     verified: string;
-    bashOnly: string;
     pro: string;
     description: string;
   };

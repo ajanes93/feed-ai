@@ -34,6 +34,7 @@ defineProps<{
           class="h-8 w-px bg-gradient-to-b from-gray-200/20 via-orange-500/40 to-orange-500/20"
         />
         <span
+          data-testid="gap-indicator"
           class="text-[10px] font-medium tracking-wider text-orange-500/60 uppercase"
           >gap</span
         >

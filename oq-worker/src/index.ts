@@ -310,12 +310,11 @@ app.get("/api/methodology", async (c) => {
       verified: externalData.sweBench
         ? `${externalData.sweBench.topVerified}%`
         : "~79%",
-      bashOnly: externalData.sweBench
-        ? `${externalData.sweBench.topBashOnly}%`
-        : "~77%",
-      pro: externalData.sweBench?.topPro
-        ? `~${Math.round(externalData.sweBench.topPro)}%`
-        : "~46%",
+      pro:
+        externalData.sweBench?.topPro != null &&
+        externalData.sweBench.topPro > 0
+          ? `~${Math.round(externalData.sweBench.topPro)}%`
+          : "~46%",
       description:
         "SWE-bench scores on curated open-source issues. Real enterprise engineering involves ambiguous requirements, system design, and cross-team coordination.",
     },

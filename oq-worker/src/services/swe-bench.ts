@@ -170,10 +170,11 @@ export function parseScaleLeaderboard(html: string): ScaleProResult | null {
         .replace(/\\"/g, '"')
         .replace(/\\n/g, "\n");
 
-      // Look for JSON arrays/objects containing score data
-      // Pattern: {"model":"...","score":45.89,...}
+      // Look for JSON objects containing score data
+      // Pattern: {"model":"...","score":45.89,...} — limit gap to 200 chars
+      // to avoid matching across unrelated JSON objects
       const scoreMatches = str.matchAll(
-        /"(?:model|version)"\s*:\s*"([^"]+)"[^}]*"score"\s*:\s*([\d.]+)/g
+        /"(?:model|version)"\s*:\s*"([^"]+)"[^}]{0,200}"score"\s*:\s*([\d.]+)/g
       );
       for (const m of scoreMatches) {
         const score = parseFloat(m[2]);
@@ -185,7 +186,7 @@ export function parseScaleLeaderboard(html: string): ScaleProResult | null {
 
       // Also try reversed key order: score before model
       const reversedMatches = str.matchAll(
-        /"score"\s*:\s*([\d.]+)[^}]*"(?:model|version)"\s*:\s*"([^"]+)"/g
+        /"score"\s*:\s*([\d.]+)[^}]{0,200}"(?:model|version)"\s*:\s*"([^"]+)"/g
       );
       for (const m of reversedMatches) {
         const score = parseFloat(m[1]);
