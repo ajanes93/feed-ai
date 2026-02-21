@@ -311,7 +311,7 @@ app.get("/api/methodology", async (c) => {
         ? `${externalData.sweBench.topVerified}%`
         : "~79%",
       pro:
-        externalData.sweBench?.topPro != null &&
+        typeof externalData.sweBench?.topPro === "number" &&
         externalData.sweBench.topPro > 0
           ? `~${Math.round(externalData.sweBench.topPro)}%`
           : "~46%",
