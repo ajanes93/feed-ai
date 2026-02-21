@@ -108,9 +108,11 @@ onMounted(fetchDashboard);
         v-if="scoreResult"
         class="mb-4 rounded-lg border px-4 py-2 text-sm"
         :class="
-          scoreSuccess
-            ? 'border-green-800 bg-green-950 text-green-300'
-            : 'border-amber-800 bg-amber-950 text-amber-300'
+          scoreAlreadyExists
+            ? 'border-amber-800 bg-amber-950 text-amber-300'
+            : scoreSuccess
+              ? 'border-green-800 bg-green-950 text-green-300'
+              : 'border-red-800 bg-red-950 text-red-300'
         "
       >
         <div class="flex items-center justify-between gap-3">
