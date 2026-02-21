@@ -508,11 +508,11 @@ async function fetchOQArticles(
           )
           .bind(
             crypto.randomUUID(),
-            item.title.slice(0, 500),
+            item.title,
             item.url,
             source.name,
             source.pillar,
-            item.summary?.slice(0, 500) ?? null,
+            item.summary ?? null,
             item.publishedAt ?? yesterday
           )
           .run();
@@ -630,7 +630,7 @@ async function generateDailyScore(env: Env): Promise<{
 
   const yesterday = new Date(Date.now() - 86400000).toISOString();
   const articles = await env.DB.prepare(
-    "SELECT title, url, source, pillar, summary FROM oq_articles WHERE fetched_at >= ? ORDER BY published_at DESC"
+    "SELECT id, title, url, source, pillar, summary FROM oq_articles WHERE fetched_at >= ? ORDER BY published_at DESC"
   )
     .bind(yesterday)
     .all();
@@ -690,6 +690,7 @@ async function generateDailyScore(env: Env): Promise<{
       modelAgreement: "partial",
       modelSpread: 0,
       promptHash: shouldDecay ? "decay" : "no-articles",
+      isDecay: shouldDecay,
     });
 
     return { score: newScore, delta, date: today };
@@ -719,8 +720,40 @@ async function generateDailyScore(env: Env): Promise<{
     generalTrend: externalData.generalTrend,
   });
 
+  const scoreId = await saveScore(env.DB, {
+    date: today,
+    score: result.score,
+    scoreTechnical: result.scoreTechnical,
+    scoreEconomic: result.scoreEconomic,
+    delta: result.delta,
+    analysis: result.analysis,
+    signals: JSON.stringify(result.signals),
+    pillarScores: JSON.stringify(result.pillarScores),
+    modelScores: JSON.stringify(result.modelScores),
+    modelAgreement: result.modelAgreement,
+    modelSpread: result.modelSpread,
+    capabilityGap: result.capabilityGap,
+    promptHash: result.promptHash,
+    externalData: JSON.stringify(externalData),
+  });
+
+  // Link AI usage records to this score
   for (const usage of result.aiUsages) {
-    await recordAIUsage(env.DB, usage);
+    await recordAIUsage(env.DB, usage, scoreId);
+  }
+
+  // Link articles to this score
+  const articleIds = articles.results
+    .map((a) => a.id as string)
+    .filter(Boolean);
+  if (articleIds.length > 0) {
+    await env.DB.batch(
+      articleIds.map((articleId) =>
+        env.DB.prepare(
+          "INSERT INTO oq_score_articles (score_id, article_id) VALUES (?, ?)"
+        ).bind(scoreId, articleId)
+      )
+    );
   }
 
   try {
@@ -742,38 +775,26 @@ async function generateDailyScore(env: Env): Promise<{
     await env.DB.prepare(
       "INSERT INTO oq_prompt_versions (id, hash, prompt_text) VALUES (?, ?, ?) ON CONFLICT(hash) DO NOTHING"
     )
-      .bind(crypto.randomUUID(), result.promptHash, prompt.slice(0, 10000))
+      .bind(crypto.randomUUID(), result.promptHash, prompt)
       .run();
   } catch {
     // Non-critical
   }
-
-  await saveScore(env.DB, {
-    date: today,
-    score: result.score,
-    scoreTechnical: result.scoreTechnical,
-    scoreEconomic: result.scoreEconomic,
-    delta: result.delta,
-    analysis: result.analysis,
-    signals: JSON.stringify(result.signals),
-    pillarScores: JSON.stringify(result.pillarScores),
-    modelScores: JSON.stringify(result.modelScores),
-    modelAgreement: result.modelAgreement,
-    modelSpread: result.modelSpread,
-    capabilityGap: result.capabilityGap,
-    promptHash: result.promptHash,
-  });
 
   return { score: result.score, delta: result.delta, date: today };
 }
 
 // --- D1 helpers ---
 
-async function recordAIUsage(db: D1Database, usage: AIUsageEntry) {
+async function recordAIUsage(
+  db: D1Database,
+  usage: AIUsageEntry,
+  scoreId?: string
+) {
   try {
     await db
       .prepare(
-        "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, score_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       )
       .bind(
         crypto.randomUUID(),
@@ -785,7 +806,8 @@ async function recordAIUsage(db: D1Database, usage: AIUsageEntry) {
         usage.latencyMs ?? null,
         usage.wasFallback ? 1 : 0,
         usage.error ?? null,
-        usage.status
+        usage.status,
+        scoreId ?? null
       )
       .run();
   } catch (err) {
@@ -807,15 +829,18 @@ interface ScoreInsert {
   modelSpread: number;
   capabilityGap?: string;
   promptHash: string;
+  externalData?: string;
+  isDecay?: boolean;
 }
 
-async function saveScore(db: D1Database, data: ScoreInsert): Promise<void> {
+async function saveScore(db: D1Database, data: ScoreInsert): Promise<string> {
+  const id = crypto.randomUUID();
   await db
     .prepare(
-      "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, capability_gap, prompt_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, capability_gap, prompt_hash, external_data, is_decay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(
-      crypto.randomUUID(),
+      id,
       data.date,
       data.score,
       data.scoreTechnical,
@@ -828,9 +853,12 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<void> {
       data.modelAgreement,
       data.modelSpread,
       data.capabilityGap ?? null,
-      data.promptHash
+      data.promptHash,
+      data.externalData ?? null,
+      data.isDecay ? 1 : 0
     )
     .run();
+  return id;
 }
 
 function safeJsonParse(value: unknown, fallback: unknown = []) {
