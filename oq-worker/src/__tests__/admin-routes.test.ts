@@ -76,13 +76,31 @@ describe("Admin API routes", () => {
       await env.DB.prepare(
         "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       )
-        .bind("u1", "claude-sonnet", "anthropic", 100, 50, 150, 500, 0, "success")
+        .bind(
+          "u1",
+          "claude-sonnet",
+          "anthropic",
+          100,
+          50,
+          150,
+          500,
+          0,
+          "success"
+        )
         .run();
 
       await env.DB.prepare(
         "INSERT INTO oq_articles (id, title, url, source, pillar, summary, published_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
       )
-        .bind("a1", "Test Article", "https://example.com/1", "TestSource", "capability", "Summary", "2025-06-01")
+        .bind(
+          "a1",
+          "Test Article",
+          "https://example.com/1",
+          "TestSource",
+          "capability",
+          "Summary",
+          "2025-06-01"
+        )
         .run();
 
       await env.DB.prepare(
@@ -281,10 +299,9 @@ describe("Admin API routes", () => {
           .run();
       }
 
-      const res = await SELF.fetch(
-        "http://localhost/api/admin/logs?limit=2",
-        { headers: AUTH_HEADERS }
-      );
+      const res = await SELF.fetch("http://localhost/api/admin/logs?limit=2", {
+        headers: AUTH_HEADERS,
+      });
       const data = await res.json();
       expect(data).toHaveLength(2);
     });

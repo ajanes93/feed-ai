@@ -496,9 +496,7 @@ async function fetchAndStoreSanityHarness(
     data.topPassRate < 0 ||
     data.topPassRate > 100
   ) {
-    throw new Error(
-      `SanityHarness: invalid topPassRate ${data.topPassRate}`
-    );
+    throw new Error(`SanityHarness: invalid topPassRate ${data.topPassRate}`);
   }
   if (!data.topAgent || !data.topModel) {
     throw new Error("SanityHarness: missing topAgent or topModel");
@@ -830,7 +828,8 @@ async function generateDailyScore(
     qualityFlags.push(
       `sparse_pillars:${pillarCounts.map(([k]) => k).join(",")}`
     );
-  if (totalArticles < 5) qualityFlags.push(`low_article_count:${totalArticles}`);
+  if (totalArticles < 5)
+    qualityFlags.push(`low_article_count:${totalArticles}`);
 
   const result = await runScoring({
     previousScore: prevScore,
@@ -873,116 +872,117 @@ async function generateDailyScore(
       qualityFlags.length > 0 ? JSON.stringify(qualityFlags) : undefined,
   });
 
-  // Link AI usage records to this score (batched)
-  try {
-    if (result.aiUsages.length > 0) {
-      await env.DB.batch(
-        result.aiUsages.map((usage) =>
-          env.DB.prepare(
-            "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, score_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-          ).bind(
-            crypto.randomUUID(),
-            usage.model,
-            usage.provider,
-            usage.inputTokens ?? null,
-            usage.outputTokens ?? null,
-            usage.totalTokens ?? null,
-            usage.latencyMs ?? null,
-            usage.wasFallback ? 1 : 0,
-            usage.error ?? null,
-            usage.status,
-            scoreId
-          )
-        )
-      );
-    }
-  } catch (err) {
-    await log?.warn("score", "Failed to save AI usage records", {
-      scoreId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  // Non-critical post-score writes — failures are logged but don't fail the score
+  const articleIds = articles.results
+    .map((a) => a.id as string)
+    .filter(Boolean);
 
-  // Link articles to this score
-  try {
-    const articleIds = articles.results
-      .map((a) => a.id as string)
-      .filter(Boolean);
-    if (articleIds.length > 0) {
-      await env.DB.batch(
-        articleIds.map((articleId) =>
-          env.DB.prepare(
-            "INSERT INTO oq_score_articles (score_id, article_id) VALUES (?, ?)"
-          ).bind(scoreId, articleId)
+  const secondaryWrites: { label: string; fn: () => Promise<unknown> }[] = [
+    {
+      label: "ai_usage",
+      fn: () =>
+        result.aiUsages.length > 0
+          ? env.DB.batch(
+              result.aiUsages.map((usage) =>
+                env.DB.prepare(
+                  "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, score_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                ).bind(
+                  crypto.randomUUID(),
+                  usage.model,
+                  usage.provider,
+                  usage.inputTokens ?? null,
+                  usage.outputTokens ?? null,
+                  usage.totalTokens ?? null,
+                  usage.latencyMs ?? null,
+                  usage.wasFallback ? 1 : 0,
+                  usage.error ?? null,
+                  usage.status,
+                  scoreId
+                )
+              )
+            )
+          : Promise.resolve(),
+    },
+    {
+      label: "article_linkage",
+      fn: () =>
+        articleIds.length > 0
+          ? env.DB.batch(
+              articleIds.map((articleId) =>
+                env.DB.prepare(
+                  "INSERT INTO oq_score_articles (score_id, article_id) VALUES (?, ?)"
+                ).bind(scoreId, articleId)
+              )
+            )
+          : Promise.resolve(),
+    },
+    {
+      label: "model_responses",
+      fn: () =>
+        result.modelResponses.length > 0
+          ? env.DB.batch(
+              result.modelResponses.map((mr) =>
+                env.DB.prepare(
+                  "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, input_tokens, output_tokens, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                ).bind(
+                  crypto.randomUUID(),
+                  scoreId,
+                  mr.model,
+                  mr.provider,
+                  mr.rawResponse,
+                  JSON.stringify(mr.parsed.pillar_scores),
+                  mr.parsed.technical_delta,
+                  mr.parsed.economic_delta,
+                  mr.parsed.suggested_delta,
+                  mr.parsed.analysis,
+                  JSON.stringify(mr.parsed.top_signals),
+                  mr.parsed.capability_gap_note ?? null,
+                  mr.inputTokens ?? null,
+                  mr.outputTokens ?? null,
+                  mr.latencyMs ?? null
+                )
+              )
+            )
+          : Promise.resolve(),
+    },
+    {
+      label: "prompt_version",
+      fn: async () => {
+        const prompt = buildScoringPrompt({
+          currentScore: prevScore,
+          technicalScore: prevTechnical,
+          economicScore: prevEconomic,
+          history,
+          articlesByPillar,
+          sanityHarness: externalData.sanityHarness,
+          sweBench: externalData.sweBench,
+          softwareIndex: externalData.softwareIndex,
+          softwareDate: externalData.softwareDate,
+          softwareTrend: externalData.softwareTrend,
+          generalIndex: externalData.generalIndex,
+          generalDate: externalData.generalDate,
+          generalTrend: externalData.generalTrend,
+        });
+        await env.DB.prepare(
+          "INSERT INTO oq_prompt_versions (id, hash, prompt_text) VALUES (?, ?, ?) ON CONFLICT(hash) DO NOTHING"
         )
-      );
-    }
-  } catch (err) {
-    await log?.warn("score", "Failed to save article linkage", {
-      scoreId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+          .bind(crypto.randomUUID(), result.promptHash, prompt)
+          .run();
+      },
+    },
+  ];
 
-  // Store individual model responses for transparency
-  try {
-    if (result.modelResponses.length > 0) {
-      await env.DB.batch(
-        result.modelResponses.map((mr) =>
-          env.DB.prepare(
-            "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, input_tokens, output_tokens, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-          ).bind(
-            crypto.randomUUID(),
-            scoreId,
-            mr.model,
-            mr.provider,
-            mr.rawResponse,
-            JSON.stringify(mr.parsed.pillar_scores),
-            mr.parsed.technical_delta,
-            mr.parsed.economic_delta,
-            mr.parsed.suggested_delta,
-            mr.parsed.analysis,
-            JSON.stringify(mr.parsed.top_signals),
-            mr.parsed.capability_gap_note ?? null,
-            mr.inputTokens ?? null,
-            mr.outputTokens ?? null,
-            mr.latencyMs ?? null
-          )
-        )
-      );
+  const writeResults = await Promise.allSettled(
+    secondaryWrites.map((w) => w.fn())
+  );
+  for (let i = 0; i < writeResults.length; i++) {
+    const r = writeResults[i];
+    if (r.status === "rejected") {
+      await log?.warn("score", `Failed: ${secondaryWrites[i].label}`, {
+        scoreId,
+        error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+      });
     }
-  } catch (err) {
-    await log?.warn("score", "Failed to save model responses", {
-      scoreId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
-  try {
-    const prompt = buildScoringPrompt({
-      currentScore: prevScore,
-      technicalScore: prevTechnical,
-      economicScore: prevEconomic,
-      history,
-      articlesByPillar,
-      sanityHarness: externalData.sanityHarness,
-      sweBench: externalData.sweBench,
-      softwareIndex: externalData.softwareIndex,
-      softwareDate: externalData.softwareDate,
-      softwareTrend: externalData.softwareTrend,
-      generalIndex: externalData.generalIndex,
-      generalDate: externalData.generalDate,
-      generalTrend: externalData.generalTrend,
-    });
-    await env.DB.prepare(
-      "INSERT INTO oq_prompt_versions (id, hash, prompt_text) VALUES (?, ?, ?) ON CONFLICT(hash) DO NOTHING"
-    )
-      .bind(crypto.randomUUID(), result.promptHash, prompt)
-      .run();
-  } catch (err) {
-    await log?.warn("score", "Prompt version insert failed", {
-      error: err instanceof Error ? err.message : String(err),
-    });
   }
 
   return { score: result.score, delta: result.delta, date: today };
@@ -1203,12 +1203,12 @@ export default {
         let scoreStatus = "pending";
         let scoreResult: unknown = null;
         const externalStatus: Record<string, string> = {};
+        let cronError: string | undefined;
 
         try {
           // Weekly external data fetches (Sundays)
           const dayOfWeek = new Date().getUTCDay();
           if (dayOfWeek === 0) {
-            await cronLog.info("external", "Fetching external data (weekly)");
             const results = await Promise.allSettled([
               fetchAndStoreSanityHarness(env.DB),
               fetchAndStoreSWEBench(env.DB),
@@ -1227,10 +1227,9 @@ export default {
                 r.status === "fulfilled" ? "success" : `failed: ${r.reason}`;
             });
 
-            // Log external fetch failures individually
             for (const [source, status] of Object.entries(externalStatus)) {
               if (status !== "success") {
-                await cronLog.warn("external", `External fetch failed: ${source}`, {
+                await cronLog.warn("external", `Fetch failed: ${source}`, {
                   source,
                   status,
                 });
@@ -1238,7 +1237,6 @@ export default {
             }
 
             // Weekly data retention cleanup
-            await cronLog.info("system", "Running data retention cleanup");
             await env.DB.batch([
               env.DB.prepare(
                 "DELETE FROM oq_articles WHERE fetched_at < datetime('now', '-90 days')"
@@ -1258,40 +1256,28 @@ export default {
             ]);
           }
 
-          await cronLog.info("fetch", "Fetching articles");
           const fetchResult = await fetchOQArticles(env.DB);
           fetchStatus = "success";
           fetchArticles = fetchResult.fetched;
           fetchErrors = fetchResult.errors;
 
-          // Persist any fetch errors
           if (fetchErrors.length > 0) {
             await persistFetchErrors(env.DB, fetchErrors, cronLog);
-            await cronLog.warn("fetch", `${fetchErrors.length} feed errors`, {
-              errors: fetchErrors,
-            });
           }
 
-          await cronLog.info("fetch", "Articles fetched", {
-            fetched: fetchArticles,
-            errorCount: fetchErrors.length,
-          });
-
-          await cronLog.info("score", "Generating daily score");
           scoreResult = await generateDailyScore(env, cronLog);
           scoreStatus = "success";
         } catch (err) {
-          const phase =
-            fetchStatus === "pending" ? "fetch" : "score";
+          const phase = fetchStatus === "pending" ? "fetch" : "score";
           if (phase === "fetch") fetchStatus = "failed";
           else scoreStatus = "failed";
 
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          await cronLog.error("cron", `Cron failed in ${phase} phase`, {
+          cronError = err instanceof Error ? err.message : String(err);
+          await cronLog.error("cron", `Failed in ${phase} phase`, {
             phase,
-            error: errorMsg,
+            error: cronError,
           });
-
+        } finally {
           await logCronRun(
             env.DB,
             {
@@ -1303,38 +1289,15 @@ export default {
               fetchErrors,
               scoreStatus,
               scoreResult,
-              externalFetchStatus: externalStatus,
-              error: errorMsg,
+              externalFetchStatus:
+                Object.keys(externalStatus).length > 0
+                  ? externalStatus
+                  : undefined,
+              error: cronError,
             },
             cronLog
           );
-          throw err;
         }
-
-        await logCronRun(
-          env.DB,
-          {
-            id: runId,
-            startedAt,
-            completedAt: new Date().toISOString(),
-            fetchStatus,
-            fetchArticles,
-            fetchErrors,
-            scoreStatus,
-            scoreResult,
-            externalFetchStatus:
-              Object.keys(externalStatus).length > 0
-                ? externalStatus
-                : undefined,
-          },
-          cronLog
-        );
-
-        await cronLog.info("cron", "Cron completed successfully", {
-          fetchArticles,
-          fetchErrorCount: fetchErrors.length,
-          scoreResult,
-        });
       })()
     );
   },

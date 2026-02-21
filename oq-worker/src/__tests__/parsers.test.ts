@@ -7,11 +7,23 @@ import {
 import { parseSWEBenchHtml } from "../services/swe-bench";
 
 describe("SanityHarness parser", () => {
-  function buildSanityHtml(entries: { rank: number; agent: string; model: string; score: number; passRate: number; languages?: Record<string, number> }[]): string {
+  function buildSanityHtml(
+    entries: {
+      rank: number;
+      agent: string;
+      model: string;
+      score: number;
+      passRate: number;
+      languages?: Record<string, number>;
+    }[]
+  ): string {
     return entries
       .map((e) => {
         const langHtml = Object.entries(e.languages ?? {})
-          .map(([lang, pct]) => `<span title="${lang}"><span>${lang}</span></span><span>${pct}%</span>`)
+          .map(
+            ([lang, pct]) =>
+              `<span title="${lang}"><span>${lang}</span></span><span>${pct}%</span>`
+          )
           .join("");
         return `
           <div>#${e.rank}</div>
@@ -27,8 +39,20 @@ describe("SanityHarness parser", () => {
 
   it("parses entries from SSR HTML", () => {
     const html = buildSanityHtml([
-      { rank: 1, agent: "TestAgent", model: "GPT-4", score: 45.2, passRate: 42.5 },
-      { rank: 2, agent: "Agent2", model: "Claude", score: 30.1, passRate: 28.0 },
+      {
+        rank: 1,
+        agent: "TestAgent",
+        model: "GPT-4",
+        score: 45.2,
+        passRate: 42.5,
+      },
+      {
+        rank: 2,
+        agent: "Agent2",
+        model: "Claude",
+        score: 30.1,
+        passRate: 28.0,
+      },
     ]);
 
     const result = parseSanityHarnessHtml(html);
@@ -50,9 +74,9 @@ describe("SanityHarness parser", () => {
   });
 
   it("throws when no entries parsed", () => {
-    expect(() => parseSanityHarnessHtml("<html><body>Empty</body></html>")).toThrow(
-      "SanityHarness: No entries parsed from HTML"
-    );
+    expect(() =>
+      parseSanityHarnessHtml("<html><body>Empty</body></html>")
+    ).toThrow("SanityHarness: No entries parsed from HTML");
   });
 
   it("calculates median pass rate", () => {
@@ -267,7 +291,9 @@ describe("SWE-bench parser", () => {
       </script>
     `;
 
-    expect(() => parseSWEBenchHtml(html)).toThrow("Failed to parse leaderboard JSON");
+    expect(() => parseSWEBenchHtml(html)).toThrow(
+      "Failed to parse leaderboard JSON"
+    );
   });
 
   it("handles string resolved values", () => {

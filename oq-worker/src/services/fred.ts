@@ -93,7 +93,13 @@ export function buildTrend(
 
 export async function fetchFREDData(
   apiKey: string,
-  log?: { error: (category: string, message: string, details?: Record<string, unknown>) => Promise<void> }
+  log?: {
+    error: (
+      category: string,
+      message: string,
+      details?: Record<string, unknown>
+    ) => Promise<void>;
+  }
 ): Promise<FREDData> {
   const [softwareObs, generalObs] = await Promise.all([
     fetchFREDSeries(SOFTWARE_SERIES, apiKey).catch(async (err) => {

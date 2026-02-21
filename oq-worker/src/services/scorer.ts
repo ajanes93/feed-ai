@@ -344,7 +344,11 @@ export interface OQScoringResult {
 }
 
 interface ScorerLogger {
-  warn: (category: string, message: string, details?: Record<string, unknown>) => Promise<void>;
+  warn: (
+    category: string,
+    message: string,
+    details?: Record<string, unknown>
+  ) => Promise<void>;
 }
 
 interface ScoringInput {
