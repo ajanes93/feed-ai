@@ -325,3 +325,98 @@ describe("calculateModelAgreement", () => {
     expect(calculateModelAgreement(scores).spread).toBe(2);
   });
 });
+
+describe("parseModelResponse — delta_explanation", () => {
+  it("parses delta_explanation when present", () => {
+    const json = JSON.stringify({
+      pillar_scores: {
+        capability: 1,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
+      technical_delta: 0.5,
+      economic_delta: 0,
+      suggested_delta: 0.3,
+      analysis: "Test analysis",
+      top_signals: [],
+      delta_explanation: "Driven by SWE-bench Verified rising 2 points to 81%.",
+    });
+    const result = parseModelResponse(json, "test-model");
+    expect(result.delta_explanation).toBe(
+      "Driven by SWE-bench Verified rising 2 points to 81%."
+    );
+  });
+
+  it("delta_explanation is undefined when not in response", () => {
+    const json = JSON.stringify({
+      pillar_scores: {
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
+      suggested_delta: 0,
+      analysis: "No change",
+      top_signals: [],
+    });
+    const result = parseModelResponse(json, "test-model");
+    expect(result.delta_explanation).toBeUndefined();
+  });
+});
+
+describe("delta explanation in consensus", () => {
+  it("prefers Claude's delta_explanation over other models", () => {
+    const claudeScore = oqModelScoreFactory.build({
+      model: "claude-sonnet-4-5-20250929",
+      delta_explanation: "Claude's explanation",
+    });
+    const gptScore = oqModelScoreFactory.build({
+      model: "gpt-4o",
+      delta_explanation: "GPT's explanation",
+    });
+    const geminiScore = oqModelScoreFactory.build({
+      model: "gemini-2.0-flash",
+      delta_explanation: "Gemini's explanation",
+    });
+
+    const scores = [claudeScore, gptScore, geminiScore];
+    // Replicate the logic from runScoring
+    const deltaExplanation =
+      scores.find((s) => s.model.includes("claude"))?.delta_explanation ??
+      scores.find((s) => s.delta_explanation)?.delta_explanation;
+
+    expect(deltaExplanation).toBe("Claude's explanation");
+  });
+
+  it("falls back to first available delta_explanation when no Claude", () => {
+    const gptScore = oqModelScoreFactory.build({
+      model: "gpt-4o",
+      delta_explanation: "GPT's explanation",
+    });
+    const geminiScore = oqModelScoreFactory.build({
+      model: "gemini-2.0-flash",
+    });
+
+    const scores = [gptScore, geminiScore];
+    const deltaExplanation =
+      scores.find((s) => s.model.includes("claude"))?.delta_explanation ??
+      scores.find((s) => s.delta_explanation)?.delta_explanation;
+
+    expect(deltaExplanation).toBe("GPT's explanation");
+  });
+
+  it("returns undefined when no model provides delta_explanation", () => {
+    const scores = [
+      oqModelScoreFactory.build({ model: "gpt-4o" }),
+      oqModelScoreFactory.build({ model: "gemini-2.0-flash" }),
+    ];
+    const deltaExplanation =
+      scores.find((s) => s.model.includes("claude"))?.delta_explanation ??
+      scores.find((s) => s.delta_explanation)?.delta_explanation;
+
+    expect(deltaExplanation).toBeUndefined();
+  });
+});

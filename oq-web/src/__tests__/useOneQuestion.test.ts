@@ -212,4 +212,148 @@ describe("useOneQuestion", () => {
 
     expect(history.value).toEqual([]);
   });
+
+  it("fetchToday preserves deltaExplanation from response", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          date: "2025-01-15",
+          score: 33,
+          delta: 0.3,
+          deltaExplanation: "SWE-bench Verified rose 2 points.",
+          analysis: "Analysis",
+          signals: [],
+          pillarScores: {},
+          modelScores: [],
+          modelAgreement: "agree",
+          modelSpread: 0.2,
+        }),
+    });
+
+    const { today, fetchToday } = useOneQuestion();
+    await fetchToday();
+
+    expect(today.value?.deltaExplanation).toBe(
+      "SWE-bench Verified rose 2 points."
+    );
+  });
+
+  it("fetchToday preserves externalData from response", async () => {
+    const externalData = {
+      sweBench: {
+        topVerified: 81,
+        topVerifiedModel: "Agent-X",
+        topBashOnly: 78,
+        topBashOnlyModel: "Model-Y",
+        topPro: 48,
+        topProModel: "Pro-Agent",
+      },
+      sanityHarness: {
+        topPassRate: 72,
+        topAgent: "TestAgent",
+        topModel: "TestModel",
+        medianPassRate: 45,
+        languageBreakdown: "go: 95%",
+      },
+      softwareIndex: 47.3,
+      softwareDate: "2026-02-14",
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          date: "2025-01-15",
+          score: 33,
+          delta: 0,
+          analysis: "",
+          signals: [],
+          pillarScores: {},
+          modelScores: [],
+          modelAgreement: "partial",
+          modelSpread: 0,
+          externalData,
+        }),
+    });
+
+    const { today, fetchToday } = useOneQuestion();
+    await fetchToday();
+
+    expect(today.value?.externalData).toEqual(externalData);
+  });
+
+  it("fetchMethodology populates methodology with new fields", async () => {
+    const methodologyData = {
+      pillars: [{ name: "AI Capability", weight: 0.25, key: "capability" }],
+      formula: {
+        models: ["Claude"],
+        weights: { claude: 0.4 },
+        dampening: 0.3,
+        dailyCap: 1.2,
+        scoreRange: [5, 95],
+        decayTarget: 40,
+      },
+      startingScore: 32,
+      currentPromptHash: "abc123",
+      capabilityGap: {
+        verified: "~79%",
+        bashOnly: "~77%",
+        pro: "~46%",
+        description: "SWE-bench scores",
+      },
+      sanityHarness: {
+        topPassRate: 72.5,
+        topAgent: "Agentless",
+        topModel: "Claude 3.5",
+        medianPassRate: 45,
+        languageBreakdown: "go: 95%",
+      },
+      fredData: {
+        softwareIndex: 47.3,
+        softwareDate: "2026-02-14",
+        softwareTrend: {
+          current: 47.3,
+          currentDate: "2026-02-14",
+          change4w: -12.1,
+        },
+      },
+      whatWouldChange: {
+        to50: ["Milestone A"],
+        to70: ["Milestone B"],
+        below20: ["Milestone C"],
+      },
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(methodologyData),
+    });
+
+    const { methodology, fetchMethodology } = useOneQuestion();
+    await fetchMethodology();
+
+    expect(methodology.value).toEqual(methodologyData);
+    expect(methodology.value?.capabilityGap.pro).toBe("~46%");
+    expect(methodology.value?.sanityHarness?.topPassRate).toBe(72.5);
+    expect(methodology.value?.fredData.softwareIndex).toBe(47.3);
+  });
+
+  it("fetchMethodology silently handles errors", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("Network error"));
+
+    const { methodology, fetchMethodology } = useOneQuestion();
+    await fetchMethodology();
+
+    expect(methodology.value).toBeNull();
+  });
+
+  it("fetchMethodology does not populate on non-ok response", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
+
+    const { methodology, fetchMethodology } = useOneQuestion();
+    await fetchMethodology();
+
+    expect(methodology.value).toBeNull();
+  });
 });

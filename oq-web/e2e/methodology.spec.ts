@@ -56,7 +56,7 @@ test.describe("Methodology page", () => {
     await expect(
       mockPage.getByText("SWE-bench Verified").first()
     ).toBeVisible();
-    await expect(mockPage.getByText("SWE-bench Bash Only")).toBeVisible();
+    await expect(mockPage.getByText("SWE-bench Pro")).toBeVisible();
   });
 
   test("shows what-would-change scenarios", async ({ mockPage }) => {
