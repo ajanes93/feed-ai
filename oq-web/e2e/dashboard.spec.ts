@@ -251,4 +251,24 @@ test.describe("Dashboard", () => {
       page.getByRole("button", { name: "Force Regenerate" })
     ).not.toBeVisible();
   });
+
+  test("shows friendly error when dashboard API network fails", async ({
+    page,
+  }) => {
+    // Abort the dashboard request to simulate iOS Safari TypeError
+    await page.route("**/api/admin/dashboard", (route) => route.abort());
+    await page.route("**/api/admin/logs*", (route) => route.abort());
+
+    await page.goto("/dashboard");
+    await page.evaluate(() =>
+      sessionStorage.setItem("oq_admin_key", "test-key")
+    );
+    await page.goto("/dashboard");
+
+    // Should show friendly network error, not raw "Type error"
+    await expect(
+      page.getByText(/Network error.*Refresh|Failed to fetch/)
+    ).toBeVisible();
+    await expect(page.getByText("Type error")).not.toBeVisible();
+  });
 });
