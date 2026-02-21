@@ -1,4 +1,5 @@
 import type { OQPillar } from "@feed-ai/shared/oq-types";
+import type { FREDSeriesTrend } from "./fred";
 
 interface SanityHarnessContext {
   topPassRate: number;
@@ -25,8 +26,23 @@ interface PromptContext {
   sweBench?: SWEBenchContext;
   softwareIndex?: number;
   softwareDate?: string;
+  softwareTrend?: FREDSeriesTrend;
   generalIndex?: number;
   generalDate?: string;
+  generalTrend?: FREDSeriesTrend;
+}
+
+function formatTrend(trend: FREDSeriesTrend): string {
+  const parts: string[] = [];
+  if (trend.change1w !== undefined) {
+    const sign = trend.change1w > 0 ? "+" : "";
+    parts.push(`${sign}${trend.change1w}% week-over-week`);
+  }
+  if (trend.change4w !== undefined) {
+    const sign = trend.change4w > 0 ? "+" : "";
+    parts.push(`${sign}${trend.change4w}% over 4 weeks`);
+  }
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 
 export function buildScoringPrompt(ctx: PromptContext): string {
@@ -67,7 +83,7 @@ ${
 Note: Only flag a labour market AI signal if software job postings are declining FASTER than general postings.
 ${
   ctx.softwareIndex !== undefined && ctx.generalIndex !== undefined
-    ? `Indeed Software Dev Postings Index: ${ctx.softwareIndex}${ctx.softwareDate ? ` (as of ${ctx.softwareDate})` : ""}. Initial Claims (general labour): ${ctx.generalIndex}${ctx.generalDate ? ` (as of ${ctx.generalDate})` : ""}.
+    ? `Indeed Software Dev Postings Index: ${ctx.softwareIndex}${ctx.softwareDate ? ` (as of ${ctx.softwareDate})` : ""}${ctx.softwareTrend ? formatTrend(ctx.softwareTrend) : ""}. Initial Claims (general labour): ${ctx.generalIndex}${ctx.generalDate ? ` (as of ${ctx.generalDate})` : ""}${ctx.generalTrend ? formatTrend(ctx.generalTrend) : ""}.
 `
     : ""
 }${ctx.articlesByPillar.labour_market || "No articles today."}

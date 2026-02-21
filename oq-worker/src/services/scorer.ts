@@ -8,6 +8,7 @@ import type {
 } from "@feed-ai/shared/oq-types";
 import { buildScoringPrompt, hashPrompt } from "./prompt";
 import type { AIUsageEntry } from "@feed-ai/shared/types";
+import type { FREDSeriesTrend } from "./fred";
 
 // --- Model calling ---
 
@@ -353,8 +354,10 @@ interface ScoringInput {
   };
   softwareIndex?: number;
   softwareDate?: string;
+  softwareTrend?: FREDSeriesTrend;
   generalIndex?: number;
   generalDate?: string;
+  generalTrend?: FREDSeriesTrend;
 }
 
 const MAX_RETRIES = 3;
@@ -389,8 +392,10 @@ export async function runScoring(
     sweBench: input.sweBench,
     softwareIndex: input.softwareIndex,
     softwareDate: input.softwareDate,
+    softwareTrend: input.softwareTrend,
     generalIndex: input.generalIndex,
     generalDate: input.generalDate,
+    generalTrend: input.generalTrend,
   });
 
   const promptHash = await hashPrompt(prompt);

@@ -13,7 +13,7 @@ import {
   buildSanityHarnessArticleSummary,
 } from "./services/sanity-harness";
 import { fetchSWEBenchLeaderboard } from "./services/swe-bench";
-import { fetchFREDData } from "./services/fred";
+import { fetchFREDData, type FREDSeriesTrend } from "./services/fred";
 
 const STARTING_SCORE = 32;
 const STARTING_TECHNICAL = 25;
@@ -340,8 +340,10 @@ interface ExternalData {
   };
   softwareIndex?: number;
   softwareDate?: string;
+  softwareTrend?: FREDSeriesTrend;
   generalIndex?: number;
   generalDate?: string;
+  generalTrend?: FREDSeriesTrend;
 }
 
 async function loadExternalData(db: D1Database): Promise<ExternalData> {
@@ -361,8 +363,10 @@ async function loadExternalData(db: D1Database): Promise<ExternalData> {
       } else if (row.key === "fred_labour") {
         result.softwareIndex = data.softwareIndex;
         result.softwareDate = data.softwareDate;
+        result.softwareTrend = data.softwareTrend;
         result.generalIndex = data.generalIndex;
         result.generalDate = data.generalDate;
+        result.generalTrend = data.generalTrend;
       }
     }
   } catch {
@@ -419,7 +423,11 @@ async function fetchAndStoreSWEBench(
 ): Promise<{ stored: boolean; verified: number; bashOnly: number }> {
   const data = await fetchSWEBenchLeaderboard();
   await storeExternalData(db, "swe_bench", data);
-  return { stored: true, verified: data.topVerified, bashOnly: data.topBashOnly };
+  return {
+    stored: true,
+    verified: data.topVerified,
+    bashOnly: data.topBashOnly,
+  };
 }
 
 async function fetchAndStoreFRED(
@@ -676,8 +684,10 @@ async function generateDailyScore(env: Env): Promise<{
     sweBench: externalData.sweBench,
     softwareIndex: externalData.softwareIndex,
     softwareDate: externalData.softwareDate,
+    softwareTrend: externalData.softwareTrend,
     generalIndex: externalData.generalIndex,
     generalDate: externalData.generalDate,
+    generalTrend: externalData.generalTrend,
   });
 
   for (const usage of result.aiUsages) {
@@ -695,8 +705,10 @@ async function generateDailyScore(env: Env): Promise<{
       sweBench: externalData.sweBench,
       softwareIndex: externalData.softwareIndex,
       softwareDate: externalData.softwareDate,
+      softwareTrend: externalData.softwareTrend,
       generalIndex: externalData.generalIndex,
       generalDate: externalData.generalDate,
+      generalTrend: externalData.generalTrend,
     });
     await env.DB.prepare(
       "INSERT INTO oq_prompt_versions (id, hash, prompt_text) VALUES (?, ?, ?) ON CONFLICT(hash) DO NOTHING"
