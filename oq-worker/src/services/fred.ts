@@ -91,14 +91,23 @@ export function buildTrend(
   return trend;
 }
 
-export async function fetchFREDData(apiKey: string): Promise<FREDData> {
+export async function fetchFREDData(
+  apiKey: string,
+  log?: { error: (category: string, message: string, details?: Record<string, unknown>) => Promise<void> }
+): Promise<FREDData> {
   const [softwareObs, generalObs] = await Promise.all([
-    fetchFREDSeries(SOFTWARE_SERIES, apiKey).catch((err) => {
-      console.error(`[oq] FRED ${SOFTWARE_SERIES} failed:`, err);
+    fetchFREDSeries(SOFTWARE_SERIES, apiKey).catch(async (err) => {
+      await log?.error("external", `FRED ${SOFTWARE_SERIES} failed`, {
+        series: SOFTWARE_SERIES,
+        error: err instanceof Error ? err.message : String(err),
+      });
       return [] as FREDObservation[];
     }),
-    fetchFREDSeries(GENERAL_SERIES, apiKey).catch((err) => {
-      console.error(`[oq] FRED ${GENERAL_SERIES} failed:`, err);
+    fetchFREDSeries(GENERAL_SERIES, apiKey).catch(async (err) => {
+      await log?.error("external", `FRED ${GENERAL_SERIES} failed`, {
+        series: GENERAL_SERIES,
+        error: err instanceof Error ? err.message : String(err),
+      });
       return [] as FREDObservation[];
     }),
   ]);

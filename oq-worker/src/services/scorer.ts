@@ -343,6 +343,10 @@ export interface OQScoringResult {
   aiUsages: AIUsageEntry[];
 }
 
+interface ScorerLogger {
+  warn: (category: string, message: string, details?: Record<string, unknown>) => Promise<void>;
+}
+
 interface ScoringInput {
   previousScore: number;
   previousTechnical: number;
@@ -373,6 +377,7 @@ interface ScoringInput {
   generalIndex?: number;
   generalDate?: string;
   generalTrend?: FREDSeriesTrend;
+  log?: ScorerLogger;
 }
 
 const MAX_RETRIES = 3;
@@ -386,7 +391,8 @@ async function callModelWithRetry(
   name: string,
   model: string,
   provider: string,
-  fn: () => Promise<ModelResult>
+  fn: () => Promise<ModelResult>,
+  log?: ScorerLogger
 ): Promise<ModelCallResult> {
   let lastError: string | undefined;
   const start = Date.now();
@@ -395,7 +401,12 @@ async function callModelWithRetry(
       return { result: await fn() };
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
-      console.warn(`${name} attempt ${attempt + 1} failed:`, err);
+      await log?.warn("score", `${name} attempt ${attempt + 1} failed`, {
+        model,
+        provider,
+        attempt: attempt + 1,
+        error: lastError,
+      });
       if (attempt < MAX_RETRIES - 1) {
         await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
       }
@@ -443,21 +454,30 @@ export async function runScoring(
         "Claude",
         "claude-sonnet-4-5-20250929",
         "anthropic",
-        () => callClaude(prompt, input.apiKeys.anthropic!)
+        () => callClaude(prompt, input.apiKeys.anthropic!),
+        input.log
       )
     );
   }
   if (input.apiKeys.openai) {
     calls.push(
-      callModelWithRetry("GPT-4", "gpt-4o", "openai", () =>
-        callOpenAI(prompt, input.apiKeys.openai!)
+      callModelWithRetry(
+        "GPT-4",
+        "gpt-4o",
+        "openai",
+        () => callOpenAI(prompt, input.apiKeys.openai!),
+        input.log
       )
     );
   }
   if (input.apiKeys.gemini) {
     calls.push(
-      callModelWithRetry("Gemini", "gemini-2.0-flash", "gemini", () =>
-        callGemini(prompt, input.apiKeys.gemini!)
+      callModelWithRetry(
+        "Gemini",
+        "gemini-2.0-flash",
+        "gemini",
+        () => callGemini(prompt, input.apiKeys.gemini!),
+        input.log
       )
     );
   }

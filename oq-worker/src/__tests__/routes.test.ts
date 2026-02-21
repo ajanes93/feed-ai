@@ -14,6 +14,7 @@ describe("OQ API routes", () => {
     await env.DB.exec("DELETE FROM oq_cron_runs");
     await env.DB.exec("DELETE FROM oq_fetch_errors");
     await env.DB.exec("DELETE FROM oq_admin_actions");
+    await env.DB.exec("DELETE FROM oq_logs");
   });
 
   describe("GET /api/today", () => {

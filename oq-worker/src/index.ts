@@ -13,6 +13,11 @@ import {
 } from "./services/sanity-harness";
 import { fetchSWEBenchLeaderboard } from "./services/swe-bench";
 import { fetchFREDData, type FREDSeriesTrend } from "./services/fred";
+import { Logger } from "@feed-ai/shared/logger";
+
+function createLogger(db: D1Database, context?: Record<string, unknown>) {
+  return new Logger(db, { table: "oq_logs", prefix: "oq" }, context);
+}
 
 const STARTING_SCORE = 32;
 const STARTING_TECHNICAL = 25;
@@ -132,6 +137,45 @@ app.get("/api/admin/external-history", async (c) => {
   );
 });
 
+app.get("/api/admin/logs", async (c) => {
+  const level = c.req.query("level");
+  const category = c.req.query("category");
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "100"), 500);
+
+  let sql = "SELECT * FROM oq_logs";
+  const conditions: string[] = [];
+  const binds: (string | number)[] = [];
+
+  if (level) {
+    conditions.push("level = ?");
+    binds.push(level);
+  }
+  if (category) {
+    conditions.push("category = ?");
+    binds.push(category);
+  }
+
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+  sql += " ORDER BY created_at DESC LIMIT ?";
+  binds.push(limit);
+
+  const stmt = c.env.DB.prepare(sql);
+  const rows = await stmt.bind(...binds).all();
+
+  return c.json(
+    rows.results.map((row) => ({
+      id: row.id,
+      level: row.level,
+      category: row.category,
+      message: row.message,
+      details: row.details ? safeJsonParse(row.details, {}) : null,
+      createdAt: row.created_at,
+    }))
+  );
+});
+
 // --- Public endpoints ---
 
 app.get("/api/today", async (c) => {
@@ -210,7 +254,11 @@ app.post("/api/subscribe", async (c) => {
       .bind(crypto.randomUUID(), email)
       .run();
     return c.json({ ok: true });
-  } catch {
+  } catch (err) {
+    const log = createLogger(c.env.DB);
+    await log.warn("system", "Subscriber insert failed (likely duplicate)", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return c.json({ ok: true, already: true });
   }
 });
@@ -295,37 +343,41 @@ app.get("/api/methodology", async (c) => {
 // --- Admin endpoints ---
 
 app.post("/api/fetch", async (c) => {
+  const log = createLogger(c.env.DB);
   const result = await fetchOQArticles(c.env.DB);
-  await logAdminAction(c.env.DB, "fetch", "/api/fetch", 200, result);
+  await logAdminAction(c.env.DB, "fetch", "/api/fetch", 200, result, log);
   return c.json(result);
 });
 
 app.post("/api/score", async (c) => {
-  const result = await generateDailyScore(c.env);
-  await logAdminAction(c.env.DB, "score", "/api/score", 200, result);
+  const log = createLogger(c.env.DB);
+  const result = await generateDailyScore(c.env, log);
+  await logAdminAction(c.env.DB, "score", "/api/score", 200, result, log);
   return c.json(result);
 });
 
 app.post("/api/fetch-sanity", async (c) => {
+  const log = createLogger(c.env.DB);
   try {
     const result = await fetchAndStoreSanityHarness(c.env.DB);
-    await logAdminAction(c.env.DB, "fetch-sanity", "/api/fetch-sanity", 200, result);
+    await logAdminAction(c.env.DB, "fetch-sanity", "/api/fetch-sanity", 200, result, log);
     return c.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "SanityHarness fetch failed";
-    await logAdminAction(c.env.DB, "fetch-sanity", "/api/fetch-sanity", 500, { error: msg });
+    await logAdminAction(c.env.DB, "fetch-sanity", "/api/fetch-sanity", 500, { error: msg }, log);
     return c.json({ error: msg }, 500);
   }
 });
 
 app.post("/api/fetch-swebench", async (c) => {
+  const log = createLogger(c.env.DB);
   try {
     const result = await fetchAndStoreSWEBench(c.env.DB);
-    await logAdminAction(c.env.DB, "fetch-swebench", "/api/fetch-swebench", 200, result);
+    await logAdminAction(c.env.DB, "fetch-swebench", "/api/fetch-swebench", 200, result, log);
     return c.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "SWE-bench fetch failed";
-    await logAdminAction(c.env.DB, "fetch-swebench", "/api/fetch-swebench", 500, { error: msg });
+    await logAdminAction(c.env.DB, "fetch-swebench", "/api/fetch-swebench", 500, { error: msg }, log);
     return c.json({ error: msg }, 500);
   }
 });
@@ -334,13 +386,14 @@ app.post("/api/fetch-fred", async (c) => {
   if (!c.env.FRED_API_KEY) {
     return c.json({ error: "FRED_API_KEY not configured" }, 503);
   }
+  const log = createLogger(c.env.DB);
   try {
-    const result = await fetchAndStoreFRED(c.env.DB, c.env.FRED_API_KEY);
-    await logAdminAction(c.env.DB, "fetch-fred", "/api/fetch-fred", 200, result);
+    const result = await fetchAndStoreFRED(c.env.DB, c.env.FRED_API_KEY, log);
+    await logAdminAction(c.env.DB, "fetch-fred", "/api/fetch-fred", 200, result, log);
     return c.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "FRED fetch failed";
-    await logAdminAction(c.env.DB, "fetch-fred", "/api/fetch-fred", 500, { error: msg });
+    await logAdminAction(c.env.DB, "fetch-fred", "/api/fetch-fred", 500, { error: msg }, log);
     return c.json({ error: msg }, 500);
   }
 });
@@ -372,7 +425,10 @@ interface ExternalData {
 const LATEST_EXTERNAL_SQL =
   "SELECT value FROM oq_external_data_history WHERE key = ? ORDER BY fetched_at DESC LIMIT 1";
 
-async function loadExternalData(db: D1Database): Promise<ExternalData> {
+async function loadExternalData(
+  db: D1Database,
+  log?: Logger
+): Promise<ExternalData> {
   const result: ExternalData = {};
   try {
     const [sanity, swe, fred] = await db.batch([
@@ -384,15 +440,15 @@ async function loadExternalData(db: D1Database): Promise<ExternalData> {
     if (sanity.results[0]) {
       try {
         result.sanityHarness = JSON.parse(sanity.results[0].value as string);
-      } catch (e) {
-        console.error("[oq] corrupt sanity_harness data:", e);
+      } catch {
+        await log?.error("external", "Corrupt sanity_harness data in DB");
       }
     }
     if (swe.results[0]) {
       try {
         result.sweBench = JSON.parse(swe.results[0].value as string);
-      } catch (e) {
-        console.error("[oq] corrupt swe_bench data:", e);
+      } catch {
+        await log?.error("external", "Corrupt swe_bench data in DB");
       }
     }
     if (fred.results[0]) {
@@ -404,15 +460,14 @@ async function loadExternalData(db: D1Database): Promise<ExternalData> {
         result.generalIndex = data.generalIndex;
         result.generalDate = data.generalDate;
         result.generalTrend = data.generalTrend;
-      } catch (e) {
-        console.error("[oq] corrupt fred_labour data:", e);
+      } catch {
+        await log?.error("external", "Corrupt fred_labour data in DB");
       }
     }
   } catch (err) {
-    console.error(
-      "[oq] loadExternalData failed:",
-      err instanceof Error ? err.message : err
-    );
+    await log?.error("external", "loadExternalData failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
   return result;
 }
@@ -508,9 +563,10 @@ async function fetchAndStoreSWEBench(
 
 async function fetchAndStoreFRED(
   db: D1Database,
-  apiKey: string
+  apiKey: string,
+  log?: Logger
 ): Promise<{ stored: boolean; softwareIndex?: number; generalIndex?: number }> {
-  const data = await fetchFREDData(apiKey);
+  const data = await fetchFREDData(apiKey, log);
 
   // Validate: at least one index should be present
   if (data.softwareIndex === undefined && data.generalIndex === undefined) {
@@ -657,7 +713,10 @@ function stripHtml(text: string): string {
 
 // --- Daily score generation ---
 
-async function generateDailyScore(env: Env): Promise<{
+async function generateDailyScore(
+  env: Env,
+  log?: Logger
+): Promise<{
   score: number;
   delta: number;
   date: string;
@@ -765,7 +824,7 @@ async function generateDailyScore(env: Env): Promise<{
   }
 
   // Load external data for prompt context
-  const externalData = await loadExternalData(env.DB);
+  const externalData = await loadExternalData(env.DB, log);
 
   // Track data quality — flag missing external data sources
   const qualityFlags: string[] = [];
@@ -804,6 +863,7 @@ async function generateDailyScore(env: Env): Promise<{
     generalIndex: externalData.generalIndex,
     generalDate: externalData.generalDate,
     generalTrend: externalData.generalTrend,
+    log,
   });
 
   const scoreId = await saveScore(env.DB, {
@@ -910,8 +970,10 @@ async function generateDailyScore(env: Env): Promise<{
     )
       .bind(crypto.randomUUID(), result.promptHash, prompt)
       .run();
-  } catch {
-    // Non-critical
+  } catch (err) {
+    await log?.warn("score", "Prompt version insert failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   return { score: result.score, delta: result.delta, date: today };
@@ -1010,7 +1072,8 @@ async function logCronRun(
     scoreResult?: unknown;
     externalFetchStatus?: Record<string, string>;
     error?: string;
-  }
+  },
+  log?: Logger
 ): Promise<void> {
   try {
     await db
@@ -1033,7 +1096,10 @@ async function logCronRun(
       )
       .run();
   } catch (err) {
-    console.error("[oq] logCronRun failed:", err);
+    await log?.error("system", "logCronRun DB write failed", {
+      error: err instanceof Error ? err.message : String(err),
+      runId: run.id,
+    });
   }
 }
 
@@ -1042,7 +1108,8 @@ async function logAdminAction(
   action: string,
   endpoint: string,
   status: number,
-  summary?: unknown
+  summary?: unknown,
+  log?: Logger
 ): Promise<void> {
   try {
     await db
@@ -1058,13 +1125,18 @@ async function logAdminAction(
       )
       .run();
   } catch (err) {
-    console.error("[oq] logAdminAction failed:", err);
+    await log?.error("admin", "logAdminAction DB write failed", {
+      error: err instanceof Error ? err.message : String(err),
+      action,
+      endpoint,
+    });
   }
 }
 
 async function persistFetchErrors(
   db: D1Database,
-  errors: FetchError[]
+  errors: FetchError[],
+  log?: Logger
 ): Promise<void> {
   if (errors.length === 0) return;
   try {
@@ -1083,8 +1155,11 @@ async function persistFetchErrors(
           )
       )
     );
-  } catch {
-    // Best-effort logging
+  } catch (err) {
+    await log?.error("fetch", "persistFetchErrors DB write failed", {
+      error: err instanceof Error ? err.message : String(err),
+      errorCount: errors.length,
+    });
   }
 }
 
@@ -1096,6 +1171,8 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
       (async () => {
+        const log = createLogger(env.DB);
+
         // Idempotency: skip if a successful cron already ran today
         const today = new Date().toISOString().split("T")[0];
         const existingRun = await env.DB.prepare(
@@ -1104,11 +1181,12 @@ export default {
           .bind(today)
           .first();
         if (existingRun) {
-          console.log("[oq] Cron: skipping duplicate run for", today);
+          await log.info("cron", "Skipping duplicate run", { date: today });
           return;
         }
 
         const runId = crypto.randomUUID();
+        const cronLog = log.child({ cronRunId: runId });
         const startedAt = new Date().toISOString();
         let fetchStatus = "pending";
         let fetchArticles = 0;
@@ -1121,12 +1199,12 @@ export default {
           // Weekly external data fetches (Sundays)
           const dayOfWeek = new Date().getUTCDay();
           if (dayOfWeek === 0) {
-            console.log("[oq] Cron: fetching external data (weekly)");
+            await cronLog.info("external", "Fetching external data (weekly)");
             const results = await Promise.allSettled([
               fetchAndStoreSanityHarness(env.DB),
               fetchAndStoreSWEBench(env.DB),
               ...(env.FRED_API_KEY
-                ? [fetchAndStoreFRED(env.DB, env.FRED_API_KEY)]
+                ? [fetchAndStoreFRED(env.DB, env.FRED_API_KEY, cronLog)]
                 : []),
             ]);
 
@@ -1140,8 +1218,18 @@ export default {
                 r.status === "fulfilled" ? "success" : `failed: ${r.reason}`;
             });
 
+            // Log external fetch failures individually
+            for (const [source, status] of Object.entries(externalStatus)) {
+              if (status !== "success") {
+                await cronLog.warn("external", `External fetch failed: ${source}`, {
+                  source,
+                  status,
+                });
+              }
+            }
+
             // Weekly data retention cleanup
-            console.log("[oq] Cron: running data retention cleanup");
+            await cronLog.info("system", "Running data retention cleanup");
             await env.DB.batch([
               env.DB.prepare(
                 "DELETE FROM oq_articles WHERE fetched_at < datetime('now', '-90 days')"
@@ -1155,10 +1243,13 @@ export default {
               env.DB.prepare(
                 "DELETE FROM oq_admin_actions WHERE created_at < datetime('now', '-90 days')"
               ),
+              env.DB.prepare(
+                "DELETE FROM oq_logs WHERE created_at < datetime('now', '-30 days')"
+              ),
             ]);
           }
 
-          console.log("[oq] Cron: fetching articles");
+          await cronLog.info("fetch", "Fetching articles");
           const fetchResult = await fetchOQArticles(env.DB);
           fetchStatus = "success";
           fetchArticles = fetchResult.fetched;
@@ -1166,11 +1257,19 @@ export default {
 
           // Persist any fetch errors
           if (fetchErrors.length > 0) {
-            await persistFetchErrors(env.DB, fetchErrors);
+            await persistFetchErrors(env.DB, fetchErrors, cronLog);
+            await cronLog.warn("fetch", `${fetchErrors.length} feed errors`, {
+              errors: fetchErrors,
+            });
           }
 
-          console.log("[oq] Cron: generating daily score");
-          scoreResult = await generateDailyScore(env);
+          await cronLog.info("fetch", "Articles fetched", {
+            fetched: fetchArticles,
+            errorCount: fetchErrors.length,
+          });
+
+          await cronLog.info("score", "Generating daily score");
+          scoreResult = await generateDailyScore(env, cronLog);
           scoreStatus = "success";
         } catch (err) {
           const phase =
@@ -1178,7 +1277,34 @@ export default {
           if (phase === "fetch") fetchStatus = "failed";
           else scoreStatus = "failed";
 
-          await logCronRun(env.DB, {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          await cronLog.error("cron", `Cron failed in ${phase} phase`, {
+            phase,
+            error: errorMsg,
+          });
+
+          await logCronRun(
+            env.DB,
+            {
+              id: runId,
+              startedAt,
+              completedAt: new Date().toISOString(),
+              fetchStatus,
+              fetchArticles,
+              fetchErrors,
+              scoreStatus,
+              scoreResult,
+              externalFetchStatus: externalStatus,
+              error: errorMsg,
+            },
+            cronLog
+          );
+          throw err;
+        }
+
+        await logCronRun(
+          env.DB,
+          {
             id: runId,
             startedAt,
             completedAt: new Date().toISOString(),
@@ -1187,25 +1313,18 @@ export default {
             fetchErrors,
             scoreStatus,
             scoreResult,
-            externalFetchStatus: externalStatus,
-            error: err instanceof Error ? err.message : String(err),
-          });
-          throw err;
-        }
+            externalFetchStatus:
+              Object.keys(externalStatus).length > 0
+                ? externalStatus
+                : undefined,
+          },
+          cronLog
+        );
 
-        await logCronRun(env.DB, {
-          id: runId,
-          startedAt,
-          completedAt: new Date().toISOString(),
-          fetchStatus,
+        await cronLog.info("cron", "Cron completed successfully", {
           fetchArticles,
-          fetchErrors,
-          scoreStatus,
+          fetchErrorCount: fetchErrors.length,
           scoreResult,
-          externalFetchStatus:
-            Object.keys(externalStatus).length > 0
-              ? externalStatus
-              : undefined,
         });
       })()
     );
