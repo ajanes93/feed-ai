@@ -542,9 +542,20 @@ async function enrichDigestComments(
     }
   }
 
-  // Record AI usages
+  // Record AI usages (best-effort)
   if (aiUsages.length > 0) {
-    await recordAIUsage(env.DB, aiUsages);
+    const results = await Promise.allSettled(
+      aiUsages.map((u) => recordAIUsage(env.DB, u))
+    );
+    const failed = results.filter((r) => r.status === "rejected");
+    if (failed.length > 0) {
+      await logEvent(env.DB, {
+        level: "warn",
+        category: "ai",
+        message: `Failed to record ${failed.length}/${aiUsages.length} AI usage entries`,
+        digestId,
+      });
+    }
   }
 
   // Log all comment enrichment logs
@@ -704,13 +715,15 @@ export async function summarizeNewItems(env: Env): Promise<Response> {
 
   // Record AI usages (best-effort — don't block digest on logging failure)
   if (allAiUsages.length > 0) {
-    try {
-      await recordAIUsage(env.DB, allAiUsages);
-    } catch (err) {
+    const results = await Promise.allSettled(
+      allAiUsages.map((u) => recordAIUsage(env.DB, u))
+    );
+    const failed = results.filter((r) => r.status === "rejected");
+    if (failed.length > 0) {
       await logEvent(env.DB, {
         level: "warn",
         category: "general",
-        message: `Failed to record AI usage: ${err instanceof Error ? err.message : String(err)}`,
+        message: `Failed to record ${failed.length}/${allAiUsages.length} AI usage entries`,
         digestId,
       });
     }

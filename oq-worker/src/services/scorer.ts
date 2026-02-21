@@ -8,11 +8,13 @@ import type {
 } from "@feed-ai/shared/oq-types";
 import { buildScoringPrompt, hashPrompt } from "./prompt";
 import type { AIUsageEntry } from "@feed-ai/shared/types";
+import type { FREDSeriesTrend } from "./fred";
 
 // --- Model calling ---
 
 interface ModelResult {
   parsed: OQModelScore;
+  rawResponse: string;
   usage: AIUsageEntry;
 }
 
@@ -55,6 +57,7 @@ async function callGemini(
 
   return {
     parsed,
+    rawResponse: text,
     usage: {
       model: "gemini-2.0-flash",
       provider: "gemini",
@@ -90,6 +93,7 @@ async function callClaude(
 
   return {
     parsed,
+    rawResponse: content.text,
     usage: {
       model: "claude-sonnet-4-5-20250929",
       provider: "anthropic",
@@ -140,6 +144,7 @@ async function callOpenAI(
 
   return {
     parsed,
+    rawResponse: text,
     usage: {
       model: "gpt-4o",
       provider: "openai",
@@ -262,6 +267,25 @@ function mergePillarScores(scores: OQModelScore[]): OQPillarScores {
   return result;
 }
 
+function formatModelName(model: string): string {
+  if (model.includes("claude")) return "Claude";
+  if (model.includes("gpt")) return "GPT-4";
+  if (model.includes("gemini")) return "Gemini";
+  return model.split("-")[0];
+}
+
+function deltaVerb(delta: number): string {
+  if (delta > 0.5) return "upgraded the score";
+  if (delta < -0.5) return "downgraded the score";
+  return "held steady";
+}
+
+function firstSentence(text: string): string {
+  const match = text.match(/^[^.!?]+[.!?]/);
+  if (match) return match[0].trim();
+  return text.length > 120 ? text.slice(0, 120) + "..." : text;
+}
+
 function synthesizeAnalysis(
   scores: OQModelScore[],
   agreement: OQModelAgreement
@@ -269,10 +293,12 @@ function synthesizeAnalysis(
   if (scores.length === 1) return scores[0].analysis;
 
   if (agreement === "disagree") {
-    const parts = scores.map(
-      (s) => `${s.model.split("-")[0].toUpperCase()}: "${s.analysis}"`
-    );
-    return parts.join(" — Meanwhile, ");
+    return scores
+      .map((s) => {
+        const sign = s.suggested_delta > 0 ? "+" : "";
+        return `${formatModelName(s.model)} ${deltaVerb(s.suggested_delta)} (${sign}${s.suggested_delta}), citing: ${firstSentence(s.analysis)}`;
+      })
+      .join(" ");
   }
 
   const claude = scores.find((s) => s.model.includes("claude"));
@@ -290,6 +316,16 @@ export {
 
 // --- Main scoring pipeline ---
 
+export interface OQModelResponse {
+  model: string;
+  provider: string;
+  rawResponse: string;
+  parsed: OQModelScore;
+  inputTokens?: number;
+  outputTokens?: number;
+  latencyMs?: number;
+}
+
 export interface OQScoringResult {
   score: number;
   scoreTechnical: number;
@@ -299,11 +335,20 @@ export interface OQScoringResult {
   signals: OQSignal[];
   pillarScores: OQPillarScores;
   modelScores: OQModelScore[];
+  modelResponses: OQModelResponse[];
   modelAgreement: OQModelAgreement;
   modelSpread: number;
   capabilityGap?: string;
   promptHash: string;
   aiUsages: AIUsageEntry[];
+}
+
+interface ScorerLogger {
+  warn: (
+    category: string,
+    message: string,
+    details?: Record<string, unknown>
+  ) => Promise<void>;
 }
 
 interface ScoringInput {
@@ -317,25 +362,71 @@ interface ScoringInput {
     gemini?: string;
     openai?: string;
   };
+  sanityHarness?: {
+    topPassRate: number;
+    topAgent: string;
+    topModel: string;
+    medianPassRate: number;
+    languageBreakdown: string;
+  };
+  sweBench?: {
+    topVerified: number;
+    topVerifiedModel: string;
+    topBashOnly: number;
+    topBashOnlyModel: string;
+  };
+  softwareIndex?: number;
+  softwareDate?: string;
+  softwareTrend?: FREDSeriesTrend;
+  generalIndex?: number;
+  generalDate?: string;
+  generalTrend?: FREDSeriesTrend;
+  log?: ScorerLogger;
 }
 
 const MAX_RETRIES = 3;
 
+interface ModelCallResult {
+  result: ModelResult | null;
+  failedUsage?: AIUsageEntry;
+}
+
 async function callModelWithRetry(
   name: string,
-  fn: () => Promise<ModelResult>
-): Promise<ModelResult | null> {
+  model: string,
+  provider: string,
+  fn: () => Promise<ModelResult>,
+  log?: ScorerLogger
+): Promise<ModelCallResult> {
+  let lastError: string | undefined;
+  const start = Date.now();
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      return await fn();
+      return { result: await fn() };
     } catch (err) {
-      console.warn(`${name} attempt ${attempt + 1} failed:`, err);
+      lastError = err instanceof Error ? err.message : String(err);
+      await log?.warn("score", `${name} attempt ${attempt + 1} failed`, {
+        model,
+        provider,
+        attempt: attempt + 1,
+        error: lastError,
+      });
       if (attempt < MAX_RETRIES - 1) {
         await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
       }
     }
   }
-  return null;
+  return {
+    result: null,
+    failedUsage: {
+      model,
+      provider,
+      latencyMs: Date.now() - start,
+      wasFallback: false,
+      status: "failed",
+      error: lastError,
+    },
+  };
 }
 
 export async function runScoring(
@@ -347,73 +438,103 @@ export async function runScoring(
     economicScore: input.previousEconomic,
     history: input.history,
     articlesByPillar: input.articlesByPillar,
+    sanityHarness: input.sanityHarness,
+    sweBench: input.sweBench,
+    softwareIndex: input.softwareIndex,
+    softwareDate: input.softwareDate,
+    softwareTrend: input.softwareTrend,
+    generalIndex: input.generalIndex,
+    generalDate: input.generalDate,
+    generalTrend: input.generalTrend,
   });
 
   const promptHash = await hashPrompt(prompt);
 
-  const calls: Promise<ModelResult | null>[] = [];
+  const calls: Promise<ModelCallResult>[] = [];
 
   if (input.apiKeys.anthropic) {
     calls.push(
-      callModelWithRetry("Claude", () =>
-        callClaude(prompt, input.apiKeys.anthropic!)
+      callModelWithRetry(
+        "Claude",
+        "claude-sonnet-4-5-20250929",
+        "anthropic",
+        () => callClaude(prompt, input.apiKeys.anthropic!),
+        input.log
       )
     );
   }
   if (input.apiKeys.openai) {
     calls.push(
-      callModelWithRetry("GPT-4", () =>
-        callOpenAI(prompt, input.apiKeys.openai!)
+      callModelWithRetry(
+        "GPT-4",
+        "gpt-4o",
+        "openai",
+        () => callOpenAI(prompt, input.apiKeys.openai!),
+        input.log
       )
     );
   }
   if (input.apiKeys.gemini) {
     calls.push(
-      callModelWithRetry("Gemini", () =>
-        callGemini(prompt, input.apiKeys.gemini!)
+      callModelWithRetry(
+        "Gemini",
+        "gemini-2.0-flash",
+        "gemini",
+        () => callGemini(prompt, input.apiKeys.gemini!),
+        input.log
       )
     );
   }
 
-  const modelResults = (await Promise.all(calls)).filter(
-    (r): r is ModelResult => r !== null
-  );
+  const callResults = await Promise.all(calls);
+  const modelResults = callResults
+    .map((r) => r.result)
+    .filter((r): r is ModelResult => r !== null);
+
+  // Collect both successful and failed usage entries
+  const aiUsages: AIUsageEntry[] = [
+    ...modelResults.map((r) => r.usage),
+    ...callResults
+      .filter((r) => r.failedUsage)
+      .map((r) => r.failedUsage as AIUsageEntry),
+  ];
 
   if (modelResults.length === 0) {
     throw new Error("All AI models failed — cannot generate score");
   }
 
   const scores = modelResults.map((r) => r.parsed);
-  const aiUsages = modelResults.map((r) => r.usage);
+  const modelResponses: OQModelResponse[] = modelResults.map((r) => ({
+    model: r.usage.model,
+    provider: r.usage.provider,
+    rawResponse: r.rawResponse,
+    parsed: r.parsed,
+    inputTokens: r.usage.inputTokens,
+    outputTokens: r.usage.outputTokens,
+    latencyMs: r.usage.latencyMs,
+  }));
+
+  // Dampen a raw delta: clamp to ±cap, multiply by 0.3, round to 1dp
+  const dampen = (raw: number, cap = 1.2) =>
+    Math.round(Math.max(-cap, Math.min(cap, raw * 0.3)) * 10) / 10;
 
   // Consensus calculation
   const consensusDelta = calculateConsensusDelta(scores);
-  const clampedDelta = Math.max(-4, Math.min(4, consensusDelta));
-  const dampened = clampedDelta * 0.3;
-  const finalDelta =
-    Math.round(Math.max(-1.2, Math.min(1.2, dampened)) * 10) / 10;
+  const preDampened = Math.max(-4, Math.min(4, consensusDelta));
+  const finalDelta = dampen(preDampened, 1.2);
 
   // Calculate sub-score deltas
-  const avgTechnicalDelta =
-    scores.reduce((sum, s) => sum + s.technical_delta, 0) / scores.length;
-  const avgEconomicDelta =
-    scores.reduce((sum, s) => sum + s.economic_delta, 0) / scores.length;
+  const avg = (fn: (s: OQModelScore) => number) =>
+    scores.reduce((sum, s) => sum + fn(s), 0) / scores.length;
+  const techDelta = dampen(avg((s) => s.technical_delta));
+  const econDelta = dampen(avg((s) => s.economic_delta));
 
-  const techDelta =
-    Math.round(Math.max(-1.2, Math.min(1.2, avgTechnicalDelta * 0.3)) * 10) /
-    10;
-  const econDelta =
-    Math.round(Math.max(-1.2, Math.min(1.2, avgEconomicDelta * 0.3)) * 10) / 10;
+  const clampScore = (prev: number, delta: number) =>
+    Math.round(Math.max(5, Math.min(95, prev + delta)));
 
-  const newScore = Math.round(
-    Math.max(5, Math.min(95, input.previousScore + finalDelta))
-  );
-  const newTechnical = Math.round(
-    Math.max(5, Math.min(95, input.previousTechnical + techDelta))
-  );
-  const newEconomic = Math.round(
-    Math.max(5, Math.min(95, input.previousEconomic + econDelta))
-  );
+  const newScore = clampScore(input.previousScore, finalDelta);
+  const newTechnical = clampScore(input.previousTechnical, techDelta);
+  const newEconomic = clampScore(input.previousEconomic, econDelta);
 
   const { agreement, spread } = calculateModelAgreement(scores);
   const signals = mergeSignals(scores);
@@ -435,6 +556,7 @@ export async function runScoring(
     signals,
     pillarScores,
     modelScores: scores,
+    modelResponses,
     modelAgreement: agreement,
     modelSpread: Math.round(spread * 10) / 10,
     capabilityGap: gapNotes || undefined,

@@ -52,10 +52,53 @@ describe("buildScoringPrompt", () => {
     expect(prompt).toContain("0-2 points");
   });
 
+  it("includes FRED trend data when provided", () => {
+    const prompt = buildScoringPrompt({
+      ...defaultContext,
+      softwareIndex: 47.3,
+      softwareDate: "2026-02-14",
+      softwareTrend: {
+        current: 47.3,
+        currentDate: "2026-02-14",
+        change1w: -5.4,
+        change4w: -12.1,
+        previous: 50.0,
+        previousDate: "2026-02-07",
+      },
+      generalIndex: 215000,
+      generalDate: "2026-02-14",
+      generalTrend: {
+        current: 215000,
+        currentDate: "2026-02-14",
+        change1w: 2.3,
+        change4w: -1.5,
+        previous: 210000,
+        previousDate: "2026-02-07",
+      },
+    });
+    expect(prompt).toContain("47.3");
+    expect(prompt).toContain("-5.4% week-over-week");
+    expect(prompt).toContain("-12.1% over 4 weeks");
+    expect(prompt).toContain("+2.3% week-over-week");
+    expect(prompt).toContain("-1.5% over 4 weeks");
+  });
+
+  it("omits trend parentheses when no trend provided", () => {
+    const prompt = buildScoringPrompt({
+      ...defaultContext,
+      softwareIndex: 47.3,
+      softwareDate: "2026-02-14",
+      generalIndex: 215000,
+      generalDate: "2026-02-14",
+    });
+    expect(prompt).toContain("47.3");
+    expect(prompt).not.toContain("week-over-week");
+  });
+
   it("includes capability gap framing", () => {
     const prompt = buildScoringPrompt(defaultContext);
     expect(prompt).toContain("SWE-bench Verified");
-    expect(prompt).toContain("SWE-bench Pro");
+    expect(prompt).toContain("SWE-bench Bash Only");
     expect(prompt).toContain("Capability Gap");
   });
 });

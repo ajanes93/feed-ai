@@ -7,10 +7,13 @@ import OQSignalList from "../components/OQSignalList.vue";
 import OQTrendChart from "../components/OQTrendChart.vue";
 import OQModelAgreement from "../components/OQModelAgreement.vue";
 import OQSubscribe from "../components/OQSubscribe.vue";
+import OQWhatWouldChange from "../components/OQWhatWouldChange.vue";
+import OQCapabilityGap from "../components/OQCapabilityGap.vue";
 
 const {
   today,
   history,
+  methodology,
   loading,
   error,
   formattedDate,
@@ -18,12 +21,13 @@ const {
   deltaDirection,
   fetchToday,
   fetchHistory,
+  fetchMethodology,
   subscribe,
   subscribeStatus,
 } = useOneQuestion();
 
 onMounted(async () => {
-  await Promise.all([fetchToday(), fetchHistory()]);
+  await Promise.all([fetchToday(), fetchHistory(), fetchMethodology()]);
 });
 </script>
 
@@ -185,24 +189,16 @@ onMounted(async () => {
 
         <!-- Capability Gap -->
         <motion.section
-          v-if="today.capabilityGap"
           class="mt-6"
           :initial="{ opacity: 0, y: 20 }"
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.6, delay: 0.3 }"
         >
-          <div
-            class="rounded-2xl border border-gray-800 bg-gray-900 p-6 sm:p-8"
-          >
-            <div
-              class="mb-3 text-[10px] tracking-widest text-gray-600 uppercase"
-            >
-              The Capability Gap
-            </div>
-            <p class="text-sm leading-relaxed text-gray-400">
-              {{ today.capabilityGap }}
-            </p>
-          </div>
+          <OQCapabilityGap
+            :verified="methodology?.capabilityGap?.verified ?? '~79%'"
+            :bash-only="methodology?.capabilityGap?.bashOnly ?? '~77%'"
+            :note="today.capabilityGap"
+          />
         </motion.section>
 
         <!-- Trend Chart -->
@@ -219,12 +215,27 @@ onMounted(async () => {
           <OQTrendChart :history="history" />
         </motion.section>
 
+        <!-- What Would Move This Score -->
+        <motion.section
+          v-if="methodology"
+          class="mt-8"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ duration: 0.6, delay: 0.5 }"
+        >
+          <OQWhatWouldChange
+            :to50="methodology.whatWouldChange.to50"
+            :to70="methodology.whatWouldChange.to70"
+            :below20="methodology.whatWouldChange.below20"
+          />
+        </motion.section>
+
         <!-- Subscribe -->
         <motion.section
           class="pt-12 pb-16"
           :initial="{ opacity: 0, y: 20 }"
           :animate="{ opacity: 1, y: 0 }"
-          :transition="{ duration: 0.6, delay: 0.5 }"
+          :transition="{ duration: 0.6, delay: 0.6 }"
         >
           <OQSubscribe :status="subscribeStatus" @subscribe="subscribe" />
         </motion.section>
@@ -243,7 +254,14 @@ onMounted(async () => {
         >
           Andres Janes
         </a>
-        · Powered by feed-ai · Data refreshed daily at 06:30 UTC
+        ·
+        <router-link
+          to="/methodology"
+          class="text-gray-500 hover:text-orange-500"
+        >
+          Methodology
+        </router-link>
+        · Data refreshed daily at 06:30 UTC
       </footer>
     </div>
   </div>

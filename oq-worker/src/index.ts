@@ -3,11 +3,21 @@ import type { Context } from "hono";
 import { cors } from "hono/cors";
 import { XMLParser } from "fast-xml-parser";
 import type { OQPillar } from "@feed-ai/shared/oq-types";
-import type { AIUsageEntry } from "@feed-ai/shared/types";
 import type { Env } from "./types";
 import { oqSources } from "./sources";
 import { runScoring } from "./services/scorer";
 import { buildScoringPrompt, hashPrompt } from "./services/prompt";
+import {
+  fetchSanityHarness,
+  buildSanityHarnessArticleSummary,
+} from "./services/sanity-harness";
+import { fetchSWEBenchLeaderboard } from "./services/swe-bench";
+import { fetchFREDData, type FREDSeriesTrend } from "./services/fred";
+import { Logger } from "@feed-ai/shared/logger";
+
+function createLogger(db: D1Database, context?: Record<string, unknown>) {
+  return new Logger(db, { table: "oq_logs", prefix: "oq" }, context);
+}
 
 const STARTING_SCORE = 32;
 const STARTING_TECHNICAL = 25;
@@ -45,6 +55,9 @@ async function adminAuth(
 app.use("/api/fetch", adminAuth);
 app.use("/api/score", adminAuth);
 app.use("/api/admin/*", adminAuth);
+app.use("/api/fetch-sanity", adminAuth);
+app.use("/api/fetch-swebench", adminAuth);
+app.use("/api/fetch-fred", adminAuth);
 
 // --- Admin dashboard ---
 
@@ -99,6 +112,70 @@ app.get("/api/admin/dashboard", async (c) => {
   });
 });
 
+app.get("/api/admin/external-history", async (c) => {
+  const key = c.req.query("key");
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "90") || 90, 365);
+
+  const rows = key
+    ? await c.env.DB.prepare(
+        "SELECT key, value, fetched_at FROM oq_external_data_history WHERE key = ? ORDER BY fetched_at DESC LIMIT ?"
+      )
+        .bind(key, limit)
+        .all()
+    : await c.env.DB.prepare(
+        "SELECT key, value, fetched_at FROM oq_external_data_history ORDER BY fetched_at DESC LIMIT ?"
+      )
+        .bind(limit)
+        .all();
+
+  return c.json(
+    rows.results.map((row) => ({
+      key: row.key,
+      value: JSON.parse(row.value as string),
+      fetchedAt: row.fetched_at,
+    }))
+  );
+});
+
+app.get("/api/admin/logs", async (c) => {
+  const level = c.req.query("level");
+  const category = c.req.query("category");
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "100") || 100, 500);
+
+  let sql = "SELECT * FROM oq_logs";
+  const conditions: string[] = [];
+  const binds: (string | number)[] = [];
+
+  if (level) {
+    conditions.push("level = ?");
+    binds.push(level);
+  }
+  if (category) {
+    conditions.push("category = ?");
+    binds.push(category);
+  }
+
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+  sql += " ORDER BY created_at DESC LIMIT ?";
+  binds.push(limit);
+
+  const stmt = c.env.DB.prepare(sql);
+  const rows = await stmt.bind(...binds).all();
+
+  return c.json(
+    rows.results.map((row) => ({
+      id: row.id,
+      level: row.level,
+      category: row.category,
+      message: row.message,
+      details: row.details ? safeJsonParse(row.details, {}) : null,
+      createdAt: row.created_at,
+    }))
+  );
+});
+
 // --- Public endpoints ---
 
 app.get("/api/today", async (c) => {
@@ -116,7 +193,7 @@ app.get("/api/today", async (c) => {
       scoreEconomic: STARTING_ECONOMIC,
       delta: 0,
       analysis:
-        "Tracking begins today. The Capability Gap between SWE-bench Verified (~80%) and SWE-bench Pro (~23%) tells the real story of where AI stands in software engineering.",
+        "Tracking begins today. SWE-bench Verified: ~79% | Bash Only: ~77%. High scores on curated bugs — real enterprise engineering is far harder.",
       signals: [],
       pillarScores: {
         capability: 0,
@@ -129,7 +206,7 @@ app.get("/api/today", async (c) => {
       modelAgreement: "partial",
       modelSpread: 0,
       capabilityGap:
-        "SWE-bench Verified: ~80% | SWE-bench Pro: ~23% — the gap is the story.",
+        "SWE-bench Verified: ~79% | Bash Only: ~77% — curated benchmarks; real engineering is harder.",
       isSeed: true,
     });
   }
@@ -177,12 +254,17 @@ app.post("/api/subscribe", async (c) => {
       .bind(crypto.randomUUID(), email)
       .run();
     return c.json({ ok: true });
-  } catch {
+  } catch (err) {
+    const log = createLogger(c.env.DB);
+    await log.warn("system", "Subscriber insert failed (likely duplicate)", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return c.json({ ok: true, already: true });
   }
 });
 
 app.get("/api/methodology", async (c) => {
+  const externalData = await loadExternalData(c.env.DB);
   const prompt = buildScoringPrompt({
     currentScore: 0,
     technicalScore: 0,
@@ -225,26 +307,33 @@ app.get("/api/methodology", async (c) => {
     startingScore: STARTING_SCORE,
     currentPromptHash: hash,
     capabilityGap: {
-      verified: "~80%",
-      pro: "~23%",
+      verified: externalData.sweBench
+        ? `${externalData.sweBench.topVerified}%`
+        : "~79%",
+      bashOnly: externalData.sweBench
+        ? `${externalData.sweBench.topBashOnly}%`
+        : "~77%",
       description:
-        "The gap between SWE-bench Verified (curated open-source) and Pro (private enterprise) is the central metric.",
+        "SWE-bench scores on curated open-source issues. Real enterprise engineering involves ambiguous requirements, system design, and cross-team coordination.",
     },
     whatWouldChange: {
       to50: [
-        "SWE-bench Pro climbing above 50% consistently",
+        "SWE-bench Verified consistently above 90% with diverse agents",
+        "Top SanityHarness agent >85% AND all languages >60%",
         "Multiple Fortune 500 companies reporting 50%+ reduction in engineering headcount",
         "Indeed software job posting index dropping significantly faster than general postings",
       ],
       to70: [
         "AI autonomously shipping and maintaining production systems at multiple companies for 6+ months",
+        "Median SanityHarness agent pass rate >70%",
         "Measurable, sustained decline in software engineering salaries",
         "Major open-source projects primarily maintained by AI agents",
       ],
       below20: [
         "AI coding tool market contracting",
         "Major failures of AI-generated production code causing regulatory backlash",
-        "SWE-bench Pro progress plateauing for 12+ months",
+        "SWE-bench Verified progress plateauing for 12+ months",
+        "Top SanityHarness agent plateaus or regresses",
         "Debugging AI code consistently taking longer than writing it from scratch",
       ],
     },
@@ -253,26 +342,240 @@ app.get("/api/methodology", async (c) => {
 
 // --- Admin endpoints ---
 
-app.post("/api/fetch", async (c) => {
-  const result = await fetchOQArticles(c.env.DB);
-  return c.json(result);
+async function adminHandler(
+  c: Context<{ Bindings: Env }>,
+  action: string,
+  fn: (log: Logger) => Promise<unknown>
+) {
+  const log = createLogger(c.env.DB);
+  try {
+    const result = await fn(log);
+    await log.info("admin", `${action} succeeded`, { action });
+    return c.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await log.error("admin", `${action} failed`, { action, error: msg });
+    return c.json({ error: msg }, 500);
+  }
+}
+
+app.post("/api/fetch", (c) =>
+  adminHandler(c, "fetch", () => fetchOQArticles(c.env.DB))
+);
+
+app.post("/api/score", (c) =>
+  adminHandler(c, "score", (log) => generateDailyScore(c.env, log))
+);
+
+app.post("/api/fetch-sanity", (c) =>
+  adminHandler(c, "fetch-sanity", () => fetchAndStoreSanityHarness(c.env.DB))
+);
+
+app.post("/api/fetch-swebench", (c) =>
+  adminHandler(c, "fetch-swebench", () => fetchAndStoreSWEBench(c.env.DB))
+);
+
+app.post("/api/fetch-fred", (c) => {
+  if (!c.env.FRED_API_KEY) {
+    return c.json({ error: "FRED_API_KEY not configured" }, 503);
+  }
+  return adminHandler(c, "fetch-fred", (log) =>
+    fetchAndStoreFRED(c.env.DB, c.env.FRED_API_KEY!, log)
+  );
 });
 
-app.post("/api/score", async (c) => {
-  const result = await generateDailyScore(c.env);
-  return c.json(result);
-});
+// --- External data loading ---
+
+interface ExternalData {
+  sanityHarness?: {
+    topPassRate: number;
+    topAgent: string;
+    topModel: string;
+    medianPassRate: number;
+    languageBreakdown: string;
+  };
+  sweBench?: {
+    topVerified: number;
+    topVerifiedModel: string;
+    topBashOnly: number;
+    topBashOnlyModel: string;
+  };
+  softwareIndex?: number;
+  softwareDate?: string;
+  softwareTrend?: FREDSeriesTrend;
+  generalIndex?: number;
+  generalDate?: string;
+  generalTrend?: FREDSeriesTrend;
+}
+
+const LATEST_EXTERNAL_SQL =
+  "SELECT value FROM oq_external_data_history WHERE key = ? ORDER BY fetched_at DESC LIMIT 1";
+
+async function loadExternalData(
+  db: D1Database,
+  log?: Logger
+): Promise<ExternalData> {
+  const result: ExternalData = {};
+  try {
+    const [sanity, swe, fred] = await db.batch([
+      db.prepare(LATEST_EXTERNAL_SQL).bind("sanity_harness"),
+      db.prepare(LATEST_EXTERNAL_SQL).bind("swe_bench"),
+      db.prepare(LATEST_EXTERNAL_SQL).bind("fred_labour"),
+    ]);
+
+    if (sanity.results[0]) {
+      try {
+        result.sanityHarness = JSON.parse(sanity.results[0].value as string);
+      } catch {
+        await log?.error("external", "Corrupt sanity_harness data in DB");
+      }
+    }
+    if (swe.results[0]) {
+      try {
+        result.sweBench = JSON.parse(swe.results[0].value as string);
+      } catch {
+        await log?.error("external", "Corrupt swe_bench data in DB");
+      }
+    }
+    if (fred.results[0]) {
+      try {
+        const data = JSON.parse(fred.results[0].value as string);
+        result.softwareIndex = data.softwareIndex;
+        result.softwareDate = data.softwareDate;
+        result.softwareTrend = data.softwareTrend;
+        result.generalIndex = data.generalIndex;
+        result.generalDate = data.generalDate;
+        result.generalTrend = data.generalTrend;
+      } catch {
+        await log?.error("external", "Corrupt fred_labour data in DB");
+      }
+    }
+  } catch (err) {
+    await log?.error("external", "loadExternalData failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+  return result;
+}
+
+// --- External data fetching ---
+
+// Same-day deduplication: D1 serializes requests so check-then-insert is safe.
+// If concurrency were possible, a unique index on (key, fetch_date) would be needed.
+async function storeExternalData(
+  db: D1Database,
+  key: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any
+): Promise<void> {
+  const existing = await db
+    .prepare(
+      "SELECT id FROM oq_external_data_history WHERE key = ? AND date(fetched_at) = date('now') LIMIT 1"
+    )
+    .bind(key)
+    .first();
+  if (existing) return;
+
+  await db
+    .prepare(
+      "INSERT INTO oq_external_data_history (id, key, value) VALUES (?, ?, ?)"
+    )
+    .bind(crypto.randomUUID(), key, JSON.stringify(data))
+    .run();
+}
+
+async function fetchAndStoreSanityHarness(
+  db: D1Database
+): Promise<{ stored: boolean; topPassRate: number }> {
+  const data = await fetchSanityHarness();
+
+  // Validate critical fields before storing
+  if (
+    typeof data.topPassRate !== "number" ||
+    data.topPassRate < 0 ||
+    data.topPassRate > 100
+  ) {
+    throw new Error(`SanityHarness: invalid topPassRate ${data.topPassRate}`);
+  }
+  if (!data.topAgent || !data.topModel) {
+    throw new Error("SanityHarness: missing topAgent or topModel");
+  }
+
+  const summary = buildSanityHarnessArticleSummary(data);
+  const today = new Date().toISOString().split("T")[0];
+
+  // Store as synthetic article (deduplicate by day)
+  await db
+    .prepare(
+      "INSERT INTO oq_articles (id, title, url, source, pillar, summary, published_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING"
+    )
+    .bind(
+      crypto.randomUUID(),
+      `SanityHarness Agent Benchmark Update — ${today}`,
+      `https://sanityboard.lr7.dev#sanityharness-${today}`,
+      "SanityHarness",
+      "capability",
+      summary,
+      new Date().toISOString()
+    )
+    .run();
+
+  await storeExternalData(db, "sanity_harness", data);
+  return { stored: true, topPassRate: data.topPassRate };
+}
+
+async function fetchAndStoreSWEBench(
+  db: D1Database
+): Promise<{ stored: boolean; verified: number; bashOnly: number }> {
+  const data = await fetchSWEBenchLeaderboard();
+
+  // Validate critical fields before storing
+  if (
+    typeof data.topVerified !== "number" ||
+    data.topVerified < 0 ||
+    data.topVerified > 100
+  ) {
+    throw new Error(`SWE-bench: invalid topVerified ${data.topVerified}`);
+  }
+
+  await storeExternalData(db, "swe_bench", data);
+  return {
+    stored: true,
+    verified: data.topVerified,
+    bashOnly: data.topBashOnly,
+  };
+}
+
+async function fetchAndStoreFRED(
+  db: D1Database,
+  apiKey: string,
+  log?: Logger
+): Promise<{ stored: boolean; softwareIndex?: number; generalIndex?: number }> {
+  const data = await fetchFREDData(apiKey, log);
+
+  // Validate: at least one index should be present
+  if (data.softwareIndex === undefined && data.generalIndex === undefined) {
+    throw new Error("FRED: no valid observation data returned");
+  }
+
+  await storeExternalData(db, "fred_labour", data);
+  return {
+    stored: true,
+    softwareIndex: data.softwareIndex,
+    generalIndex: data.generalIndex,
+  };
+}
 
 // --- Article fetching ---
 
 async function fetchOQArticles(
   db: D1Database
-): Promise<{ fetched: number; errors: string[] }> {
+): Promise<{ fetched: number; errors: FetchError[] }> {
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: "@_",
   });
-  const errors: string[] = [];
+  const errors: FetchError[] = [];
   let fetched = 0;
   const yesterday = new Date(Date.now() - 86400000).toISOString();
 
@@ -282,7 +585,12 @@ async function fetchOQArticles(
         headers: { "User-Agent": "FeedAI-OQ/1.0" },
       });
       if (!res.ok) {
-        errors.push(`${source.id}: HTTP ${res.status}`);
+        errors.push({
+          sourceId: source.id,
+          errorType: "http_error",
+          message: `HTTP ${res.status}`,
+          httpStatus: res.status,
+        });
         continue;
       }
 
@@ -299,24 +607,34 @@ async function fetchOQArticles(
           )
           .bind(
             crypto.randomUUID(),
-            item.title.slice(0, 500),
+            item.title,
             item.url,
             source.name,
             source.pillar,
-            item.summary?.slice(0, 500) ?? null,
+            item.summary ?? null,
             item.publishedAt ?? yesterday
           )
           .run();
         if (result.meta.changes > 0) fetched++;
       }
     } catch (err) {
-      errors.push(
-        `${source.id}: ${err instanceof Error ? err.message : String(err)}`
-      );
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push({
+        sourceId: source.id,
+        errorType: /timeout/i.test(message) ? "timeout" : "parse_error",
+        message,
+      });
     }
   }
 
   return { fetched, errors };
+}
+
+interface FetchError {
+  sourceId: string;
+  errorType: "http_error" | "parse_error" | "timeout";
+  message: string;
+  httpStatus?: number;
 }
 
 interface FeedItem {
@@ -380,7 +698,10 @@ function stripHtml(text: string): string {
 
 // --- Daily score generation ---
 
-async function generateDailyScore(env: Env): Promise<{
+async function generateDailyScore(
+  env: Env,
+  log?: Logger
+): Promise<{
   score: number;
   delta: number;
   date: string;
@@ -421,7 +742,7 @@ async function generateDailyScore(env: Env): Promise<{
 
   const yesterday = new Date(Date.now() - 86400000).toISOString();
   const articles = await env.DB.prepare(
-    "SELECT title, url, source, pillar, summary FROM oq_articles WHERE fetched_at >= ? ORDER BY published_at DESC"
+    "SELECT id, title, url, source, pillar, summary FROM oq_articles WHERE fetched_at >= ? ORDER BY published_at DESC"
   )
     .bind(yesterday)
     .all();
@@ -481,10 +802,33 @@ async function generateDailyScore(env: Env): Promise<{
       modelAgreement: "partial",
       modelSpread: 0,
       promptHash: shouldDecay ? "decay" : "no-articles",
+      isDecay: shouldDecay,
     });
 
     return { score: newScore, delta, date: today };
   }
+
+  // Load external data for prompt context
+  const externalData = await loadExternalData(env.DB, log);
+
+  // Track data quality — flag missing external data sources
+  const qualityFlags: string[] = [];
+  if (!externalData.sanityHarness) qualityFlags.push("missing_sanity_harness");
+  if (!externalData.sweBench) qualityFlags.push("missing_swe_bench");
+  if (externalData.softwareIndex === undefined)
+    qualityFlags.push("missing_fred_software");
+  if (externalData.generalIndex === undefined)
+    qualityFlags.push("missing_fred_general");
+
+  const pillarCounts = Object.entries(articlesByPillar).filter(
+    ([, v]) => v.length > 0
+  );
+  if (pillarCounts.length < 5)
+    qualityFlags.push(
+      `sparse_pillars:${pillarCounts.map(([k]) => k).join(",")}`
+    );
+  if (totalArticles < 5)
+    qualityFlags.push(`low_article_count:${totalArticles}`);
 
   const result = await runScoring({
     previousScore: prevScore,
@@ -497,30 +841,18 @@ async function generateDailyScore(env: Env): Promise<{
       gemini: env.GEMINI_API_KEY,
       openai: env.OPENAI_API_KEY,
     },
+    sanityHarness: externalData.sanityHarness,
+    sweBench: externalData.sweBench,
+    softwareIndex: externalData.softwareIndex,
+    softwareDate: externalData.softwareDate,
+    softwareTrend: externalData.softwareTrend,
+    generalIndex: externalData.generalIndex,
+    generalDate: externalData.generalDate,
+    generalTrend: externalData.generalTrend,
+    log,
   });
 
-  for (const usage of result.aiUsages) {
-    await recordAIUsage(env.DB, usage);
-  }
-
-  try {
-    const prompt = buildScoringPrompt({
-      currentScore: prevScore,
-      technicalScore: prevTechnical,
-      economicScore: prevEconomic,
-      history,
-      articlesByPillar,
-    });
-    await env.DB.prepare(
-      "INSERT INTO oq_prompt_versions (id, hash, prompt_text) VALUES (?, ?, ?) ON CONFLICT(hash) DO NOTHING"
-    )
-      .bind(crypto.randomUUID(), result.promptHash, prompt.slice(0, 10000))
-      .run();
-  } catch {
-    // Non-critical
-  }
-
-  await saveScore(env.DB, {
+  const scoreId = await saveScore(env.DB, {
     date: today,
     score: result.score,
     scoreTechnical: result.scoreTechnical,
@@ -534,36 +866,128 @@ async function generateDailyScore(env: Env): Promise<{
     modelSpread: result.modelSpread,
     capabilityGap: result.capabilityGap,
     promptHash: result.promptHash,
+    externalData: JSON.stringify(externalData),
+    dataQualityFlags:
+      qualityFlags.length > 0 ? JSON.stringify(qualityFlags) : undefined,
   });
+
+  // Non-critical post-score writes — failures are logged but don't fail the score
+  const articleIds = articles.results
+    .map((a) => a.id as string)
+    .filter(Boolean);
+
+  const secondaryWrites: { label: string; fn: () => Promise<unknown> }[] = [
+    {
+      label: "ai_usage",
+      fn: () =>
+        result.aiUsages.length > 0
+          ? env.DB.batch(
+              result.aiUsages.map((usage) =>
+                env.DB.prepare(
+                  "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, score_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                ).bind(
+                  crypto.randomUUID(),
+                  usage.model,
+                  usage.provider,
+                  usage.inputTokens ?? null,
+                  usage.outputTokens ?? null,
+                  usage.totalTokens ?? null,
+                  usage.latencyMs ?? null,
+                  usage.wasFallback ? 1 : 0,
+                  usage.error ?? null,
+                  usage.status,
+                  scoreId
+                )
+              )
+            )
+          : Promise.resolve(),
+    },
+    {
+      label: "article_linkage",
+      fn: () =>
+        articleIds.length > 0
+          ? env.DB.batch(
+              articleIds.map((articleId) =>
+                env.DB.prepare(
+                  "INSERT INTO oq_score_articles (score_id, article_id) VALUES (?, ?)"
+                ).bind(scoreId, articleId)
+              )
+            )
+          : Promise.resolve(),
+    },
+    {
+      label: "model_responses",
+      fn: () =>
+        result.modelResponses.length > 0
+          ? env.DB.batch(
+              result.modelResponses.map((mr) =>
+                env.DB.prepare(
+                  "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, input_tokens, output_tokens, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                ).bind(
+                  crypto.randomUUID(),
+                  scoreId,
+                  mr.model,
+                  mr.provider,
+                  mr.rawResponse,
+                  JSON.stringify(mr.parsed.pillar_scores),
+                  mr.parsed.technical_delta,
+                  mr.parsed.economic_delta,
+                  mr.parsed.suggested_delta,
+                  mr.parsed.analysis,
+                  JSON.stringify(mr.parsed.top_signals),
+                  mr.parsed.capability_gap_note ?? null,
+                  mr.inputTokens ?? null,
+                  mr.outputTokens ?? null,
+                  mr.latencyMs ?? null
+                )
+              )
+            )
+          : Promise.resolve(),
+    },
+    {
+      label: "prompt_version",
+      fn: async () => {
+        const prompt = buildScoringPrompt({
+          currentScore: prevScore,
+          technicalScore: prevTechnical,
+          economicScore: prevEconomic,
+          history,
+          articlesByPillar,
+          sanityHarness: externalData.sanityHarness,
+          sweBench: externalData.sweBench,
+          softwareIndex: externalData.softwareIndex,
+          softwareDate: externalData.softwareDate,
+          softwareTrend: externalData.softwareTrend,
+          generalIndex: externalData.generalIndex,
+          generalDate: externalData.generalDate,
+          generalTrend: externalData.generalTrend,
+        });
+        await env.DB.prepare(
+          "INSERT INTO oq_prompt_versions (id, hash, prompt_text) VALUES (?, ?, ?) ON CONFLICT(hash) DO NOTHING"
+        )
+          .bind(crypto.randomUUID(), result.promptHash, prompt)
+          .run();
+      },
+    },
+  ];
+
+  const writeResults = await Promise.allSettled(
+    secondaryWrites.map((w) => w.fn())
+  );
+  for (let i = 0; i < writeResults.length; i++) {
+    const r = writeResults[i];
+    if (r.status === "rejected") {
+      await log?.warn("score", `Failed: ${secondaryWrites[i].label}`, {
+        scoreId,
+        error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+      });
+    }
+  }
 
   return { score: result.score, delta: result.delta, date: today };
 }
 
 // --- D1 helpers ---
-
-async function recordAIUsage(db: D1Database, usage: AIUsageEntry) {
-  try {
-    await db
-      .prepare(
-        "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      )
-      .bind(
-        crypto.randomUUID(),
-        usage.model,
-        usage.provider,
-        usage.inputTokens ?? null,
-        usage.outputTokens ?? null,
-        usage.totalTokens ?? null,
-        usage.latencyMs ?? null,
-        usage.wasFallback ? 1 : 0,
-        usage.error ?? null,
-        usage.status
-      )
-      .run();
-  } catch (err) {
-    console.error("Failed to record AI usage:", err);
-  }
-}
 
 interface ScoreInsert {
   date: string;
@@ -579,15 +1003,19 @@ interface ScoreInsert {
   modelSpread: number;
   capabilityGap?: string;
   promptHash: string;
+  externalData?: string;
+  isDecay?: boolean;
+  dataQualityFlags?: string;
 }
 
-async function saveScore(db: D1Database, data: ScoreInsert): Promise<void> {
+async function saveScore(db: D1Database, data: ScoreInsert): Promise<string> {
+  const id = crypto.randomUUID();
   await db
     .prepare(
-      "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, capability_gap, prompt_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, capability_gap, prompt_hash, external_data, is_decay, data_quality_flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(
-      crypto.randomUUID(),
+      id,
       data.date,
       data.score,
       data.scoreTechnical,
@@ -600,9 +1028,21 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<void> {
       data.modelAgreement,
       data.modelSpread,
       data.capabilityGap ?? null,
-      data.promptHash
+      data.promptHash,
+      data.externalData ?? null,
+      data.isDecay ? 1 : 0,
+      data.dataQualityFlags ?? null
     )
     .run();
+  return id;
+}
+
+function safeJsonParse(value: unknown, fallback: unknown = []) {
+  try {
+    return JSON.parse(value as string);
+  } catch {
+    return fallback;
+  }
 }
 
 function mapScoreRow(row: Record<string, unknown>) {
@@ -614,9 +1054,9 @@ function mapScoreRow(row: Record<string, unknown>) {
     scoreEconomic: row.score_economic,
     delta: row.delta,
     analysis: row.analysis,
-    signals: JSON.parse(row.signals as string),
-    pillarScores: JSON.parse(row.pillar_scores as string),
-    modelScores: JSON.parse(row.model_scores as string),
+    signals: safeJsonParse(row.signals, []),
+    pillarScores: safeJsonParse(row.pillar_scores, {}),
+    modelScores: safeJsonParse(row.model_scores, []),
     modelAgreement: row.model_agreement,
     modelSpread: row.model_spread,
     capabilityGap: row.capability_gap,
@@ -627,6 +1067,92 @@ function mapScoreRow(row: Record<string, unknown>) {
 
 // --- Exports ---
 
+async function logCronRun(
+  db: D1Database,
+  run: {
+    id: string;
+    startedAt: string;
+    completedAt?: string;
+    fetchStatus: string;
+    fetchArticles?: number;
+    fetchErrors?: FetchError[];
+    scoreStatus: string;
+    scoreResult?: unknown;
+    externalFetchStatus?: Record<string, string>;
+    error?: string;
+  },
+  log?: Logger
+): Promise<void> {
+  try {
+    await db
+      .prepare(
+        "INSERT OR REPLACE INTO oq_cron_runs (id, started_at, completed_at, fetch_status, fetch_articles, fetch_errors, score_status, score_result, external_fetch_status, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        run.id,
+        run.startedAt,
+        run.completedAt ?? null,
+        run.fetchStatus,
+        run.fetchArticles ?? 0,
+        run.fetchErrors?.length ? JSON.stringify(run.fetchErrors) : null,
+        run.scoreStatus,
+        run.scoreResult ? JSON.stringify(run.scoreResult) : null,
+        run.externalFetchStatus
+          ? JSON.stringify(run.externalFetchStatus)
+          : null,
+        run.error ?? null
+      )
+      .run();
+  } catch (err) {
+    await log?.error("system", "logCronRun DB write failed", {
+      error: err instanceof Error ? err.message : String(err),
+      runId: run.id,
+    });
+  }
+}
+
+export async function findCompletedCronRun(
+  db: D1Database,
+  date: string
+): Promise<{ id: string } | null> {
+  return db
+    .prepare(
+      "SELECT id FROM oq_cron_runs WHERE date(started_at) = ? AND fetch_status = 'success' AND score_status = 'success' LIMIT 1"
+    )
+    .bind(date)
+    .first();
+}
+
+async function persistFetchErrors(
+  db: D1Database,
+  errors: FetchError[],
+  log?: Logger
+): Promise<void> {
+  if (errors.length === 0) return;
+  try {
+    await db.batch(
+      errors.map((err) =>
+        db
+          .prepare(
+            "INSERT INTO oq_fetch_errors (id, source_id, error_type, error_message, http_status) VALUES (?, ?, ?, ?, ?)"
+          )
+          .bind(
+            crypto.randomUUID(),
+            err.sourceId,
+            err.errorType,
+            err.message,
+            err.httpStatus ?? null
+          )
+      )
+    );
+  } catch (err) {
+    await log?.error("fetch", "persistFetchErrors DB write failed", {
+      error: err instanceof Error ? err.message : String(err),
+      errorCount: errors.length,
+    });
+  }
+}
+
 export { fetchOQArticles, generateDailyScore, extractFeedItems, stripHtml };
 
 export default {
@@ -635,10 +1161,117 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
       (async () => {
-        console.log("[oq] Cron: fetching articles");
-        await fetchOQArticles(env.DB);
-        console.log("[oq] Cron: generating daily score");
-        await generateDailyScore(env);
+        const log = createLogger(env.DB);
+
+        // Idempotency: skip if a successful cron already ran today
+        const today = new Date().toISOString().split("T")[0];
+        const existingRun = await findCompletedCronRun(env.DB, today);
+        if (existingRun) {
+          await log.info("cron", "Skipping duplicate run", { date: today });
+          return;
+        }
+
+        const runId = crypto.randomUUID();
+        const cronLog = log.child({ cronRunId: runId });
+        const startedAt = new Date().toISOString();
+        let fetchStatus = "pending";
+        let fetchArticles = 0;
+        let fetchErrors: FetchError[] = [];
+        let scoreStatus = "pending";
+        let scoreResult: unknown = null;
+        const externalStatus: Record<string, string> = {};
+        let cronError: string | undefined;
+
+        try {
+          // Weekly external data fetches (Sundays)
+          const dayOfWeek = new Date().getUTCDay();
+          if (dayOfWeek === 0) {
+            const results = await Promise.allSettled([
+              fetchAndStoreSanityHarness(env.DB),
+              fetchAndStoreSWEBench(env.DB),
+              ...(env.FRED_API_KEY
+                ? [fetchAndStoreFRED(env.DB, env.FRED_API_KEY, cronLog)]
+                : []),
+            ]);
+
+            const labels = [
+              "sanity_harness",
+              "swe_bench",
+              ...(env.FRED_API_KEY ? ["fred"] : []),
+            ];
+            results.forEach((r, i) => {
+              externalStatus[labels[i]] =
+                r.status === "fulfilled" ? "success" : `failed: ${r.reason}`;
+            });
+
+            for (const [source, status] of Object.entries(externalStatus)) {
+              if (status !== "success") {
+                await cronLog.warn("external", `Fetch failed: ${source}`, {
+                  source,
+                  status,
+                });
+              }
+            }
+
+            // Weekly data retention cleanup
+            await env.DB.batch([
+              env.DB.prepare(
+                "DELETE FROM oq_articles WHERE fetched_at < datetime('now', '-90 days')"
+              ),
+              env.DB.prepare(
+                "DELETE FROM oq_fetch_errors WHERE attempted_at < datetime('now', '-30 days')"
+              ),
+              env.DB.prepare(
+                "DELETE FROM oq_cron_runs WHERE started_at < datetime('now', '-90 days')"
+              ),
+              env.DB.prepare(
+                "DELETE FROM oq_logs WHERE created_at < datetime('now', '-30 days')"
+              ),
+            ]);
+          }
+
+          const fetchResult = await fetchOQArticles(env.DB);
+          fetchStatus = "success";
+          fetchArticles = fetchResult.fetched;
+          fetchErrors = fetchResult.errors;
+
+          if (fetchErrors.length > 0) {
+            await persistFetchErrors(env.DB, fetchErrors, cronLog);
+          }
+
+          scoreResult = await generateDailyScore(env, cronLog);
+          scoreStatus = "success";
+        } catch (err) {
+          const phase = fetchStatus === "pending" ? "fetch" : "score";
+          if (phase === "fetch") fetchStatus = "failed";
+          else scoreStatus = "failed";
+
+          cronError = err instanceof Error ? err.message : String(err);
+          await cronLog.error("cron", `Failed in ${phase} phase`, {
+            phase,
+            error: cronError,
+          });
+        } finally {
+          await logCronRun(
+            env.DB,
+            {
+              id: runId,
+              startedAt,
+              completedAt: new Date().toISOString(),
+              fetchStatus,
+              fetchArticles,
+              fetchErrors,
+              scoreStatus,
+              scoreResult,
+              externalFetchStatus:
+                Object.keys(externalStatus).length > 0
+                  ? externalStatus
+                  : undefined,
+              error: cronError,
+            },
+            cronLog
+          );
+        }
       })()
     );
   },

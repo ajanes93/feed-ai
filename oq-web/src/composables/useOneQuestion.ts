@@ -7,6 +7,30 @@ import type {
   OQModelAgreement,
 } from "@feed-ai/shared/oq-types";
 
+interface MethodologyResponse {
+  whatWouldChange: {
+    to50: string[];
+    to70: string[];
+    below20: string[];
+  };
+  capabilityGap: {
+    verified: string;
+    bashOnly: string;
+    description: string;
+  };
+  pillars: { name: string; weight: number; key: string }[];
+  formula: {
+    models: string[];
+    weights: Record<string, number>;
+    dampening: number;
+    dailyCap: number;
+    scoreRange: [number, number];
+    decayTarget: number;
+  };
+  startingScore: number;
+  currentPromptHash: string;
+}
+
 interface TodayResponse {
   date: string;
   score: number;
@@ -28,6 +52,7 @@ export function useOneQuestion() {
   const history = ref<OQHistoryEntry[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
+  const methodology = ref<MethodologyResponse | null>(null);
   const subscribeStatus = ref<"idle" | "loading" | "success" | "error">("idle");
 
   async function fetchToday() {
@@ -49,6 +74,16 @@ export function useOneQuestion() {
       const res = await fetch(`/api/history?d=${days}`);
       if (!res.ok) return;
       history.value = await res.json();
+    } catch {
+      // Non-critical
+    }
+  }
+
+  async function fetchMethodology() {
+    try {
+      const res = await fetch("/api/methodology");
+      if (!res.ok) return;
+      methodology.value = await res.json();
     } catch {
       // Non-critical
     }
@@ -99,11 +134,13 @@ export function useOneQuestion() {
   return {
     today,
     history,
+    methodology,
     loading,
     error,
     subscribeStatus,
     fetchToday,
     fetchHistory,
+    fetchMethodology,
     subscribe,
     formattedDate,
     deltaFormatted,

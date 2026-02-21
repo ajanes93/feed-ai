@@ -1,4 +1,20 @@
 import type { OQPillar } from "@feed-ai/shared/oq-types";
+import type { FREDSeriesTrend } from "./fred";
+
+interface SanityHarnessContext {
+  topPassRate: number;
+  topAgent: string;
+  topModel: string;
+  medianPassRate: number;
+  languageBreakdown: string;
+}
+
+interface SWEBenchContext {
+  topVerified: number;
+  topVerifiedModel: string;
+  topBashOnly: number;
+  topBashOnlyModel: string;
+}
 
 interface PromptContext {
   currentScore: number;
@@ -6,6 +22,27 @@ interface PromptContext {
   economicScore: number;
   history: string;
   articlesByPillar: Record<OQPillar, string>;
+  sanityHarness?: SanityHarnessContext;
+  sweBench?: SWEBenchContext;
+  softwareIndex?: number;
+  softwareDate?: string;
+  softwareTrend?: FREDSeriesTrend;
+  generalIndex?: number;
+  generalDate?: string;
+  generalTrend?: FREDSeriesTrend;
+}
+
+function formatTrend(trend: FREDSeriesTrend): string {
+  const parts: string[] = [];
+  if (trend.change1w !== undefined) {
+    const sign = trend.change1w > 0 ? "+" : "";
+    parts.push(`${sign}${trend.change1w}% week-over-week`);
+  }
+  if (trend.change4w !== undefined) {
+    const sign = trend.change4w > 0 ? "+" : "";
+    parts.push(`${sign}${trend.change4w}% over 4 weeks`);
+  }
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 
 export function buildScoringPrompt(ctx: PromptContext): string {
@@ -19,9 +56,9 @@ non-technical stakeholders, and maintaining software over time.
 A human engineer is no longer needed.
 
 KEY FRAMING: The central metric is the "Capability Gap":
-- SWE-bench Verified (curated open-source): ~80%
-- SWE-bench Pro (private enterprise code): ~23%
-This gap is the story. Movement in Pro matters far more than Verified.
+- SWE-bench Verified (best agent+model, curated open-source): ${ctx.sweBench ? `${ctx.sweBench.topVerified}% (${ctx.sweBench.topVerifiedModel})` : "~79%"}
+- SWE-bench Bash Only (raw model capability, standardized agent): ${ctx.sweBench ? `${ctx.sweBench.topBashOnly}% (${ctx.sweBench.topBashOnlyModel})` : "~77%"}
+These are benchmark scores on curated issues. Real enterprise software engineering is far harder.
 
 Current score: ${ctx.currentScore}/100
 Technical sub-score: ${ctx.technicalScore}/100
@@ -31,11 +68,25 @@ Score history (last 14 days): ${ctx.history}
 Today's articles grouped by pillar:
 
 ## AI Capability Benchmarks (weight: 25%)
-${ctx.articlesByPillar.capability || "No articles today."}
+${
+  ctx.sanityHarness
+    ? `SanityHarness latest data (agent-level benchmarks across 6 languages):
+- Top agent pass rate: ${ctx.sanityHarness.topPassRate}% (${ctx.sanityHarness.topAgent} + ${ctx.sanityHarness.topModel})
+- Median agent pass rate: ${ctx.sanityHarness.medianPassRate}%
+- Language spread (top agent): ${ctx.sanityHarness.languageBreakdown}
+- Note: High pass rates on Go/Rust but low on Dart/Zig indicates narrow competence, not general replacement capability.
+`
+    : ""
+}${ctx.articlesByPillar.capability || "No articles today."}
 
 ## Labour Market Signals (weight: 25%)
 Note: Only flag a labour market AI signal if software job postings are declining FASTER than general postings.
-${ctx.articlesByPillar.labour_market || "No articles today."}
+${
+  ctx.softwareIndex !== undefined && ctx.generalIndex !== undefined
+    ? `Indeed Software Dev Postings Index: ${ctx.softwareIndex}${ctx.softwareDate ? ` (as of ${ctx.softwareDate})` : ""}${ctx.softwareTrend ? formatTrend(ctx.softwareTrend) : ""}. Initial Claims (general labour): ${ctx.generalIndex}${ctx.generalDate ? ` (as of ${ctx.generalDate})` : ""}${ctx.generalTrend ? formatTrend(ctx.generalTrend) : ""}.
+`
+    : ""
+}${ctx.articlesByPillar.labour_market || "No articles today."}
 
 ## Developer Sentiment & Adoption (weight: 20%)
 Note: Track the "Maintenance Tax" — if developers report spending more time fixing AI-generated code, that signals augmentation problems, not replacement progress. High adoption of broken AI code = score goes DOWN.
@@ -69,13 +120,13 @@ Provide your assessment as JSON:
     }
   ],
   "analysis": "<2-3 sentences. Be specific. Reference concrete data. Mention the Capability Gap if relevant. Avoid generic statements.>",
-  "capability_gap_note": "<optional: note if SWE-bench Pro or Verified changed today>"
+  "capability_gap_note": "<optional: note if SWE-bench Verified or Bash Only changed today>"
 }
 
 CALIBRATION RULES:
 - Most days the score should move 0-2 points. 3+ requires landmark news.
 - Distinguish between AI *helping* engineers vs AI *replacing* them.
-- SWE-bench Verified improvements are less meaningful than Pro improvements.
+- High SWE-bench scores on curated bugs ≠ replacing full engineering roles.
 - CEO hype carries less weight than actual headcount data.
 - One company's anecdote doesn't represent the industry.
 - "AI tools adopted more" ≠ "engineers being replaced."
