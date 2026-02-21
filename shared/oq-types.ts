@@ -34,6 +34,7 @@ export interface OQModelScore {
   suggested_delta: number;
   analysis: string;
   top_signals: OQSignal[];
+  delta_explanation?: string;
   capability_gap_note?: string;
 }
 

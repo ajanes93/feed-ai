@@ -7,7 +7,31 @@ import type {
   OQModelAgreement,
 } from "@feed-ai/shared/oq-types";
 
-interface MethodologyResponse {
+interface SanityHarnessData {
+  topPassRate: number;
+  topAgent: string;
+  topModel: string;
+  medianPassRate: number;
+  languageBreakdown: string;
+}
+
+interface FREDTrend {
+  current: number;
+  currentDate: string;
+  change1w?: number;
+  change4w?: number;
+}
+
+interface FREDDataResponse {
+  softwareIndex?: number;
+  softwareDate?: string;
+  softwareTrend?: FREDTrend;
+  generalIndex?: number;
+  generalDate?: string;
+  generalTrend?: FREDTrend;
+}
+
+export interface MethodologyResponse {
   whatWouldChange: {
     to50: string[];
     to70: string[];
@@ -16,8 +40,11 @@ interface MethodologyResponse {
   capabilityGap: {
     verified: string;
     bashOnly: string;
+    pro: string;
     description: string;
   };
+  sanityHarness: SanityHarnessData | null;
+  fredData: FREDDataResponse;
   pillars: { name: string; weight: number; key: string }[];
   formula: {
     models: string[];
@@ -31,12 +58,38 @@ interface MethodologyResponse {
   currentPromptHash: string;
 }
 
-interface TodayResponse {
+interface ExternalDataSnapshot {
+  sanityHarness?: SanityHarnessData & {
+    entries?: {
+      agent: string;
+      model: string;
+      overall: number;
+      languages: Record<string, number>;
+    }[];
+  };
+  sweBench?: {
+    topVerified: number;
+    topVerifiedModel: string;
+    topBashOnly: number;
+    topBashOnlyModel: string;
+    topPro?: number;
+    topProModel?: string;
+  };
+  softwareIndex?: number;
+  softwareDate?: string;
+  softwareTrend?: FREDTrend;
+  generalIndex?: number;
+  generalDate?: string;
+  generalTrend?: FREDTrend;
+}
+
+export interface TodayResponse {
   date: string;
   score: number;
   scoreTechnical: number;
   scoreEconomic: number;
   delta: number;
+  deltaExplanation?: string;
   analysis: string;
   signals: OQSignal[];
   pillarScores: OQPillarScores;
@@ -44,6 +97,7 @@ interface TodayResponse {
   modelAgreement: OQModelAgreement;
   modelSpread: number;
   capabilityGap?: string;
+  externalData?: ExternalDataSnapshot;
   isSeed?: boolean;
 }
 

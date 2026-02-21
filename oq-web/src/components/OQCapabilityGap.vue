@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineProps<{
   verified: string;
-  bashOnly: string;
+  pro: string;
   note?: string;
 }>();
 </script>
@@ -20,9 +20,12 @@ defineProps<{
         >
           {{ verified }}
         </div>
-        <div class="mt-1 text-[10px] tracking-widest text-gray-600 uppercase">
+        <div
+          class="mt-1 max-w-[100px] text-[10px] leading-tight tracking-widest text-gray-600 uppercase"
+        >
           SWE-bench Verified
         </div>
+        <div class="mt-0.5 text-[9px] text-gray-700">Curated bugs</div>
       </div>
 
       <!-- Gap indicator -->
@@ -39,21 +42,25 @@ defineProps<{
         />
       </div>
 
-      <!-- Bash Only -->
+      <!-- Pro -->
       <div class="text-center">
         <div
           class="text-3xl font-semibold tracking-tight text-orange-500 sm:text-4xl"
         >
-          {{ bashOnly }}
+          {{ pro }}
         </div>
-        <div class="mt-1 text-[10px] tracking-widest text-gray-600 uppercase">
-          SWE-bench Bash Only
+        <div
+          class="mt-1 max-w-[100px] text-[10px] leading-tight tracking-widest text-gray-600 uppercase"
+        >
+          SWE-bench Pro
         </div>
+        <div class="mt-0.5 text-[9px] text-gray-700">Private codebases</div>
       </div>
     </div>
 
     <p class="mt-5 text-center text-xs leading-relaxed text-gray-500">
-      Curated benchmarks. Real enterprise engineering is far harder.
+      Best AI scores on curated open-source vs. private real-world code. The gap
+      is the story.
     </p>
 
     <p

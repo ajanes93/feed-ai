@@ -9,6 +9,8 @@ import OQModelAgreement from "../components/OQModelAgreement.vue";
 import OQSubscribe from "../components/OQSubscribe.vue";
 import OQWhatWouldChange from "../components/OQWhatWouldChange.vue";
 import OQCapabilityGap from "../components/OQCapabilityGap.vue";
+import OQSanityHarness from "../components/OQSanityHarness.vue";
+import OQEconomicReality from "../components/OQEconomicReality.vue";
 
 const {
   today,
@@ -96,7 +98,7 @@ onMounted(async () => {
 
       <!-- Content -->
       <template v-else-if="today">
-        <!-- Score Card -->
+        <!-- ═══ SCORE CARD ═══ -->
         <motion.section
           :initial="{ opacity: 0, y: 20 }"
           :animate="{ opacity: 1, y: 0 }"
@@ -131,19 +133,28 @@ onMounted(async () => {
                   Replacement Likelihood Score
                 </div>
               </div>
-              <div
-                class="flex items-center gap-1.5 self-start rounded-lg px-3 py-1.5 font-mono text-xs"
-                :class="{
-                  'bg-red-500/8 text-red-400': deltaDirection === 'up',
-                  'bg-emerald-500/8 text-emerald-400':
-                    deltaDirection === 'down',
-                  'bg-gray-800 text-gray-500': deltaDirection === 'neutral',
-                }"
-              >
-                <span v-if="deltaDirection === 'up'">▲</span>
-                <span v-else-if="deltaDirection === 'down'">▼</span>
-                <span v-else>●</span>
-                {{ deltaFormatted }}
+              <div class="flex flex-col items-start gap-1 sm:items-end">
+                <div
+                  class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-mono text-xs"
+                  :class="{
+                    'bg-red-500/8 text-red-400': deltaDirection === 'up',
+                    'bg-emerald-500/8 text-emerald-400':
+                      deltaDirection === 'down',
+                    'bg-gray-800 text-gray-500': deltaDirection === 'neutral',
+                  }"
+                >
+                  <span v-if="deltaDirection === 'up'">▲</span>
+                  <span v-else-if="deltaDirection === 'down'">▼</span>
+                  <span v-else>●</span>
+                  {{ deltaFormatted }}
+                </div>
+                <!-- Delta explanation -->
+                <p
+                  v-if="today.deltaExplanation"
+                  class="max-w-xs text-[11px] leading-snug text-gray-600"
+                >
+                  {{ today.deltaExplanation }}
+                </p>
               </div>
             </div>
 
@@ -152,6 +163,15 @@ onMounted(async () => {
               :score="today.score"
               :score-technical="today.scoreTechnical"
               :score-economic="today.scoreEconomic"
+            />
+
+            <!-- Model Agreement -->
+            <OQModelAgreement
+              v-if="today.modelScores.length > 1"
+              :model-agreement="today.modelAgreement"
+              :model-spread="today.modelSpread"
+              :model-scores="today.modelScores"
+              class="mt-6"
             />
 
             <!-- Analysis -->
@@ -169,15 +189,6 @@ onMounted(async () => {
               </p>
             </div>
 
-            <!-- Model Agreement -->
-            <OQModelAgreement
-              v-if="today.modelScores.length > 1"
-              :model-agreement="today.modelAgreement"
-              :model-spread="today.modelSpread"
-              :model-scores="today.modelScores"
-              class="mt-6"
-            />
-
             <!-- Signals -->
             <OQSignalList
               v-if="today.signals.length > 0"
@@ -187,27 +198,13 @@ onMounted(async () => {
           </div>
         </motion.section>
 
-        <!-- Capability Gap -->
+        <!-- ═══ TREND CHART ═══ -->
         <motion.section
+          v-if="history.length > 1"
           class="mt-6"
           :initial="{ opacity: 0, y: 20 }"
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.6, delay: 0.3 }"
-        >
-          <OQCapabilityGap
-            :verified="methodology?.capabilityGap?.verified ?? '~79%'"
-            :bash-only="methodology?.capabilityGap?.bashOnly ?? '~77%'"
-            :note="today.capabilityGap"
-          />
-        </motion.section>
-
-        <!-- Trend Chart -->
-        <motion.section
-          v-if="history.length > 1"
-          class="mt-8"
-          :initial="{ opacity: 0, y: 20 }"
-          :animate="{ opacity: 1, y: 0 }"
-          :transition="{ duration: 0.6, delay: 0.4 }"
         >
           <div class="mb-4 text-[10px] tracking-widest text-gray-600 uppercase">
             Score over time
@@ -215,7 +212,52 @@ onMounted(async () => {
           <OQTrendChart :history="history" />
         </motion.section>
 
-        <!-- What Would Move This Score -->
+        <!-- ═══ CAPABILITY GAP (Technical evidence) ═══ -->
+        <motion.section
+          class="mt-6"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ duration: 0.6, delay: 0.35 }"
+        >
+          <OQCapabilityGap
+            :verified="methodology?.capabilityGap?.verified ?? '~79%'"
+            :pro="methodology?.capabilityGap?.pro ?? '~46%'"
+            :note="today.capabilityGap"
+          />
+        </motion.section>
+
+        <!-- ═══ SANITY HARNESS (Agent Reality Check) ═══ -->
+        <motion.section
+          v-if="methodology?.sanityHarness"
+          class="mt-6"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ duration: 0.6, delay: 0.4 }"
+        >
+          <OQSanityHarness
+            :top-pass-rate="methodology.sanityHarness.topPassRate"
+            :top-agent="methodology.sanityHarness.topAgent"
+            :top-model="methodology.sanityHarness.topModel"
+            :median-pass-rate="methodology.sanityHarness.medianPassRate"
+            :language-breakdown="methodology.sanityHarness.languageBreakdown"
+          />
+        </motion.section>
+
+        <!-- ═══ ECONOMIC REALITY ═══ -->
+        <motion.section
+          class="mt-6"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ duration: 0.6, delay: 0.45 }"
+        >
+          <OQEconomicReality
+            :software-index="methodology?.fredData?.softwareIndex"
+            :software-date="methodology?.fredData?.softwareDate"
+            :software-trend="methodology?.fredData?.softwareTrend"
+          />
+        </motion.section>
+
+        <!-- ═══ WHAT WOULD MOVE THIS SCORE ═══ -->
         <motion.section
           v-if="methodology"
           class="mt-8"
@@ -230,12 +272,12 @@ onMounted(async () => {
           />
         </motion.section>
 
-        <!-- Subscribe -->
+        <!-- ═══ SUBSCRIBE ═══ -->
         <motion.section
           class="pt-12 pb-16"
           :initial="{ opacity: 0, y: 20 }"
           :animate="{ opacity: 1, y: 0 }"
-          :transition="{ duration: 0.6, delay: 0.6 }"
+          :transition="{ duration: 0.6, delay: 0.55 }"
         >
           <OQSubscribe :status="subscribeStatus" @subscribe="subscribe" />
         </motion.section>

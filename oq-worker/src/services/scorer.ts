@@ -185,6 +185,7 @@ function parseModelResponse(text: string, model: string): OQModelScore {
     suggested_delta: parsed.suggested_delta,
     analysis: parsed.analysis,
     top_signals: (parsed.top_signals ?? []) as OQSignal[],
+    delta_explanation: parsed.delta_explanation,
     capability_gap_note: parsed.capability_gap_note,
   };
 }
@@ -331,6 +332,7 @@ export interface OQScoringResult {
   scoreTechnical: number;
   scoreEconomic: number;
   delta: number;
+  deltaExplanation?: string;
   analysis: string;
   signals: OQSignal[];
   pillarScores: OQPillarScores;
@@ -547,11 +549,17 @@ export async function runScoring(
     .filter(Boolean)
     .join(" ");
 
+  // Pick best delta explanation (prefer Claude's, fall back to first available)
+  const deltaExplanation =
+    scores.find((s) => s.model.includes("claude"))?.delta_explanation ??
+    scores.find((s) => s.delta_explanation)?.delta_explanation;
+
   return {
     score: newScore,
     scoreTechnical: newTechnical,
     scoreEconomic: newEconomic,
     delta: finalDelta,
+    deltaExplanation: deltaExplanation || undefined,
     analysis,
     signals,
     pillarScores,

@@ -34,15 +34,27 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (!data) return response;
 
   const ogTitle = `Will AI Replace Software Engineers? Today: ${data.score}%`;
-  const ogDesc = data.analysis.slice(0, 200);
+  const ogDesc = `Three AI models read the signals daily. The Capability Gap: ~79% on benchmarks, ~46% on real code. ${data.analysis.slice(0, 140)}`;
 
   return new HTMLRewriter()
+    .on("title", {
+      element(el) {
+        el.setInnerContent(
+          `One Question — ${data.score}% | Will AI replace software engineers?`
+        );
+      },
+    })
     .on('meta[property="og:title"]', {
       element(el) {
         el.setAttribute("content", ogTitle);
       },
     })
     .on('meta[property="og:description"]', {
+      element(el) {
+        el.setAttribute("content", ogDesc);
+      },
+    })
+    .on('meta[name="description"]', {
       element(el) {
         el.setAttribute("content", ogDesc);
       },

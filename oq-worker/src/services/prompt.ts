@@ -14,6 +14,8 @@ interface SWEBenchContext {
   topVerifiedModel: string;
   topBashOnly: number;
   topBashOnlyModel: string;
+  topPro?: number;
+  topProModel?: string;
 }
 
 interface PromptContext {
@@ -58,7 +60,8 @@ A human engineer is no longer needed.
 KEY FRAMING: The central metric is the "Capability Gap":
 - SWE-bench Verified (best agent+model, curated open-source): ${ctx.sweBench ? `${ctx.sweBench.topVerified}% (${ctx.sweBench.topVerifiedModel})` : "~79%"}
 - SWE-bench Bash Only (raw model capability, standardized agent): ${ctx.sweBench ? `${ctx.sweBench.topBashOnly}% (${ctx.sweBench.topBashOnlyModel})` : "~77%"}
-These are benchmark scores on curated issues. Real enterprise software engineering is far harder.
+- SWE-bench Pro (private codebases, harder problems): ${ctx.sweBench?.topPro ? `${ctx.sweBench.topPro}% (${ctx.sweBench.topProModel})` : "~46%"}
+The gap between Verified (~79%) and Pro (~46%) IS the story. Curated open-source benchmarks flatter AI capabilities. Private codebases expose the real gap.
 
 Current score: ${ctx.currentScore}/100
 Technical sub-score: ${ctx.technicalScore}/100
@@ -119,9 +122,12 @@ Provide your assessment as JSON:
       "impact": <-5 to +5>
     }
   ],
+  "delta_explanation": "<one sentence explaining what drove the delta, referencing specific signals by name>",
   "analysis": "<2-3 sentences. Be specific. Reference concrete data. Mention the Capability Gap if relevant. Avoid generic statements.>",
-  "capability_gap_note": "<optional: note if SWE-bench Verified or Bash Only changed today>"
+  "capability_gap_note": "<optional: note if SWE-bench Verified, Bash Only, or Pro changed today>"
 }
+
+IMPORTANT: Return 3-5 top_signals. Fewer than 3 looks broken. Include a mix of up/down/neutral directions.
 
 CALIBRATION RULES:
 - Most days the score should move 0-2 points. 3+ requires landmark news.
@@ -133,6 +139,14 @@ CALIBRATION RULES:
 - Rising adoption + declining trust = augmentation, not replacement.
 - Developers spending more time debugging AI code = score goes DOWN.
 - Job market declines only matter if software is falling FASTER than general.
+
+ANALYSIS QUALITY RULES:
+- Your analysis MUST reference at least 2 specific articles or data points by name.
+- Never use phrases like "a mix of" or "remains neutral" without citing why.
+- Bad: "The labour market shows mixed signals."
+- Good: "Indeed's software posting index dropped 3 points this week while general postings held steady — the first divergence since October."
+- Bad: "The AI Capability pillar remains neutral as there is a mix of incremental improvements."
+- Good: "SWE-bench Pro holds at ~46%, still far below the 79% Verified score, while SanityHarness median stayed at 50% — agents are good at curated bugs but mediocre at real code."
 
 Return ONLY the JSON object, no other text.`;
 }

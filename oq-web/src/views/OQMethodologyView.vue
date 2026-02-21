@@ -118,7 +118,7 @@ onMounted(() => fetchMethodology());
             The Capability Gap
           </h2>
           <div class="rounded-xl border border-gray-800 bg-gray-900 p-5">
-            <div class="flex items-center gap-6">
+            <div class="flex items-center justify-center gap-6">
               <div class="text-center">
                 <div class="text-2xl font-semibold text-gray-200">
                   {{ methodology.capabilityGap.verified }}
@@ -130,11 +130,9 @@ onMounted(() => fetchMethodology());
               <div class="text-lg text-gray-700">vs</div>
               <div class="text-center">
                 <div class="text-2xl font-semibold text-orange-500">
-                  {{ methodology.capabilityGap.bashOnly }}
+                  {{ methodology.capabilityGap.pro }}
                 </div>
-                <div class="mt-1 text-[10px] text-gray-600">
-                  SWE-bench Bash Only
-                </div>
+                <div class="mt-1 text-[10px] text-gray-600">SWE-bench Pro</div>
               </div>
             </div>
             <p class="mt-4 text-sm leading-relaxed text-gray-500">

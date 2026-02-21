@@ -313,8 +313,28 @@ app.get("/api/methodology", async (c) => {
       bashOnly: externalData.sweBench
         ? `${externalData.sweBench.topBashOnly}%`
         : "~77%",
+      pro: externalData.sweBench?.topPro
+        ? `~${Math.round(externalData.sweBench.topPro)}%`
+        : "~46%",
       description:
         "SWE-bench scores on curated open-source issues. Real enterprise engineering involves ambiguous requirements, system design, and cross-team coordination.",
+    },
+    sanityHarness: externalData.sanityHarness
+      ? {
+          topPassRate: externalData.sanityHarness.topPassRate,
+          topAgent: externalData.sanityHarness.topAgent,
+          topModel: externalData.sanityHarness.topModel,
+          medianPassRate: externalData.sanityHarness.medianPassRate,
+          languageBreakdown: externalData.sanityHarness.languageBreakdown,
+        }
+      : null,
+    fredData: {
+      softwareIndex: externalData.softwareIndex,
+      softwareDate: externalData.softwareDate,
+      softwareTrend: externalData.softwareTrend,
+      generalIndex: externalData.generalIndex,
+      generalDate: externalData.generalDate,
+      generalTrend: externalData.generalTrend,
     },
     whatWouldChange: {
       to50: [
@@ -393,12 +413,20 @@ interface ExternalData {
     topModel: string;
     medianPassRate: number;
     languageBreakdown: string;
+    entries?: {
+      agent: string;
+      model: string;
+      overall: number;
+      languages: Record<string, number>;
+    }[];
   };
   sweBench?: {
     topVerified: number;
     topVerifiedModel: string;
     topBashOnly: number;
     topBashOnlyModel: string;
+    topPro?: number;
+    topProModel?: string;
   };
   softwareIndex?: number;
   softwareDate?: string;
@@ -524,9 +552,12 @@ async function fetchAndStoreSanityHarness(
   return { stored: true, topPassRate: data.topPassRate };
 }
 
-async function fetchAndStoreSWEBench(
-  db: D1Database
-): Promise<{ stored: boolean; verified: number; bashOnly: number }> {
+async function fetchAndStoreSWEBench(db: D1Database): Promise<{
+  stored: boolean;
+  verified: number;
+  bashOnly: number;
+  pro: number;
+}> {
   const data = await fetchSWEBenchLeaderboard();
 
   // Validate critical fields before storing
@@ -543,6 +574,7 @@ async function fetchAndStoreSWEBench(
     stored: true,
     verified: data.topVerified,
     bashOnly: data.topBashOnly,
+    pro: data.topPro,
   };
 }
 
@@ -870,6 +902,7 @@ async function generateDailyScore(
     scoreTechnical: result.scoreTechnical,
     scoreEconomic: result.scoreEconomic,
     delta: result.delta,
+    deltaExplanation: result.deltaExplanation,
     analysis: result.analysis,
     signals: JSON.stringify(result.signals),
     pillarScores: JSON.stringify(result.pillarScores),
@@ -1007,6 +1040,7 @@ interface ScoreInsert {
   scoreTechnical: number;
   scoreEconomic: number;
   delta: number;
+  deltaExplanation?: string;
   analysis: string;
   signals: string;
   pillarScores: string;
@@ -1024,7 +1058,7 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<string> {
   const id = crypto.randomUUID();
   await db
     .prepare(
-      "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, capability_gap, prompt_hash, external_data, is_decay, data_quality_flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, delta_explanation, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, capability_gap, prompt_hash, external_data, is_decay, data_quality_flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(
       id,
@@ -1033,6 +1067,7 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<string> {
       data.scoreTechnical,
       data.scoreEconomic,
       data.delta,
+      data.deltaExplanation ?? null,
       data.analysis,
       data.signals,
       data.pillarScores,
@@ -1065,6 +1100,7 @@ function mapScoreRow(row: Record<string, unknown>) {
     scoreTechnical: row.score_technical,
     scoreEconomic: row.score_economic,
     delta: row.delta,
+    deltaExplanation: row.delta_explanation,
     analysis: row.analysis,
     signals: safeJsonParse(row.signals, []),
     pillarScores: safeJsonParse(row.pillar_scores, {}),
@@ -1072,6 +1108,9 @@ function mapScoreRow(row: Record<string, unknown>) {
     modelAgreement: row.model_agreement,
     modelSpread: row.model_spread,
     capabilityGap: row.capability_gap,
+    externalData: row.external_data
+      ? safeJsonParse(row.external_data, null)
+      : null,
     promptHash: row.prompt_hash,
     createdAt: row.created_at,
   };
