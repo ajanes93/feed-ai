@@ -167,6 +167,7 @@ export function useDashboard() {
     loading,
     error,
     needsAuth,
+    adminKey,
     fetching,
     fetchResult,
     fetchSuccess,

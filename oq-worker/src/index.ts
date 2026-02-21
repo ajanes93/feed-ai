@@ -578,6 +578,7 @@ async function fetchOQArticles(
   const errors: FetchError[] = [];
   let fetched = 0;
   const yesterday = new Date(Date.now() - 86400000).toISOString();
+  const threeDaysAgo = new Date(Date.now() - 3 * 86400000);
 
   for (const source of oqSources) {
     try {
@@ -600,6 +601,9 @@ async function fetchOQArticles(
 
       for (const item of items) {
         if (!item.title || !item.url) continue;
+
+        const pubDate = new Date(item.publishedAt ?? "");
+        if (!isNaN(pubDate.getTime()) && pubDate < threeDaysAgo) continue;
 
         const result = await db
           .prepare(
@@ -693,7 +697,10 @@ function extractFeedItems(parsed: any): FeedItem[] {
 }
 
 function stripHtml(text: string): string {
-  return text.replace(/<[^>]*>/g, "").trim();
+  return text
+    .replace(/<[^>]*>/g, "")
+    .toWellFormed()
+    .trim();
 }
 
 // --- Daily score generation ---
@@ -740,28 +747,33 @@ async function generateDailyScore(
     .map((r) => `${r.date}: ${r.score} (${r.delta > 0 ? "+" : ""}${r.delta})`)
     .join(", ");
 
-  const yesterday = new Date(Date.now() - 86400000).toISOString();
+  const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString();
   const articles = await env.DB.prepare(
-    "SELECT id, title, url, source, pillar, summary FROM oq_articles WHERE fetched_at >= ? ORDER BY published_at DESC"
+    "SELECT id, title, url, source, pillar, summary FROM oq_articles WHERE published_at >= ? ORDER BY published_at DESC"
   )
-    .bind(yesterday)
+    .bind(twoDaysAgo)
     .all();
 
-  const articlesByPillar: Record<OQPillar, string> = {
-    capability: "",
-    labour_market: "",
-    sentiment: "",
-    industry: "",
-    barriers: "",
-  };
-
-  for (const article of articles.results) {
-    const pillar = article.pillar as OQPillar;
-    if (articlesByPillar[pillar] !== undefined) {
-      articlesByPillar[pillar] +=
-        `- ${article.title}${article.summary ? ` — ${(article.summary as string).slice(0, 200)}` : ""} (${article.source})\n`;
-    }
-  }
+  const pillars: OQPillar[] = [
+    "capability",
+    "labour_market",
+    "sentiment",
+    "industry",
+    "barriers",
+  ];
+  const articlesByPillar = Object.fromEntries(
+    pillars.map((pillar) => [
+      pillar,
+      articles.results
+        .filter((a) => a.pillar === pillar)
+        .slice(0, 20)
+        .map(
+          (a) =>
+            `- ${a.title}${a.summary ? ` — ${(a.summary as string).slice(0, 200)}` : ""} (${a.source})\n`
+        )
+        .join(""),
+    ])
+  ) as Record<OQPillar, string>;
 
   const totalArticles = articles.results.length;
   if (totalArticles === 0) {
@@ -820,12 +832,12 @@ async function generateDailyScore(
   if (externalData.generalIndex === undefined)
     qualityFlags.push("missing_fred_general");
 
-  const pillarCounts = Object.entries(articlesByPillar).filter(
+  const activePillars = Object.entries(articlesByPillar).filter(
     ([, v]) => v.length > 0
   );
-  if (pillarCounts.length < 5)
+  if (activePillars.length < 5)
     qualityFlags.push(
-      `sparse_pillars:${pillarCounts.map(([k]) => k).join(",")}`
+      `sparse_pillars:${activePillars.map(([k]) => k).join(",")}`
     );
   if (totalArticles < 5)
     qualityFlags.push(`low_article_count:${totalArticles}`);

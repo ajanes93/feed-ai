@@ -6,12 +6,14 @@ import { timeAgo, formatTokens, formatModelName } from "@feed-ai/shared/utils";
 import DataTable from "@feed-ai/shared/components/DataTable";
 import StatCard from "@feed-ai/shared/components/StatCard";
 import DropdownMenu from "@feed-ai/shared/components/DropdownMenu";
+import LogViewer from "@feed-ai/shared/components/LogViewer";
 
 const {
   data,
   loading,
   error,
   needsAuth,
+  adminKey,
   fetching,
   fetchResult,
   fetchSuccess,
@@ -284,6 +286,16 @@ onMounted(fetchDashboard);
               </td>
             </tr>
           </DataTable>
+        </motion.section>
+
+        <!-- Logs -->
+        <motion.section
+          class="mb-6"
+          :initial="{ opacity: 0, y: 12 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ duration: 0.35, delay: 0.35 }"
+        >
+          <LogViewer :admin-key="adminKey" />
         </motion.section>
 
         <!-- Refresh -->

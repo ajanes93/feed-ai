@@ -11,7 +11,9 @@
     "./logger": "./logger.ts",
     "./components/DropdownMenu": "./components/DropdownMenu.vue",
     "./components/StatCard": "./components/StatCard.vue",
-    "./components/DataTable": "./components/DataTable.vue"
+    "./components/DataTable": "./components/DataTable.vue",
+    "./components/LogViewer": "./components/LogViewer.vue",
+    "./composables/useLogs": "./composables/useLogs.ts"
   },
   "scripts": {
     "build": "true",
