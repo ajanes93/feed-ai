@@ -3,8 +3,12 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import DashboardView from "../../views/DashboardView.vue";
 import type { DashboardData } from "../../composables/useDashboard";
-import { stubFetchJson } from "../helpers";
-import { dashboardDataFactory, sourceHealthFactory } from "../factories";
+import { stubFetchJson, stubFetchResponses } from "../helpers";
+import {
+  dashboardDataFactory,
+  sourceHealthFactory,
+  errorLogFactory,
+} from "../factories";
 
 const DASHBOARD_DATA = dashboardDataFactory.build();
 
@@ -20,8 +24,16 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-const render = async (data = DASHBOARD_DATA) => {
-  stubFetchJson(data);
+const LOG_ENTRIES = {
+  count: 1,
+  logs: [errorLogFactory.build({ message: "Connection timeout" })],
+};
+
+const render = async (data = DASHBOARD_DATA, logs = LOG_ENTRIES) => {
+  stubFetchResponses({
+    "/api/admin/dashboard": { status: 200, body: data },
+    "/api/admin/logs": { status: 200, body: logs },
+  });
   const wrapper = mount(DashboardView);
   await flushPromises();
   return { wrapper };
@@ -113,15 +125,22 @@ describe("DashboardView", () => {
     });
   });
 
-  describe("error logs", () => {
-    it("renders error logs section", async () => {
+  describe("logs", () => {
+    it("renders logs section", async () => {
       const { wrapper } = await render();
-      expect(wrapper.text()).toContain("Recent Errors");
+      expect(wrapper.text()).toContain("Logs");
     });
 
-    it("shows error message", async () => {
+    it("shows log entries from /api/admin/logs", async () => {
       const { wrapper } = await render();
       expect(wrapper.text()).toContain("Connection timeout");
+    });
+
+    it("shows filter chips", async () => {
+      const { wrapper } = await render();
+      expect(wrapper.text()).toContain("error");
+      expect(wrapper.text()).toContain("warn");
+      expect(wrapper.text()).toContain("info");
     });
   });
 

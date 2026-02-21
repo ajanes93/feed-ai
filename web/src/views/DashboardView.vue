@@ -6,12 +6,14 @@ import { timeAgo, formatTokens, formatModelName } from "@feed-ai/shared/utils";
 import DataTable from "@feed-ai/shared/components/DataTable";
 import StatCard from "@feed-ai/shared/components/StatCard";
 import DropdownMenu from "@feed-ai/shared/components/DropdownMenu";
+import LogViewer from "@feed-ai/shared/components/LogViewer";
 
 const {
   data,
   loading,
   error,
   needsAuth,
+  adminKey,
   fetching,
   fetchResult,
   fetchSuccess,
@@ -389,53 +391,14 @@ onMounted(fetchDashboard);
           </DataTable>
         </motion.section>
 
-        <!-- Error Logs -->
+        <!-- Logs -->
         <motion.section
           class="mb-6"
           :initial="{ opacity: 0, y: 12 }"
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.35, delay: 0.35 }"
         >
-          <h2
-            class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase"
-          >
-            Recent Errors
-          </h2>
-          <DataTable
-            :columns="[
-              { key: 'when', label: 'When' },
-              { key: 'level', label: 'Level' },
-              { key: 'category', label: 'Category' },
-              { key: 'message', label: 'Message' },
-            ]"
-            :row-count="data.errors.length"
-            empty-message="No errors recorded"
-          >
-            <tr
-              v-for="err in data.errors"
-              :key="err.id"
-              class="border-b border-gray-800/50"
-            >
-              <td class="px-3 py-2 text-gray-300">
-                {{ timeAgo(err.createdAt) }}
-              </td>
-              <td class="px-3 py-2">
-                <span
-                  :class="{
-                    'text-red-400': err.level === 'error',
-                    'text-amber-400': err.level === 'warn',
-                    'text-gray-400': err.level === 'info',
-                  }"
-                >
-                  {{ err.level }}
-                </span>
-              </td>
-              <td class="px-3 py-2">{{ err.category }}</td>
-              <td class="max-w-md truncate px-3 py-2 text-gray-300">
-                {{ err.message }}
-              </td>
-            </tr>
-          </DataTable>
+          <LogViewer :admin-key="adminKey" />
         </motion.section>
 
         <!-- Refresh -->
