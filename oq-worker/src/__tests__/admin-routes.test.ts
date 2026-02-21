@@ -16,7 +16,6 @@ describe("Admin API routes", () => {
     await env.DB.exec("DELETE FROM oq_score_articles");
     await env.DB.exec("DELETE FROM oq_cron_runs");
     await env.DB.exec("DELETE FROM oq_fetch_errors");
-    await env.DB.exec("DELETE FROM oq_admin_actions");
     await env.DB.exec("DELETE FROM oq_logs");
   });
 
@@ -342,12 +341,12 @@ describe("Admin API routes", () => {
       const data = await res.json();
       expect(data.error).toBeTruthy();
 
-      // Verify admin action was logged with status 500
-      const actions = await env.DB.prepare(
-        "SELECT * FROM oq_admin_actions WHERE action = 'fetch-sanity'"
+      // Verify error was logged via Logger
+      const logs = await env.DB.prepare(
+        "SELECT * FROM oq_logs WHERE category = 'admin' AND level = 'error'"
       ).all();
-      expect(actions.results).toHaveLength(1);
-      expect(actions.results[0].result_status).toBe(500);
+      expect(logs.results.length).toBeGreaterThanOrEqual(1);
+      expect(logs.results[0].message).toContain("fetch-sanity");
     });
 
     it("returns 503 when FRED_API_KEY not configured", async () => {

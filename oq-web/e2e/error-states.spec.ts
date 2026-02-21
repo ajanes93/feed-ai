@@ -1,8 +1,5 @@
 import { test as base, expect, type Page } from "@playwright/test";
-import {
-  buildTodayResponse,
-  buildMethodologyResponse,
-} from "./fixtures";
+import { buildTodayResponse, buildMethodologyResponse } from "./fixtures";
 
 /** Mock all routes with a custom /api/today override and optional history */
 async function mockApiWith(
@@ -47,10 +44,18 @@ async function mockApiWith(
 base.describe("Error states", () => {
   base("shows error message when /api/today fails", async ({ page }) => {
     await page.route("**/api/today", (route) =>
-      route.fulfill({ status: 500, contentType: "application/json", body: "{}" })
+      route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: "{}",
+      })
     );
     await page.route("**/api/history*", (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "[]",
+      })
     );
     await page.route("**/api/methodology", (route) =>
       route.fulfill({
@@ -112,7 +117,11 @@ base.describe("Edge cases", () => {
     await mockApiWith(
       page,
       { signals: [] },
-      { history: [{ date: "2025-01-01", score: 33, delta: 0.3, modelSpread: 0 }] }
+      {
+        history: [
+          { date: "2025-01-01", score: 33, delta: 0.3, modelSpread: 0 },
+        ],
+      }
     );
     await page.goto("/");
     await expect(page.getByText("Score over time")).not.toBeVisible();

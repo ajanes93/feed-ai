@@ -53,13 +53,17 @@ test.describe("Methodology page", () => {
   test("shows capability gap section", async ({ mockPage }) => {
     await mockPage.goto("/methodology");
     await expect(mockPage.getByText("The Capability Gap")).toBeVisible();
-    await expect(mockPage.getByText("SWE-bench Verified").first()).toBeVisible();
+    await expect(
+      mockPage.getByText("SWE-bench Verified").first()
+    ).toBeVisible();
     await expect(mockPage.getByText("SWE-bench Bash Only")).toBeVisible();
   });
 
   test("shows what-would-change scenarios", async ({ mockPage }) => {
     await mockPage.goto("/methodology");
-    await expect(mockPage.getByText("What Would Move This Score")).toBeVisible();
+    await expect(
+      mockPage.getByText("What Would Move This Score")
+    ).toBeVisible();
     await expect(mockPage.getByText("To 50+")).toBeVisible();
     await expect(mockPage.getByText("To 70+")).toBeVisible();
     await expect(mockPage.getByText("Below 20")).toBeVisible();
@@ -97,14 +101,8 @@ test.describe("What Would Change (home page)", () => {
 
   test("shows scenario items from methodology", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(
-      mockPage.getByText(/Fortune 500 companies/)
-    ).toBeVisible();
-    await expect(
-      mockPage.getByText(/AI autonomously shipping/)
-    ).toBeVisible();
-    await expect(
-      mockPage.getByText(/AI coding tool market/)
-    ).toBeVisible();
+    await expect(mockPage.getByText(/Fortune 500 companies/)).toBeVisible();
+    await expect(mockPage.getByText(/AI autonomously shipping/)).toBeVisible();
+    await expect(mockPage.getByText(/AI coding tool market/)).toBeVisible();
   });
 });

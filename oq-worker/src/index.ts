@@ -348,14 +348,13 @@ async function adminHandler(
   fn: (log: Logger) => Promise<unknown>
 ) {
   const log = createLogger(c.env.DB);
-  const endpoint = `/api/${action}`;
   try {
     const result = await fn(log);
-    await logAdminAction(c.env.DB, action, endpoint, 200, result, log);
+    await log.info("admin", `${action} succeeded`, { action });
     return c.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    await logAdminAction(c.env.DB, action, endpoint, 500, { error: msg }, log);
+    await log.error("admin", `${action} failed`, { action, error: msg });
     return c.json({ error: msg }, 500);
   }
 }
@@ -1112,36 +1111,6 @@ async function logCronRun(
   }
 }
 
-async function logAdminAction(
-  db: D1Database,
-  action: string,
-  endpoint: string,
-  status: number,
-  summary?: unknown,
-  log?: Logger
-): Promise<void> {
-  try {
-    await db
-      .prepare(
-        "INSERT INTO oq_admin_actions (id, action, endpoint, result_status, result_summary) VALUES (?, ?, ?, ?, ?)"
-      )
-      .bind(
-        crypto.randomUUID(),
-        action,
-        endpoint,
-        status,
-        summary ? JSON.stringify(summary).slice(0, 2000) : null
-      )
-      .run();
-  } catch (err) {
-    await log?.error("admin", "logAdminAction DB write failed", {
-      error: err instanceof Error ? err.message : String(err),
-      action,
-      endpoint,
-    });
-  }
-}
-
 async function persistFetchErrors(
   db: D1Database,
   errors: FetchError[],
@@ -1246,9 +1215,6 @@ export default {
               ),
               env.DB.prepare(
                 "DELETE FROM oq_cron_runs WHERE started_at < datetime('now', '-90 days')"
-              ),
-              env.DB.prepare(
-                "DELETE FROM oq_admin_actions WHERE created_at < datetime('now', '-90 days')"
               ),
               env.DB.prepare(
                 "DELETE FROM oq_logs WHERE created_at < datetime('now', '-30 days')"
