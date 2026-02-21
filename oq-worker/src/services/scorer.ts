@@ -376,6 +376,8 @@ interface ScoringInput {
     topVerifiedModel: string;
     topBashOnly: number;
     topBashOnlyModel: string;
+    topPro?: number;
+    topProModel?: string;
   };
   softwareIndex?: number;
   softwareDate?: string;
