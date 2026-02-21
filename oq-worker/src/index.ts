@@ -578,6 +578,7 @@ async function fetchOQArticles(
   const errors: FetchError[] = [];
   let fetched = 0;
   const yesterday = new Date(Date.now() - 86400000).toISOString();
+  const threeDaysAgo = new Date(Date.now() - 3 * 86400000);
 
   for (const source of oqSources) {
     try {
@@ -598,14 +599,13 @@ async function fetchOQArticles(
       const parsed = parser.parse(text);
       const items = extractFeedItems(parsed);
 
-      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
       for (const item of items) {
         if (!item.title || !item.url) continue;
 
-        // Skip articles older than 7 days to avoid ingesting full archives
+        // Skip articles older than 3 days to avoid ingesting full archives
         if (item.publishedAt) {
           const pubDate = new Date(item.publishedAt);
-          if (!isNaN(pubDate.getTime()) && pubDate < sevenDaysAgo) continue;
+          if (!isNaN(pubDate.getTime()) && pubDate < threeDaysAgo) continue;
         }
 
         const result = await db
@@ -702,7 +702,7 @@ function extractFeedItems(parsed: any): FeedItem[] {
 function stripHtml(text: string): string {
   return text
     .replace(/<[^>]*>/g, "")
-    .replace(/[\uD800-\uDFFF]/g, "") // Strip unpaired surrogates
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "")
     .trim();
 }
 
