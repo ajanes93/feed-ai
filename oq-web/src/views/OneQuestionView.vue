@@ -2,6 +2,9 @@
 import { onMounted } from "vue";
 import { motion } from "motion-v";
 import { useOneQuestion } from "../composables/useOneQuestion";
+import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
+import { Badge } from "@feed-ai/shared/components/ui/badge";
+import { Separator } from "@feed-ai/shared/components/ui/separator";
 import OQScoreGauge from "../components/OQScoreGauge.vue";
 import OQSignalList from "../components/OQSignalList.vue";
 import OQTrendChart from "../components/OQTrendChart.vue";
@@ -34,7 +37,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="h-[100dvh] overflow-y-auto bg-gray-950 text-gray-100">
+  <div class="h-[100dvh] overflow-y-auto bg-background text-foreground">
     <!-- Ambient glow -->
     <div
       class="pointer-events-none fixed top-[-30%] left-1/2 z-0 h-[600px] w-[800px] -translate-x-1/2"
@@ -52,15 +55,16 @@ onMounted(async () => {
       <header class="flex items-center justify-between pt-8">
         <router-link
           to="/"
-          class="font-serif text-lg tracking-tight text-gray-500"
+          class="font-serif text-lg tracking-tight text-muted-foreground"
         >
           one<span class="text-orange-500">?</span>
         </router-link>
-        <span
-          class="rounded-full border border-orange-500/15 bg-orange-500/8 px-3 py-1 text-[11px] font-medium tracking-widest text-orange-500 uppercase"
+        <Badge
+          variant="outline"
+          class="border-orange-500/15 bg-orange-500/8 text-[11px] font-medium tracking-widest text-orange-500 uppercase"
         >
           Live — Updated Daily
-        </span>
+        </Badge>
       </header>
 
       <!-- Hero -->
@@ -77,7 +81,7 @@ onMounted(async () => {
           engineers?
         </h1>
         <p
-          class="mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-gray-500"
+          class="mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted-foreground"
         >
           AI tracks the signals daily. Reads the research, watches the market,
           and gives its honest assessment.
@@ -87,12 +91,12 @@ onMounted(async () => {
       <!-- Loading -->
       <div v-if="loading && !today" class="flex justify-center py-20">
         <div
-          class="h-8 w-8 animate-spin rounded-full border-2 border-gray-700 border-t-orange-500"
+          class="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-orange-500"
         />
       </div>
 
       <!-- Error -->
-      <div v-else-if="error" class="py-20 text-center text-sm text-red-400">
+      <div v-else-if="error" class="py-20 text-center text-sm text-destructive">
         {{ error }}
       </div>
 
@@ -104,9 +108,7 @@ onMounted(async () => {
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.6, delay: 0.2 }"
         >
-          <div
-            class="relative overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 p-6 sm:p-10"
-          >
+          <Card class="relative overflow-hidden border-border bg-card py-0">
             <!-- Top accent line -->
             <div
               class="absolute top-0 right-0 left-0 h-px"
@@ -121,84 +123,92 @@ onMounted(async () => {
               "
             />
 
-            <!-- Header -->
-            <div
-              class="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-start sm:justify-between"
-            >
-              <div>
-                <div class="text-xs tracking-widest text-gray-600 uppercase">
-                  {{ formattedDate }}
+            <CardContent class="p-6 sm:p-10">
+              <!-- Header -->
+              <div
+                class="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-start sm:justify-between"
+              >
+                <div>
+                  <div
+                    class="text-xs tracking-widest text-muted-foreground uppercase"
+                  >
+                    {{ formattedDate }}
+                  </div>
+                  <div class="mt-1 text-sm text-muted-foreground">
+                    Replacement Likelihood Score
+                  </div>
                 </div>
-                <div class="mt-1 text-sm text-gray-500">
-                  Replacement Likelihood Score
+                <div
+                  data-testid="delta-area"
+                  class="flex flex-col items-start gap-1 sm:items-end"
+                >
+                  <Badge
+                    :variant="
+                      deltaDirection === 'up'
+                        ? 'error'
+                        : deltaDirection === 'down'
+                          ? 'success'
+                          : 'secondary'
+                    "
+                    class="font-mono text-xs"
+                  >
+                    <span v-if="deltaDirection === 'up'">▲</span>
+                    <span v-else-if="deltaDirection === 'down'">▼</span>
+                    <span v-else>●</span>
+                    {{ deltaFormatted }}
+                  </Badge>
+                  <!-- Delta explanation -->
+                  <p
+                    v-if="today.deltaExplanation"
+                    class="max-w-xs text-[11px] leading-snug text-muted-foreground"
+                  >
+                    {{ today.deltaExplanation }}
+                  </p>
                 </div>
               </div>
-              <div
-                data-testid="delta-area"
-                class="flex flex-col items-start gap-1 sm:items-end"
-              >
+
+              <!-- Gauge -->
+              <OQScoreGauge
+                :score="today.score"
+                :score-technical="today.scoreTechnical"
+                :score-economic="today.scoreEconomic"
+              />
+
+              <!-- Model Agreement -->
+              <OQModelAgreement
+                v-if="today.modelScores.length > 1"
+                :model-agreement="today.modelAgreement"
+                :model-spread="today.modelSpread"
+                :model-scores="today.modelScores"
+                class="mt-6"
+              />
+
+              <!-- Analysis -->
+              <Separator class="my-6 bg-border sm:my-8" />
+              <div>
                 <div
-                  class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-mono text-xs"
-                  :class="{
-                    'bg-red-500/8 text-red-400': deltaDirection === 'up',
-                    'bg-emerald-500/8 text-emerald-400':
-                      deltaDirection === 'down',
-                    'bg-gray-800 text-gray-500': deltaDirection === 'neutral',
-                  }"
+                  class="mb-3 flex items-center gap-2 text-[10px] tracking-widest text-muted-foreground uppercase"
                 >
-                  <span v-if="deltaDirection === 'up'">▲</span>
-                  <span v-else-if="deltaDirection === 'down'">▼</span>
-                  <span v-else>●</span>
-                  {{ deltaFormatted }}
+                  <span
+                    class="h-1.5 w-1.5 animate-pulse rounded-full bg-orange-500"
+                  />
+                  Today's AI Take
                 </div>
-                <!-- Delta explanation -->
                 <p
-                  v-if="today.deltaExplanation"
-                  class="max-w-xs text-[11px] leading-snug text-gray-600"
+                  class="text-[15px] leading-[1.7] font-light text-muted-foreground"
                 >
-                  {{ today.deltaExplanation }}
+                  {{ today.analysis }}
                 </p>
               </div>
-            </div>
 
-            <!-- Gauge -->
-            <OQScoreGauge
-              :score="today.score"
-              :score-technical="today.scoreTechnical"
-              :score-economic="today.scoreEconomic"
-            />
-
-            <!-- Model Agreement -->
-            <OQModelAgreement
-              v-if="today.modelScores.length > 1"
-              :model-agreement="today.modelAgreement"
-              :model-spread="today.modelSpread"
-              :model-scores="today.modelScores"
-              class="mt-6"
-            />
-
-            <!-- Analysis -->
-            <div class="mt-6 border-t border-gray-800 pt-6 sm:mt-8 sm:pt-8">
-              <div
-                class="mb-3 flex items-center gap-2 text-[10px] tracking-widest text-gray-600 uppercase"
-              >
-                <span
-                  class="h-1.5 w-1.5 animate-pulse rounded-full bg-orange-500"
-                />
-                Today's AI Take
-              </div>
-              <p class="text-[15px] leading-[1.7] font-light text-gray-400">
-                {{ today.analysis }}
-              </p>
-            </div>
-
-            <!-- Signals -->
-            <OQSignalList
-              v-if="today.signals.length > 0"
-              :signals="today.signals"
-              class="mt-6"
-            />
-          </div>
+              <!-- Signals -->
+              <OQSignalList
+                v-if="today.signals.length > 0"
+                :signals="today.signals"
+                class="mt-6"
+              />
+            </CardContent>
+          </Card>
         </motion.section>
 
         <!-- ═══ TREND CHART ═══ -->
@@ -209,7 +219,9 @@ onMounted(async () => {
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.6, delay: 0.3 }"
         >
-          <div class="mb-4 text-[10px] tracking-widest text-gray-600 uppercase">
+          <div
+            class="mb-4 text-[10px] tracking-widest text-muted-foreground uppercase"
+          >
             Score over time
           </div>
           <OQTrendChart :history="history" />
@@ -288,12 +300,12 @@ onMounted(async () => {
 
       <!-- Footer -->
       <footer
-        class="border-t border-gray-800 py-6 text-center text-xs text-gray-600"
+        class="border-t border-border py-6 text-center text-xs text-muted-foreground"
       >
         Built by
         <a
           href="https://andresjanes.com"
-          class="text-gray-500 hover:text-orange-500"
+          class="text-muted-foreground hover:text-orange-500"
           target="_blank"
           rel="noopener"
         >
@@ -302,7 +314,7 @@ onMounted(async () => {
         ·
         <router-link
           to="/methodology"
-          class="text-gray-500 hover:text-orange-500"
+          class="text-muted-foreground hover:text-orange-500"
         >
           Methodology
         </router-link>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { OQHistoryEntry } from "@feed-ai/shared/oq-types";
+import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
 
 const props = defineProps<{
   history: OQHistoryEntry[];
@@ -66,68 +67,70 @@ const gridLines = computed(() => {
 </script>
 
 <template>
-  <div class="rounded-2xl border border-gray-800 bg-gray-900 p-5 sm:p-8">
-    <div v-if="chartData" class="relative">
-      <svg
-        class="w-full"
-        :viewBox="`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`"
-        preserveAspectRatio="none"
-      >
-        <defs>
-          <linearGradient id="oqChartGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="rgba(240, 94, 35, 0.2)" />
-            <stop offset="100%" stop-color="rgba(240, 94, 35, 0)" />
-          </linearGradient>
-        </defs>
+  <Card class="border-border bg-card py-0">
+    <CardContent class="p-5 sm:p-8">
+      <div v-if="chartData" class="relative">
+        <svg
+          class="w-full"
+          :viewBox="`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`"
+          preserveAspectRatio="none"
+        >
+          <defs>
+            <linearGradient id="oqChartGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="rgba(240, 94, 35, 0.2)" />
+              <stop offset="100%" stop-color="rgba(240, 94, 35, 0)" />
+            </linearGradient>
+          </defs>
 
-        <!-- Grid -->
-        <line
-          v-for="y in gridLines"
-          :key="y"
-          :x1="PADDING"
-          :y1="y"
-          :x2="SVG_WIDTH - PADDING"
-          :y2="y"
-          stroke="#222228"
-          stroke-dasharray="2 4"
-        />
+          <!-- Grid -->
+          <line
+            v-for="y in gridLines"
+            :key="y"
+            :x1="PADDING"
+            :y1="y"
+            :x2="SVG_WIDTH - PADDING"
+            :y2="y"
+            class="stroke-border"
+            stroke-dasharray="2 4"
+          />
 
-        <!-- Area -->
-        <path :d="chartData.areaPath" fill="url(#oqChartGradient)" />
+          <!-- Area -->
+          <path :d="chartData.areaPath" fill="url(#oqChartGradient)" />
 
-        <!-- Line -->
-        <path
-          :d="chartData.linePath"
-          fill="none"
-          stroke="#f05e23"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
+          <!-- Line -->
+          <path
+            :d="chartData.linePath"
+            fill="none"
+            stroke="#f05e23"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
 
-        <!-- End dot -->
-        <circle
-          :cx="chartData.lastPoint.x"
-          :cy="chartData.lastPoint.y"
-          r="5"
-          fill="#f05e23"
-          stroke="#0a0a0c"
-          stroke-width="3"
-        />
-      </svg>
+          <!-- End dot -->
+          <circle
+            :cx="chartData.lastPoint.x"
+            :cy="chartData.lastPoint.y"
+            r="5"
+            fill="#f05e23"
+            class="stroke-background"
+            stroke-width="3"
+          />
+        </svg>
 
-      <!-- Labels -->
-      <div
-        class="mt-3 flex justify-between font-mono text-[10px] text-gray-600"
-      >
-        <span v-for="label in chartData.labels" :key="label.text">
-          {{ label.text }}
-        </span>
+        <!-- Labels -->
+        <div
+          class="mt-3 flex justify-between font-mono text-[10px] text-muted-foreground"
+        >
+          <span v-for="label in chartData.labels" :key="label.text">
+            {{ label.text }}
+          </span>
+        </div>
       </div>
-    </div>
 
-    <div v-else class="py-8 text-center text-sm text-gray-600">
-      Chart available after 2+ days of data.
-    </div>
-  </div>
+      <div v-else class="py-8 text-center text-sm text-muted-foreground">
+        Chart available after 2+ days of data.
+      </div>
+    </CardContent>
+  </Card>
 </template>

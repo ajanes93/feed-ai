@@ -20,7 +20,7 @@ defineEmits<{
       <motion.button
         :disabled="!hasPrevious"
         aria-label="Previous digest"
-        class="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-800 hover:text-white disabled:invisible"
+        class="text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 items-center justify-center rounded-full transition-colors disabled:invisible"
         :press="{ scale: 0.85 }"
         @click="$emit('previous')"
       >
@@ -42,16 +42,18 @@ defineEmits<{
       </motion.button>
 
       <div class="flex flex-col items-center">
-        <h2 class="text-sm font-semibold tracking-wide text-white">
+        <h2 class="text-foreground text-sm font-semibold tracking-wide">
           {{ date }}
         </h2>
-        <span class="text-xs text-gray-500">{{ itemCount }} stories</span>
+        <span class="text-muted-foreground text-xs"
+          >{{ itemCount }} stories</span
+        >
       </div>
 
       <motion.button
         :disabled="!hasNext"
         aria-label="Next digest"
-        class="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-800 hover:text-white disabled:invisible"
+        class="text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 items-center justify-center rounded-full transition-colors disabled:invisible"
         :press="{ scale: 0.85 }"
         @click="$emit('next')"
       >

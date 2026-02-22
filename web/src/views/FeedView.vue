@@ -5,6 +5,7 @@ import { Swiper, SwiperSlide } from "swiper/vue";
 import type Swiper_T from "swiper";
 import "swiper/css";
 import { useDigest } from "../composables/useDigest";
+import { Skeleton } from "@feed-ai/shared/components/ui/skeleton";
 import DigestFeed from "../components/DigestFeed.vue";
 import DateHeader from "../components/DateHeader.vue";
 import EmptyState from "../components/EmptyState.vue";
@@ -216,7 +217,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="h-[100dvh] overflow-hidden bg-gray-950">
+  <div class="bg-background h-[100dvh] overflow-hidden">
     <div
       data-testid="pull-content"
       class="relative h-full"
@@ -249,7 +250,7 @@ onMounted(async () => {
         <div class="flex items-center gap-2">
           <div
             :class="[
-              'h-4 w-4 rounded-full border-2 border-gray-600 border-t-white',
+              'border-muted border-t-foreground h-4 w-4 rounded-full border-2',
               refreshing ? 'animate-spin' : '',
             ]"
             :style="{
@@ -258,7 +259,9 @@ onMounted(async () => {
                 : undefined,
             }"
           />
-          <span class="text-xs font-medium text-gray-400">{{ pullText }}</span>
+          <span class="text-muted-foreground text-xs font-medium">{{
+            pullText
+          }}</span>
         </div>
       </div>
 
@@ -271,16 +274,16 @@ onMounted(async () => {
           <div
             v-for="n in 5"
             :key="n"
-            class="animate-pulse rounded-xl border border-gray-800/50 bg-gray-900/60 p-5"
+            class="border-border/50 bg-card/60 rounded-xl border p-5"
           >
             <div class="mb-3 flex items-center gap-3">
-              <div class="h-5 w-10 rounded-full bg-gray-800" />
-              <div class="h-4 w-12 rounded bg-gray-800" />
-              <div class="ml-auto h-4 w-20 rounded bg-gray-800" />
+              <Skeleton class="h-5 w-10 rounded-full" />
+              <Skeleton class="h-4 w-12" />
+              <Skeleton class="ml-auto h-4 w-20" />
             </div>
-            <div class="h-5 w-3/4 rounded bg-gray-800" />
-            <div class="mt-3 h-4 w-full rounded bg-gray-800/60" />
-            <div class="mt-1.5 h-4 w-5/6 rounded bg-gray-800/60" />
+            <Skeleton class="h-5 w-3/4" />
+            <Skeleton class="mt-3 h-4 w-full" />
+            <Skeleton class="mt-1.5 h-4 w-5/6" />
           </div>
         </div>
       </div>
@@ -307,7 +310,7 @@ onMounted(async () => {
             <div class="flex h-full items-center justify-center">
               <div
                 v-if="hasPrevious"
-                class="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-gray-400"
+                class="border-border border-t-muted-foreground h-6 w-6 animate-spin rounded-full border-2"
               />
             </div>
           </SwiperSlide>
@@ -335,7 +338,7 @@ onMounted(async () => {
               <!-- Digest content -->
               <template v-else-if="digest">
                 <!-- Fixed filters between header and category Swiper -->
-                <div class="no-swiper bg-gray-950 px-4 py-2">
+                <div class="no-swiper bg-background px-4 py-2">
                   <CategoryFilter
                     :items="digest.items"
                     :active-category="activeCategory"
@@ -370,12 +373,14 @@ onMounted(async () => {
                       class="h-full overflow-y-scroll overscroll-contain pb-[calc(2rem+env(safe-area-inset-bottom))]"
                     >
                       <DigestFeed :items="itemsForCategory(cat)" />
-                      <p class="py-6 text-center text-xs text-gray-600">
+                      <p
+                        class="text-muted-foreground/50 py-6 text-center text-xs"
+                      >
                         <a
                           href="https://andresjanes.com"
                           target="_blank"
                           rel="noopener"
-                          class="transition hover:text-gray-400"
+                          class="hover:text-muted-foreground transition"
                           >andresjanes.com</a
                         >
                       </p>
@@ -391,7 +396,7 @@ onMounted(async () => {
             <div class="flex h-full items-center justify-center">
               <div
                 v-if="hasNext"
-                class="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-gray-400"
+                class="border-border border-t-muted-foreground h-6 w-6 animate-spin rounded-full border-2"
               />
             </div>
           </SwiperSlide>

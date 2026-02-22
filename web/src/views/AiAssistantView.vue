@@ -3,6 +3,9 @@ import { onMounted, computed, nextTick, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAiChat, type PromptKey } from "../composables/useAiChat";
 import { renderMarkdown } from "../utils/markdown";
+import { Button } from "@feed-ai/shared/components/ui/button";
+import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
+import { ArrowLeft, Sparkles, X } from "lucide-vue-next";
 
 const router = useRouter();
 const {
@@ -79,68 +82,37 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex h-[100dvh] flex-col bg-[#0f1923]">
+  <div class="bg-background flex h-[100dvh] flex-col">
     <!-- Header -->
     <header class="flex items-center justify-between px-4 py-3">
-      <button
-        class="flex items-center gap-1 text-sm text-gray-400 transition-colors hover:text-white"
+      <Button
+        variant="ghost"
+        size="sm"
+        class="text-muted-foreground hover:text-foreground gap-1"
         @click="router.back()"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-4 w-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M15 19l-7-7 7-7"
-          />
-        </svg>
+        <ArrowLeft class="h-4 w-4" />
         Feed
-      </button>
+      </Button>
 
       <div class="flex items-center gap-1.5">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-4 w-4 text-blue-400"
-          fill="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            d="M12 2l2.09 6.26L20.18 9l-5.09 3.74L17.18 19 12 15.27 6.82 19l2.09-6.26L3.82 9l6.09-.74z"
-          />
-        </svg>
-        <span class="text-sm font-medium text-white">AI Assistant</span>
+        <Sparkles class="h-4 w-4 text-blue-400" />
+        <span class="text-foreground text-sm font-medium">AI Assistant</span>
       </div>
 
       <div class="flex items-center gap-2">
-        <button
+        <Button
           v-if="hasMessages"
-          class="text-gray-500 transition-colors hover:text-white"
+          variant="ghost"
+          size="icon"
+          class="text-muted-foreground hover:text-foreground h-8 w-8"
           title="New conversation"
           @click="reset"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
+          <X class="h-4 w-4" />
+        </Button>
         <span
-          class="min-w-[2rem] text-right text-xs text-gray-500 tabular-nums"
+          class="text-muted-foreground min-w-[2rem] text-right text-xs tabular-nums"
         >
           {{ remaining }}/5
         </span>
@@ -160,22 +132,13 @@ onMounted(() => {
         <div
           class="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-500/10"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-8 w-8 text-blue-400"
-            fill="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              d="M12 2l2.09 6.26L20.18 9l-5.09 3.74L17.18 19 12 15.27 6.82 19l2.09-6.26L3.82 9l6.09-.74z"
-            />
-          </svg>
+          <Sparkles class="h-8 w-8 text-blue-400" />
         </div>
 
-        <h1 class="text-xl font-semibold text-white">
+        <h1 class="text-foreground text-xl font-semibold">
           What do you want to know?
         </h1>
-        <p class="mt-1 text-sm text-[#8b95a3]">
+        <p class="text-muted-foreground mt-1 text-sm">
           AI-powered summaries of your feed.
         </p>
 
@@ -185,22 +148,24 @@ onMounted(() => {
             v-for="(chip, i) in prompts"
             :key="chip.key"
             :disabled="loading || remaining <= 0"
-            class="flex flex-col items-start rounded-xl border border-white/[0.07] bg-white/[0.025] p-4 text-left transition-all hover:-translate-y-0.5 hover:border-white/[0.15] hover:bg-white/[0.04] disabled:pointer-events-none disabled:opacity-40"
+            class="border-border/50 bg-card/50 hover:border-border hover:bg-card flex flex-col items-start rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 disabled:pointer-events-none disabled:opacity-40"
             :style="{ animationDelay: `${60 + i * 50}ms` }"
             @click="handleQuery(chip.key, chip.label)"
           >
             <span class="text-lg">{{ chip.emoji }}</span>
-            <span class="mt-1.5 text-sm font-medium text-[#e2e8f0]">{{
+            <span class="text-foreground mt-1.5 text-sm font-medium">{{
               chip.label
             }}</span>
-            <span class="text-xs text-[#8b95a3]">{{ chip.description }}</span>
+            <span class="text-muted-foreground text-xs">{{
+              chip.description
+            }}</span>
           </button>
         </div>
 
         <!-- Error message -->
         <p
           v-if="error"
-          class="mt-6 text-sm text-red-400"
+          class="text-destructive mt-6 text-sm"
         >
           {{ error }}
         </p>
@@ -228,24 +193,26 @@ onMounted(() => {
           </div>
 
           <!-- Assistant card -->
-          <div
+          <Card
             v-else
-            class="mb-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4"
+            class="border-border/50 bg-card/50 mb-4 py-0"
           >
-            <!-- eslint-disable-next-line vue/no-v-html -- sanitized by DOMPurify -->
-            <div
-              class="ai-prose text-sm leading-relaxed text-[#c9d1dc]"
-              v-html="renderMarkdown(msg.text)"
-            />
-          </div>
+            <CardContent class="p-4">
+              <!-- eslint-disable-next-line vue/no-v-html -- sanitized by DOMPurify -->
+              <div
+                class="ai-prose text-muted-foreground text-sm leading-relaxed"
+                v-html="renderMarkdown(msg.text)"
+              />
+            </CardContent>
+          </Card>
         </template>
 
         <!-- Loading indicator -->
-        <div
+        <Card
           v-if="loading"
-          class="mb-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4"
+          class="border-border/50 bg-card/50 mb-4 py-0"
         >
-          <div class="flex gap-1.5">
+          <CardContent class="flex gap-1.5 p-4">
             <div
               class="h-2 w-2 animate-bounce rounded-full bg-blue-400/60"
               style="animation-delay: 0s"
@@ -258,13 +225,13 @@ onMounted(() => {
               class="h-2 w-2 animate-bounce rounded-full bg-blue-400/60"
               style="animation-delay: 0.3s"
             />
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         <!-- Error message -->
         <p
           v-if="error"
-          class="mb-4 text-sm text-red-400"
+          class="text-destructive mb-4 text-sm"
         >
           {{ error }}
         </p>
@@ -274,20 +241,22 @@ onMounted(() => {
     <!-- Footer chips (after first query) -->
     <div
       v-if="hasMessages && availableChips.length > 0"
-      class="border-t border-white/[0.07] px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+      class="border-border border-t px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
     >
-      <p class="mb-2 text-xs text-[#8b95a3]">Ask something else</p>
+      <p class="text-muted-foreground mb-2 text-xs">Ask something else</p>
       <div class="flex gap-2 overflow-x-auto">
-        <button
+        <Button
           v-for="chip in availableChips"
           :key="chip.key"
+          variant="outline"
+          size="sm"
+          class="border-border/50 bg-card/50 text-foreground hover:bg-card shrink-0 gap-1.5"
           :disabled="loading || remaining <= 0"
-          class="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-1.5 text-xs text-[#e2e8f0] transition-all hover:border-white/[0.15] hover:bg-white/[0.04] disabled:pointer-events-none disabled:opacity-40"
           @click="handleQuery(chip.key, chip.label)"
         >
           <span>{{ chip.emoji }}</span>
           {{ chip.label }}
-        </button>
+        </Button>
       </div>
     </div>
   </div>
@@ -297,11 +266,11 @@ onMounted(() => {
 .ai-prose :deep(h1),
 .ai-prose :deep(h2),
 .ai-prose :deep(h3) {
-  color: #e2e8f0;
+  color: var(--color-foreground);
 }
 
 .ai-prose :deep(strong) {
-  color: #e2e8f0;
+  color: var(--color-foreground);
   font-weight: 500;
 }
 

@@ -5,8 +5,19 @@ import { useDashboard } from "../composables/useDashboard";
 import { timeAgo, formatTokens, formatModelName } from "@feed-ai/shared/utils";
 import DataTable from "@feed-ai/shared/components/DataTable";
 import StatCard from "@feed-ai/shared/components/StatCard";
-import DropdownMenu from "@feed-ai/shared/components/DropdownMenu";
 import LogViewer from "@feed-ai/shared/components/LogViewer";
+import { Button } from "@feed-ai/shared/components/ui/button";
+import { Input } from "@feed-ai/shared/components/ui/input";
+import { Badge } from "@feed-ai/shared/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@feed-ai/shared/components/ui/dropdown-menu";
+import { TableRow, TableCell } from "@feed-ai/shared/components/ui/table";
+import { ChevronDown, RefreshCw, Rss, Sparkles } from "lucide-vue-next";
 
 const {
   data,
@@ -43,52 +54,51 @@ onMounted(fetchDashboard);
 </script>
 
 <template>
-  <div class="h-[100dvh] overflow-y-auto bg-gray-950 p-4 text-gray-100">
-    <div class="mx-auto max-w-4xl">
+  <div class="h-[100dvh] overflow-y-auto bg-background p-4 text-foreground">
+    <div class="mx-auto max-w-5xl">
       <!-- Header -->
-      <div class="mb-6 flex items-center justify-between">
-        <h1 class="text-xl font-semibold text-white">OQ Dashboard</h1>
-        <div class="flex items-center gap-2">
-          <DropdownMenu
-            v-if="data && !needsAuth"
-            label="Actions"
-            :disabled="fetching || scoring"
-          >
-            <template #default="{ close }">
-              <button
-                :disabled="fetching"
-                class="flex w-full flex-col px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-50"
-                @click="
-                  close();
-                  fetchArticles();
-                "
+      <div class="mb-8 flex items-center justify-between">
+        <h1 class="text-2xl font-bold tracking-tight">OQ Dashboard</h1>
+        <div class="flex items-center gap-3">
+          <DropdownMenu v-if="data && !needsAuth">
+            <DropdownMenuTrigger as-child>
+              <Button
+                variant="outline"
+                size="sm"
+                :disabled="fetching || scoring"
               >
-                <span class="font-medium">{{
-                  fetching ? "Fetching..." : "Fetch Articles"
-                }}</span>
-                <span class="text-xs text-gray-500"
-                  >Pull latest from all RSS sources</span
-                >
-              </button>
-              <button
-                :disabled="scoring"
-                class="flex w-full flex-col px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-50"
-                @click="
-                  close();
-                  generateScore();
-                "
-              >
-                <span class="font-medium">{{
-                  scoring ? "Scoring..." : "Generate Score"
-                }}</span>
-                <span class="text-xs text-gray-500"
-                  >Run multi-model AI scoring for today</span
-                >
-              </button>
-            </template>
+                Actions
+                <ChevronDown class="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent class="w-64">
+              <DropdownMenuItem :disabled="fetching" @click="fetchArticles()">
+                <Rss class="size-4" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    fetching ? "Fetching..." : "Fetch Articles"
+                  }}</span>
+                  <span class="text-xs text-muted-foreground"
+                    >Pull latest from all RSS sources</span
+                  >
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem :disabled="scoring" @click="generateScore()">
+                <Sparkles class="size-4" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    scoring ? "Scoring..." : "Generate Score"
+                  }}</span>
+                  <span class="text-xs text-muted-foreground"
+                    >Run multi-model AI scoring for today</span
+                  >
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
           </DropdownMenu>
-          <router-link to="/" class="text-xs text-gray-500 hover:text-white">
-            Public View
+          <router-link to="/">
+            <Button variant="ghost" size="sm"> Public View </Button>
           </router-link>
         </div>
       </div>
@@ -96,24 +106,24 @@ onMounted(fetchDashboard);
       <!-- Action results -->
       <div
         v-if="fetchResult"
-        class="mb-4 rounded-lg border px-4 py-2 text-sm"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
         :class="
           fetchSuccess
-            ? 'border-green-800 bg-green-950 text-green-300'
-            : 'border-amber-800 bg-amber-950 text-amber-300'
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
         "
       >
         {{ fetchResult }}
       </div>
       <div
         v-if="scoreResult"
-        class="mb-4 rounded-lg border px-4 py-2 text-sm"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
         :class="
           scoreAlreadyExists
-            ? 'border-amber-800 bg-amber-950 text-amber-300'
+            ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
             : scoreSuccess
-              ? 'border-green-800 bg-green-950 text-green-300'
-              : 'border-red-800 bg-red-950 text-red-300'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+              : 'border-destructive/30 bg-destructive/10 text-destructive'
         "
       >
         <div class="flex items-center justify-between gap-3">
@@ -131,24 +141,19 @@ onMounted(fetchDashboard);
 
       <!-- Auth prompt -->
       <div v-if="needsAuth" class="mx-auto max-w-sm py-20">
-        <p class="mb-4 text-center text-sm text-gray-400">
+        <p class="mb-4 text-center text-sm text-muted-foreground">
           Enter admin key to access the dashboard
         </p>
         <form class="flex gap-2" @submit.prevent="submitKey">
-          <input
+          <Input
             v-model="keyInput"
             type="password"
             placeholder="Admin key"
-            class="flex-1 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-gray-500 focus:outline-none"
+            class="flex-1"
           />
-          <button
-            type="submit"
-            class="rounded-lg bg-gray-700 px-4 py-2 text-sm text-white hover:bg-gray-600"
-          >
-            Go
-          </button>
+          <Button type="submit"> Go </Button>
         </form>
-        <p v-if="error" class="mt-3 text-center text-sm text-red-400">
+        <p v-if="error" class="mt-3 text-center text-sm text-destructive">
           {{ error }}
         </p>
       </div>
@@ -156,33 +161,32 @@ onMounted(fetchDashboard);
       <!-- Loading -->
       <div v-else-if="loading" class="flex justify-center py-20">
         <div
-          class="h-8 w-8 animate-spin rounded-full border-2 border-gray-600 border-t-white"
+          class="size-8 animate-spin rounded-full border-2 border-muted border-t-foreground"
         />
       </div>
 
       <!-- Error -->
       <div v-else-if="error" class="py-20 text-center">
-        <p class="mb-4 text-sm text-red-400">{{ error }}</p>
+        <p class="mb-4 text-sm text-destructive">{{ error }}</p>
         <div class="flex justify-center gap-3">
-          <button
-            class="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 hover:border-gray-500 hover:text-white"
-            @click="fetchDashboard"
-          >
+          <Button variant="outline" size="sm" @click="fetchDashboard">
             Retry
-          </button>
-          <button
-            class="rounded-lg border border-red-900 px-4 py-2 text-sm text-red-400 hover:border-red-700 hover:text-red-300"
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            class="border-destructive/50 text-destructive hover:bg-destructive/10"
             @click="clearAdminKey"
           >
             Logout
-          </button>
+          </Button>
         </div>
       </div>
 
       <!-- Dashboard content -->
       <template v-else-if="data">
         <!-- Stats row -->
-        <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard :value="data.totalScores" label="Total Scores" :index="0" />
           <StatCard
             :value="data.totalArticles"
@@ -203,13 +207,13 @@ onMounted(fetchDashboard);
 
         <!-- AI Usage -->
         <motion.section
-          class="mb-6"
+          class="mb-8"
           :initial="{ opacity: 0, y: 12 }"
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.35, delay: 0.15 }"
         >
           <h2
-            class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase"
+            class="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground"
           >
             AI Usage
           </h2>
@@ -226,55 +230,53 @@ onMounted(fetchDashboard);
             :row-count="data.ai.recentCalls.length"
             empty-message="No AI usage recorded yet"
           >
-            <tr
-              v-for="call in data.ai.recentCalls"
-              :key="call.id"
-              class="border-b border-gray-800/50"
-            >
-              <td class="px-3 py-2 text-gray-300">
+            <TableRow v-for="call in data.ai.recentCalls" :key="call.id">
+              <TableCell class="text-muted-foreground">
                 {{ timeAgo(call.createdAt) }}
-              </td>
-              <td class="px-3 py-2">{{ call.provider }}</td>
-              <td class="px-3 py-2 text-xs text-gray-400">
+              </TableCell>
+              <TableCell>{{ call.provider }}</TableCell>
+              <TableCell class="text-muted-foreground">
                 {{ formatModelName(call.model) }}
-              </td>
-              <td class="px-3 py-2">
+              </TableCell>
+              <TableCell>
                 {{ formatTokens(call.inputTokens) }}
-              </td>
-              <td class="px-3 py-2">
+              </TableCell>
+              <TableCell>
                 {{ formatTokens(call.outputTokens) }}
-              </td>
-              <td class="px-3 py-2">
+              </TableCell>
+              <TableCell>
                 {{
                   call.latencyMs
                     ? `${(call.latencyMs / 1000).toFixed(1)}s`
                     : "-"
                 }}
-              </td>
-              <td class="px-3 py-2">
-                <span
-                  :class="{
-                    'text-green-400': call.status === 'success',
-                    'text-amber-400': call.status === 'rate_limited',
-                    'text-red-400': call.status === 'error',
-                  }"
+              </TableCell>
+              <TableCell>
+                <Badge
+                  :variant="
+                    call.status === 'success'
+                      ? 'success'
+                      : call.status === 'rate_limited'
+                        ? 'warning'
+                        : 'error'
+                  "
                 >
                   {{ call.status }}
-                </span>
-              </td>
-            </tr>
+                </Badge>
+              </TableCell>
+            </TableRow>
           </DataTable>
         </motion.section>
 
-        <!-- Source Health -->
+        <!-- Sources -->
         <motion.section
-          class="mb-6"
+          class="mb-8"
           :initial="{ opacity: 0, y: 12 }"
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.35, delay: 0.25 }"
         >
           <h2
-            class="mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase"
+            class="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground"
           >
             Sources
           </h2>
@@ -288,38 +290,26 @@ onMounted(fetchDashboard);
             :row-count="data.sources.length"
             empty-message="No sources tracked"
           >
-            <tr
-              v-for="source in data.sources"
-              :key="source.sourceName"
-              class="border-b border-gray-800/50"
-            >
-              <td class="px-3 py-2 font-medium text-white">
+            <TableRow v-for="source in data.sources" :key="source.sourceName">
+              <TableCell class="font-medium text-foreground">
                 {{ source.sourceName }}
-              </td>
-              <td class="px-3 py-2">
-                <span
-                  :class="{
-                    'text-purple-400': source.pillar === 'capability',
-                    'text-blue-400': source.pillar === 'labour_market',
-                    'text-green-400': source.pillar === 'sentiment',
-                    'text-yellow-400': source.pillar === 'industry',
-                    'text-gray-400': source.pillar === 'barriers',
-                  }"
-                >
+              </TableCell>
+              <TableCell>
+                <Badge variant="secondary">
                   {{ source.pillar }}
-                </span>
-              </td>
-              <td class="px-3 py-2">{{ source.articleCount }}</td>
-              <td class="px-3 py-2 text-gray-300">
+                </Badge>
+              </TableCell>
+              <TableCell>{{ source.articleCount }}</TableCell>
+              <TableCell class="text-muted-foreground">
                 {{ timeAgo(source.lastFetched) }}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           </DataTable>
         </motion.section>
 
         <!-- Logs -->
         <motion.section
-          class="mb-6"
+          class="mb-8"
           :initial="{ opacity: 0, y: 12 }"
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.35, delay: 0.35 }"
@@ -328,13 +318,11 @@ onMounted(fetchDashboard);
         </motion.section>
 
         <!-- Refresh -->
-        <div class="text-center">
-          <button
-            class="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-400 hover:border-gray-500 hover:text-white"
-            @click="fetchDashboard"
-          >
+        <div class="pb-6 text-center">
+          <Button variant="outline" @click="fetchDashboard">
+            <RefreshCw class="size-4" />
             Refresh
-          </button>
+          </Button>
         </div>
       </template>
     </div>
