@@ -21,7 +21,7 @@ defineProps<{
             'bg-emerald-500': modelAgreement === 'agree',
             'bg-yellow-500': modelAgreement === 'mostly_agree',
             'bg-red-500': modelAgreement === 'disagree',
-            'bg-muted-foreground': modelAgreement === 'partial',
+            'bg-gray-500': modelAgreement === 'partial',
           }"
         />
         <span v-if="modelAgreement === 'agree'">Models agree</span>
