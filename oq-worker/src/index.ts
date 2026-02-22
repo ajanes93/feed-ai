@@ -295,8 +295,12 @@ app.get("/api/score/:date", async (c) => {
     .bind(row.id)
     .all();
 
+  // Strip internal fields before returning
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id: _id, externalData: _ext, ...publicScore } = scoreData;
+
   return c.json({
-    ...scoreData,
+    ...publicScore,
     articles: articleRows.results.map((a) => ({
       title: a.title,
       url: a.url,

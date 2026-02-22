@@ -190,7 +190,10 @@ function parseModelResponse(text: string, model: string): OQModelScore {
         direction: s.direction,
         source: s.source,
         impact: s.impact,
-        ...(typeof s.url === "string" && s.url ? { url: s.url } : {}),
+        ...(typeof s.url === "string" &&
+        /^https?:\/\//.test(s.url)
+          ? { url: s.url }
+          : {}),
       })
     ) as OQSignal[],
     delta_explanation:

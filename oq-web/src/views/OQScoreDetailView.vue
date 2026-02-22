@@ -121,7 +121,9 @@ const articlesByPillar = computed(() => {
 });
 
 onMounted(async () => {
-  const date = route.params.date as string;
+  const date = Array.isArray(route.params.date)
+    ? route.params.date[0]
+    : route.params.date;
   try {
     const res = await fetch(`/api/score/${date}`);
     if (!res.ok) {
@@ -361,7 +363,11 @@ onMounted(async () => {
         </Collapsible>
 
         <!-- ═══ PILLAR SCORES (collapsible) ═══ -->
-        <Collapsible v-model:open="pillarsOpen" class="mt-4">
+        <Collapsible
+          v-if="data.pillarScores && Object.keys(data.pillarScores).length"
+          v-model:open="pillarsOpen"
+          class="mt-4"
+        >
           <Card class="border-border bg-card py-0">
             <CollapsibleTrigger class="w-full cursor-pointer">
               <CardContent class="flex items-center justify-between p-4">
