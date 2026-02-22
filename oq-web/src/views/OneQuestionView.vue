@@ -270,6 +270,7 @@ onMounted(async () => {
             :pro-private="methodology?.capabilityGap?.proPrivate"
             :pro-private-source="methodology?.capabilityGap?.proPrivateSource"
             :note="today.capabilityGap"
+            :last-updated="methodology?.lastUpdated?.sweBench"
           />
         </motion.section>
 
@@ -293,6 +294,8 @@ onMounted(async () => {
             :top-model="methodology.sanityHarness.topModel"
             :median-pass-rate="methodology.sanityHarness.medianPassRate"
             :language-breakdown="methodology.sanityHarness.languageBreakdown"
+            :note="today.sanityHarnessNote"
+            :last-updated="methodology?.lastUpdated?.sanityHarness"
           />
         </motion.section>
 
@@ -319,6 +322,7 @@ onMounted(async () => {
             :software-index="methodology?.fredData?.softwareIndex"
             :software-date="methodology?.fredData?.softwareDate"
             :software-trend="methodology?.fredData?.softwareTrend"
+            :note="today.economicNote"
           />
         </motion.section>
 

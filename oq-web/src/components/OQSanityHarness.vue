@@ -9,7 +9,17 @@ const props = defineProps<{
   topModel: string;
   medianPassRate: number;
   languageBreakdown: string;
+  note?: string;
+  lastUpdated?: string;
 }>();
+
+function formatUpdatedDate(iso: string | undefined): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+  });
+}
 
 const langs = computed(() =>
   props.languageBreakdown
@@ -110,18 +120,24 @@ function langBg(pct: number) {
       </div>
     </div>
 
+    <p
+      v-if="note"
+      data-testid="sanity-harness-note"
+      class="mt-3 rounded-lg bg-orange-500/5 px-3 py-2 text-center text-xs leading-relaxed text-orange-400/80"
+    >
+      {{ note }}
+    </p>
+
     <div class="mt-4 flex items-baseline justify-between">
-      <p class="text-xs leading-relaxed text-muted-foreground">
-        AI agents ace some languages but fail others. A generalist replacement
-        would need all of them.
-      </p>
       <a
         href="https://sanityboard.lr7.dev"
         target="_blank"
         rel="noopener noreferrer"
-        class="ml-3 inline-flex shrink-0 items-center gap-0.5 text-[9px] text-muted-foreground/50 transition-colors hover:text-orange-500/60"
+        class="inline-flex shrink-0 items-center gap-0.5 text-[9px] text-muted-foreground/50 transition-colors hover:text-orange-500/60"
       >
-        Source: SanityHarness
+        Source: SanityHarness<span v-if="lastUpdated" class="ml-0.5"
+          >· Updated {{ formatUpdatedDate(lastUpdated) }}</span
+        >
         <ExternalLink class="h-2 w-2" />
       </a>
     </div>

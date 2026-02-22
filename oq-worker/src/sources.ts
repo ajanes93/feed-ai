@@ -129,6 +129,20 @@ export const oqSources: OQSource[] = [
     type: "rss",
   },
   {
+    id: "oq-techcrunch-enterprise",
+    name: "TechCrunch Enterprise",
+    url: "https://techcrunch.com/category/enterprise/feed/",
+    pillar: "industry",
+    type: "rss",
+  },
+  {
+    id: "oq-cnbc-tech",
+    name: "CNBC Technology",
+    url: "https://www.cnbc.com/id/19854910/device/rss/rss.html",
+    pillar: "industry",
+    type: "rss",
+  },
+  {
     id: "oq-thenewstack",
     name: "The New Stack",
     url: "https://thenewstack.io/feed/",

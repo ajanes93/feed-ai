@@ -19,6 +19,8 @@ function buildTodayResponse(overrides: Record<string, unknown> = {}) {
     delta: 0.3,
     analysis:
       "SWE-bench Verified: 79.2%. Bash Only: 76.8%. No significant movement in AI capability benchmarks this week.",
+    sanityHarnessNote: "Top agent improved 3% this week in Go.",
+    economicNote: "Indeed index dropped 2 points this week.",
     signals: [
       oqSignalFactory.build({
         text: "GPT-5 rumored for Q3 release",
@@ -32,6 +34,39 @@ function buildTodayResponse(overrides: Record<string, unknown> = {}) {
         direction: "down",
         source: "Stack Overflow",
         impact: -3,
+      }),
+      oqSignalFactory.build({
+        text: "Cursor raises $400M Series C",
+        direction: "up",
+        source: "Bloomberg",
+        impact: 2,
+        url: "https://bloomberg.com/cursor",
+      }),
+      oqSignalFactory.build({
+        text: "EU regulators propose AI liability framework",
+        direction: "down",
+        source: "Reuters",
+        impact: -1,
+      }),
+      oqSignalFactory.build({
+        text: "SWE-bench Verified hits 82% top score",
+        direction: "up",
+        source: "arXiv",
+        impact: 3,
+        url: "https://arxiv.org/swebench",
+      }),
+      oqSignalFactory.build({
+        text: "Indeed software postings drop another 5%",
+        direction: "up",
+        source: "Indeed",
+        impact: 1,
+      }),
+      oqSignalFactory.build({
+        text: "Google DeepMind publishes agent safety framework",
+        direction: "down",
+        source: "DeepMind Blog",
+        impact: -1,
+        url: "https://deepmind.google/agent-safety",
       }),
     ],
     pillarScores: {
@@ -132,6 +167,11 @@ function buildMethodologyResponse() {
       generalIndex: 215000,
       generalDate: "2026-02-14",
     },
+    lastUpdated: {
+      sanityHarness: "2026-02-20",
+      sweBench: "2026-02-18",
+      fred: "2026-02-14",
+    },
     whatWouldChange: {
       to50: [
         "SWE-bench Verified consistently above 90%",
@@ -183,6 +223,29 @@ async function mockApi(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(buildMethodologyResponse()),
+    })
+  );
+
+  await page.route("**/api/prompt-history", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          hash: "abc123def456",
+          firstUsed: "2026-02-10",
+          lastUsed: "2026-02-22",
+          changeSummary: "Added funding extraction and dynamic notes",
+          createdAt: "2026-02-10T06:30:00Z",
+        },
+        {
+          hash: "prev789hash01",
+          firstUsed: "2026-01-15",
+          lastUsed: "2026-02-09",
+          changeSummary: "Initial scoring prompt",
+          createdAt: "2026-01-15T06:30:00Z",
+        },
+      ]),
     })
   );
 

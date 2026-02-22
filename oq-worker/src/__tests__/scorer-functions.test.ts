@@ -469,6 +469,212 @@ describe("parseModelResponse — delta_explanation", () => {
   });
 });
 
+describe("parseModelResponse — sanity_harness_note and economic_note", () => {
+  it("parses sanity_harness_note when present", () => {
+    const json = JSON.stringify({
+      pillar_scores: {
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
+      suggested_delta: 0,
+      analysis: "Test",
+      sanity_harness_note: "Top agent improved 3% in Go.",
+      economic_note: "Indeed index dropped 2 points.",
+    });
+    const result = parseModelResponse(json, "test-model");
+    expect(result.sanity_harness_note).toBe("Top agent improved 3% in Go.");
+    expect(result.economic_note).toBe("Indeed index dropped 2 points.");
+  });
+
+  it("leaves notes undefined when not provided", () => {
+    const json = JSON.stringify({
+      pillar_scores: {
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
+      suggested_delta: 0,
+      analysis: "Test",
+    });
+    const result = parseModelResponse(json, "test-model");
+    expect(result.sanity_harness_note).toBeUndefined();
+    expect(result.economic_note).toBeUndefined();
+  });
+});
+
+describe("parseModelResponse — funding_events", () => {
+  it("parses valid funding events", () => {
+    const json = JSON.stringify({
+      pillar_scores: {
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
+      suggested_delta: 0,
+      analysis: "Test",
+      funding_events: [
+        {
+          company: "Cursor",
+          amount: "$400M",
+          round: "Series C",
+          relevance: "AI code tool funding",
+        },
+      ],
+    });
+    const result = parseModelResponse(json, "test-model");
+    expect(result.funding_events).toHaveLength(1);
+    expect(result.funding_events![0].company).toBe("Cursor");
+    expect(result.funding_events![0].amount).toBe("$400M");
+  });
+
+  it("filters out funding events without company name", () => {
+    const json = JSON.stringify({
+      pillar_scores: {
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
+      suggested_delta: 0,
+      analysis: "Test",
+      funding_events: [
+        { company: "Valid Co", amount: "$10M" },
+        { company: "", amount: "$5M" },
+        { amount: "$1M" },
+      ],
+    });
+    const result = parseModelResponse(json, "test-model");
+    expect(result.funding_events).toHaveLength(1);
+    expect(result.funding_events![0].company).toBe("Valid Co");
+  });
+
+  it("defaults to undefined when funding_events not provided", () => {
+    const json = JSON.stringify({
+      pillar_scores: {
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
+      suggested_delta: 0,
+      analysis: "Test",
+    });
+    const result = parseModelResponse(json, "test-model");
+    expect(result.funding_events).toBeUndefined();
+  });
+});
+
+describe("section notes merge logic", () => {
+  it("prefers Claude's sanity_harness_note over other models", () => {
+    const scores = [
+      oqModelScoreFactory.build({
+        model: "claude-sonnet-4-5-20250929",
+        sanity_harness_note: "Claude's SH note",
+      }),
+      oqModelScoreFactory.build({
+        model: "gpt-4o",
+        sanity_harness_note: "GPT's SH note",
+      }),
+    ];
+    const note =
+      scores.find((s) => s.model.includes("claude"))?.sanity_harness_note ??
+      scores.find((s) => s.sanity_harness_note)?.sanity_harness_note;
+    expect(note).toBe("Claude's SH note");
+  });
+
+  it("prefers Claude's economic_note over other models", () => {
+    const scores = [
+      oqModelScoreFactory.build({
+        model: "gpt-4o",
+        economic_note: "GPT's econ note",
+      }),
+      oqModelScoreFactory.build({
+        model: "claude-sonnet-4-5-20250929",
+        economic_note: "Claude's econ note",
+      }),
+    ];
+    const note =
+      scores.find((s) => s.model.includes("claude"))?.economic_note ??
+      scores.find((s) => s.economic_note)?.economic_note;
+    expect(note).toBe("Claude's econ note");
+  });
+
+  it("falls back to first available note when no Claude", () => {
+    const scores = [
+      oqModelScoreFactory.build({ model: "gpt-4o" }),
+      oqModelScoreFactory.build({
+        model: "gemini-2.0-flash",
+        sanity_harness_note: "Gemini's note",
+      }),
+    ];
+    const note =
+      scores.find((s) => s.model.includes("claude"))?.sanity_harness_note ??
+      scores.find((s) => s.sanity_harness_note)?.sanity_harness_note;
+    expect(note).toBe("Gemini's note");
+  });
+
+  it("returns undefined when no model provides notes", () => {
+    const scores = [
+      oqModelScoreFactory.build({ model: "gpt-4o" }),
+      oqModelScoreFactory.build({ model: "gemini-2.0-flash" }),
+    ];
+    const note =
+      scores.find((s) => s.model.includes("claude"))?.sanity_harness_note ??
+      scores.find((s) => s.sanity_harness_note)?.sanity_harness_note;
+    expect(note).toBeUndefined();
+  });
+});
+
+describe("funding events deduplication", () => {
+  it("deduplicates funding events by company-amount key", () => {
+    const scores = [
+      oqModelScoreFactory.build({
+        model: "claude-sonnet",
+        funding_events: [
+          { company: "Cursor", amount: "$400M" },
+          { company: "Anysphere", amount: "$100M" },
+        ],
+      }),
+      oqModelScoreFactory.build({
+        model: "gpt-4o",
+        funding_events: [
+          { company: "Cursor", amount: "$400M" }, // duplicate
+          { company: "Poolside", amount: "$500M" },
+        ],
+      }),
+    ];
+
+    // Replicate merge logic
+    const fundingEvents: { company: string; amount?: string }[] = [];
+    const seenCompanies = new Set<string>();
+    for (const s of scores) {
+      for (const fe of s.funding_events ?? []) {
+        const key = `${fe.company}-${fe.amount ?? ""}`.toLowerCase();
+        if (!seenCompanies.has(key)) {
+          seenCompanies.add(key);
+          fundingEvents.push(fe);
+        }
+      }
+    }
+
+    expect(fundingEvents).toHaveLength(3);
+    expect(fundingEvents.map((f) => f.company)).toEqual([
+      "Cursor",
+      "Anysphere",
+      "Poolside",
+    ]);
+  });
+});
+
 describe("delta explanation in consensus", () => {
   it("prefers Claude's delta_explanation over other models", () => {
     const claudeScore = oqModelScoreFactory.build({

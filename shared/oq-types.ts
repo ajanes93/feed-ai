@@ -37,6 +37,19 @@ export interface OQModelScore {
   top_signals: OQSignal[];
   delta_explanation?: string;
   capability_gap_note?: string;
+  sanity_harness_note?: string;
+  economic_note?: string;
+  funding_events?: OQFundingEvent[];
+}
+
+export interface OQFundingEvent {
+  company: string;
+  amount?: string;
+  round?: string;
+  valuation?: string;
+  source_url?: string;
+  date?: string;
+  relevance?: string;
 }
 
 export interface OQHistoryEntry {

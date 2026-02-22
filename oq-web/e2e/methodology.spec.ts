@@ -79,7 +79,25 @@ test.describe("Methodology page", () => {
   test("displays current prompt hash", async ({ mockPage }) => {
     await mockPage.goto("/methodology");
     await expect(mockPage.getByText("Current Prompt Hash")).toBeVisible();
-    await expect(mockPage.getByText("abc123def456")).toBeVisible();
+    await expect(mockPage.getByText("abc123def456").first()).toBeVisible();
+  });
+
+  test("shows prompt audit trail heading", async ({ mockPage }) => {
+    await mockPage.goto("/methodology");
+    await expect(mockPage.getByText("Prompt Audit Trail")).toBeVisible();
+  });
+
+  test("displays prompt version history timeline", async ({ mockPage }) => {
+    await mockPage.goto("/methodology");
+    // Current version should show "current" badge
+    await expect(mockPage.getByText("current", { exact: true })).toBeVisible();
+    // Previous version hash should be visible
+    await expect(mockPage.getByText("prev789hash01")).toBeVisible();
+    // Change summaries should be visible
+    await expect(
+      mockPage.getByText("Added funding extraction and dynamic notes")
+    ).toBeVisible();
+    await expect(mockPage.getByText("Initial scoring prompt")).toBeVisible();
   });
 
   test("has back-to-score link", async ({ mockPage }) => {

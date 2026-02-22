@@ -86,10 +86,19 @@ test.describe("Sanity Harness section", () => {
   test("renders language breakdown chips", async ({ mockPage }) => {
     await mockPage.goto("/");
     await expect(mockPage.getByText("Language spread")).toBeVisible();
-    await expect(mockPage.getByText("go")).toBeVisible();
+    await expect(
+      mockPage.getByText("go", { exact: true }).first()
+    ).toBeVisible();
     await expect(mockPage.getByText("95%").first()).toBeVisible();
     await expect(mockPage.getByText("dart")).toBeVisible();
     await expect(mockPage.getByText("30%")).toBeVisible();
+  });
+
+  test("shows dynamic sanity harness note", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    const noteEl = mockPage.locator("[data-testid='sanity-harness-note']");
+    await expect(noteEl).toBeVisible();
+    await expect(noteEl).toContainText("Top agent improved 3%");
   });
 });
 
@@ -105,15 +114,16 @@ test.describe("Economic Reality section", () => {
     await expect(mockPage.getByText("Indeed Software Index")).toBeVisible();
   });
 
-  test("shows VC funding section", async ({ mockPage }) => {
+  test("shows baseline reference", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(mockPage.getByText("$4B+")).toBeVisible();
-    await expect(mockPage.getByText("VC in AI Code Tools")).toBeVisible();
+    await expect(mockPage.getByText("vs 100 baseline")).toBeVisible();
   });
 
-  test("shows F500 Teams Replaced", async ({ mockPage }) => {
+  test("shows dynamic economic note", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(mockPage.getByText("F500 Teams Replaced")).toBeVisible();
+    const noteEl = mockPage.locator("[data-testid='economic-note']");
+    await expect(noteEl).toBeVisible();
+    await expect(noteEl).toContainText("Indeed index dropped 2 points");
   });
 
   test("shows 4-week trend", async ({ mockPage }) => {
@@ -215,6 +225,40 @@ test.describe("Narrative section headers", () => {
   });
 });
 
+test.describe("Signal list collapsible", () => {
+  test("shows first 5 signals and hides the rest", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    // First signal should be visible
+    await expect(mockPage.getByText("GPT-5 rumored")).toBeVisible();
+    // 5th signal should be visible (SWE-bench)
+    await expect(
+      mockPage.getByText("SWE-bench Verified hits 82%")
+    ).toBeVisible();
+    // 6th signal should be hidden initially
+    await expect(
+      mockPage.getByText("Indeed software postings drop")
+    ).not.toBeVisible();
+  });
+
+  test("shows 'more signals' button with correct count", async ({
+    mockPage,
+  }) => {
+    await mockPage.goto("/");
+    await expect(mockPage.getByText("+ 2 more signals")).toBeVisible();
+  });
+
+  test("expands to show all signals when clicked", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    await mockPage.getByText("+ 2 more signals").click();
+    await expect(
+      mockPage.getByText("Indeed software postings drop")
+    ).toBeVisible();
+    await expect(
+      mockPage.getByText("Google DeepMind publishes agent safety")
+    ).toBeVisible();
+  });
+});
+
 test.describe("Signal card links", () => {
   test("renders signal with URL as a link", async ({ mockPage }) => {
     await mockPage.goto("/");
@@ -235,23 +279,30 @@ test.describe("Signal card links", () => {
 });
 
 test.describe("Economic Reality drill-down", () => {
-  test("drill-down reveals VC breakdown", async ({ mockPage }) => {
+  test("drill-down reveals funding context and CEPR study", async ({
+    mockPage,
+  }) => {
     await mockPage.goto("/");
     // Click the drill-down trigger in Economic Reality
     const drillDowns = mockPage.getByText("Drill down", { exact: true });
     // Economic Reality's drill down
     await drillDowns.last().click();
-    await expect(mockPage.getByText("Cursor")).toBeVisible();
-    await expect(mockPage.getByText("$400M Series C")).toBeVisible();
+    await expect(mockPage.getByText("AI Funding Context")).toBeVisible();
+    await expect(mockPage.getByText("daily RSS pipeline")).toBeVisible();
+    await expect(mockPage.getByText("CEPR / BIS / EIB Study")).toBeVisible();
+    await expect(mockPage.getByText("12,000+ European firms")).toBeVisible();
+    await expect(mockPage.getByText("0 job losses")).toBeVisible();
   });
 
-  test("shows FRED source link", async ({ mockPage }) => {
+  test("shows FRED source link with updated date", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(
-      mockPage.locator(
-        'a[href="https://fred.stlouisfed.org/series/IHLIDXUSTPSOFTDEVE"]'
-      )
-    ).toBeVisible();
+    const fredLink = mockPage.locator(
+      'a[href="https://fred.stlouisfed.org/series/IHLIDXUSTPSOFTDEVE"]'
+    );
+    await expect(fredLink).toBeVisible();
+    await expect(fredLink).toContainText("FRED");
+    await expect(fredLink).toContainText("Updated");
+    await expect(fredLink).toContainText("2026-02-14");
   });
 });
 
@@ -302,10 +353,16 @@ test.describe("Score detail page", () => {
     await expect(mockPage.getByText(/Articles Fed to Models/)).toBeVisible();
   });
 
-  test("score detail page shows prompt hash", async ({ mockPage }) => {
+  test("score detail page shows prompt hash as clickable link", async ({
+    mockPage,
+  }) => {
     await mockPage.goto("/");
     await mockPage.getByText("Full breakdown: model reasoning").click();
     await mockPage.waitForURL(/\/score\//);
-    await expect(mockPage.getByText("abc123def456")).toBeVisible();
+    const hashLink = mockPage.locator(
+      'a[href="/methodology#prompt-abc123def456"]'
+    );
+    await expect(hashLink).toBeVisible();
+    await expect(hashLink).toContainText("abc123def456");
   });
 });

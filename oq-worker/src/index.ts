@@ -290,7 +290,7 @@ app.get("/api/score/:date", async (c) => {
 
   // Load model responses for this score
   const modelRows = await c.env.DB.prepare(
-    "SELECT model, provider, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, input_tokens, output_tokens, latency_ms FROM oq_model_responses WHERE score_id = ? ORDER BY model"
+    "SELECT model, provider, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, sanity_harness_note, economic_note, input_tokens, output_tokens, latency_ms FROM oq_model_responses WHERE score_id = ? ORDER BY model"
   )
     .bind(row.id)
     .all();
@@ -320,6 +320,8 @@ app.get("/api/score/:date", async (c) => {
       analysis: m.analysis,
       topSignals: safeJsonParse(m.top_signals, []),
       capabilityGapNote: m.capability_gap_note,
+      sanityHarnessNote: m.sanity_harness_note,
+      economicNote: m.economic_note,
       inputTokens: m.input_tokens,
       outputTokens: m.output_tokens,
       latencyMs: m.latency_ms,
@@ -435,6 +437,7 @@ app.get("/api/methodology", async (c) => {
       generalDate: externalData.generalDate,
       generalTrend: externalData.generalTrend,
     },
+    lastUpdated: externalData.lastUpdated ?? {},
     whatWouldChange: {
       to50: [
         "SWE-bench Verified consistently above 90% with diverse agents",
@@ -457,6 +460,22 @@ app.get("/api/methodology", async (c) => {
       ],
     },
   });
+});
+
+app.get("/api/prompt-history", async (c) => {
+  const rows = await c.env.DB.prepare(
+    "SELECT hash, first_used, last_used, change_summary, created_at FROM oq_prompt_versions ORDER BY created_at DESC LIMIT 50"
+  ).all();
+
+  return c.json(
+    rows.results.map((r) => ({
+      hash: r.hash,
+      firstUsed: r.first_used,
+      lastUsed: r.last_used,
+      changeSummary: r.change_summary,
+      createdAt: r.created_at,
+    }))
+  );
 });
 
 // --- Admin endpoints ---
@@ -567,16 +586,23 @@ interface ExternalData {
   generalIndex?: number;
   generalDate?: string;
   generalTrend?: FREDSeriesTrend;
+  // Timestamps for when each external source was last fetched
+  lastUpdated?: {
+    sanityHarness?: string;
+    sweBench?: string;
+    fred?: string;
+  };
 }
 
 const LATEST_EXTERNAL_SQL =
-  "SELECT value FROM oq_external_data_history WHERE key = ? ORDER BY fetched_at DESC LIMIT 1";
+  "SELECT value, fetched_at FROM oq_external_data_history WHERE key = ? ORDER BY fetched_at DESC LIMIT 1";
 
 async function loadExternalData(
   db: D1Database,
   log?: Logger
 ): Promise<ExternalData> {
   const result: ExternalData = {};
+  const lastUpdated: NonNullable<ExternalData["lastUpdated"]> = {};
   try {
     const [sanity, swe, fred] = await db.batch([
       db.prepare(LATEST_EXTERNAL_SQL).bind("sanity_harness"),
@@ -587,6 +613,7 @@ async function loadExternalData(
     if (sanity.results[0]) {
       try {
         result.sanityHarness = JSON.parse(sanity.results[0].value as string);
+        lastUpdated.sanityHarness = sanity.results[0].fetched_at as string;
       } catch {
         await log?.error("external", "Corrupt sanity_harness data in DB");
       }
@@ -594,6 +621,7 @@ async function loadExternalData(
     if (swe.results[0]) {
       try {
         result.sweBench = JSON.parse(swe.results[0].value as string);
+        lastUpdated.sweBench = swe.results[0].fetched_at as string;
       } catch {
         await log?.error("external", "Corrupt swe_bench data in DB");
       }
@@ -607,6 +635,7 @@ async function loadExternalData(
         result.generalIndex = data.generalIndex;
         result.generalDate = data.generalDate;
         result.generalTrend = data.generalTrend;
+        lastUpdated.fred = fred.results[0].fetched_at as string;
       } catch {
         await log?.error("external", "Corrupt fred_labour data in DB");
       }
@@ -616,6 +645,7 @@ async function loadExternalData(
       error: err instanceof Error ? err.message : String(err),
     });
   }
+  result.lastUpdated = lastUpdated;
   return result;
 }
 
@@ -1065,6 +1095,8 @@ async function generateDailyScore(
     modelAgreement: result.modelAgreement,
     modelSpread: result.modelSpread,
     capabilityGap: result.capabilityGap,
+    sanityHarnessNote: result.sanityHarnessNote,
+    economicNote: result.economicNote,
     promptHash: result.promptHash,
     externalData: JSON.stringify(externalData),
     dataQualityFlags:
@@ -1122,7 +1154,7 @@ async function generateDailyScore(
           ? env.DB.batch(
               result.modelResponses.map((mr) =>
                 env.DB.prepare(
-                  "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, input_tokens, output_tokens, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                  "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, sanity_harness_note, economic_note, input_tokens, output_tokens, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 ).bind(
                   crypto.randomUUID(),
                   scoreId,
@@ -1136,6 +1168,8 @@ async function generateDailyScore(
                   mr.parsed.analysis,
                   JSON.stringify(mr.parsed.top_signals),
                   mr.parsed.capability_gap_note ?? null,
+                  mr.parsed.sanity_harness_note ?? null,
+                  mr.parsed.economic_note ?? null,
                   mr.inputTokens ?? null,
                   mr.outputTokens ?? null,
                   mr.latencyMs ?? null
@@ -1146,28 +1180,40 @@ async function generateDailyScore(
     },
     {
       label: "prompt_version",
-      fn: async () => {
-        const prompt = buildScoringPrompt({
-          currentScore: prevScore,
-          technicalScore: prevTechnical,
-          economicScore: prevEconomic,
-          history,
-          articlesByPillar,
-          sanityHarness: externalData.sanityHarness,
-          sweBench: externalData.sweBench,
-          softwareIndex: externalData.softwareIndex,
-          softwareDate: externalData.softwareDate,
-          softwareTrend: externalData.softwareTrend,
-          generalIndex: externalData.generalIndex,
-          generalDate: externalData.generalDate,
-          generalTrend: externalData.generalTrend,
-        });
-        await env.DB.prepare(
-          "INSERT INTO oq_prompt_versions (id, hash, prompt_text) VALUES (?, ?, ?) ON CONFLICT(hash) DO NOTHING"
+      fn: () =>
+        env.DB.prepare(
+          "INSERT INTO oq_prompt_versions (id, hash, prompt_text, first_used, last_used) VALUES (?, ?, ?, ?, ?) ON CONFLICT(hash) DO UPDATE SET last_used = excluded.last_used"
         )
-          .bind(crypto.randomUUID(), result.promptHash, prompt)
-          .run();
-      },
+          .bind(
+            crypto.randomUUID(),
+            result.promptHash,
+            result.promptText,
+            today,
+            today
+          )
+          .run(),
+    },
+    {
+      label: "funding_events",
+      fn: () =>
+        result.fundingEvents.length > 0
+          ? env.DB.batch(
+              result.fundingEvents.map((fe) =>
+                env.DB.prepare(
+                  "INSERT INTO oq_funding_events (id, company, amount, round, valuation, source_url, date, relevance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                ).bind(
+                  crypto.randomUUID(),
+                  fe.company,
+                  fe.amount ?? null,
+                  fe.round ?? null,
+                  fe.valuation ?? null,
+                  fe.source_url ?? null,
+                  fe.date ?? null,
+                  fe.relevance ?? null
+                )
+              )
+            )
+          : Promise.resolve(),
     },
   ];
 
@@ -1203,6 +1249,8 @@ interface ScoreInsert {
   modelAgreement: string;
   modelSpread: number;
   capabilityGap?: string;
+  sanityHarnessNote?: string;
+  economicNote?: string;
   promptHash: string;
   externalData?: string;
   isDecay?: boolean;
@@ -1213,7 +1261,7 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<string> {
   const id = crypto.randomUUID();
   await db
     .prepare(
-      "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, delta_explanation, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, capability_gap, prompt_hash, external_data, is_decay, data_quality_flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, delta_explanation, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, capability_gap, sanity_harness_note, economic_note, prompt_hash, external_data, is_decay, data_quality_flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(
       id,
@@ -1230,6 +1278,8 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<string> {
       data.modelAgreement,
       data.modelSpread,
       data.capabilityGap ?? null,
+      data.sanityHarnessNote ?? null,
+      data.economicNote ?? null,
       data.promptHash,
       data.externalData ?? null,
       data.isDecay ? 1 : 0,
@@ -1263,6 +1313,8 @@ function mapScoreRow(row: Record<string, unknown>) {
     modelAgreement: row.model_agreement,
     modelSpread: row.model_spread,
     capabilityGap: row.capability_gap,
+    sanityHarnessNote: row.sanity_harness_note,
+    economicNote: row.economic_note,
     externalData: row.external_data
       ? safeJsonParse(row.external_data, null)
       : null,

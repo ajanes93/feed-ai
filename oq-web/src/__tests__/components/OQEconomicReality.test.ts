@@ -33,18 +33,6 @@ describe("OQEconomicReality", () => {
     expect(wrapper.text()).toContain("vs 100 baseline");
   });
 
-  it("shows VC funding section", () => {
-    const wrapper = mount(OQEconomicReality, { props: {}, global });
-    expect(wrapper.text()).toContain("$4B+");
-    expect(wrapper.text()).toContain("VC in AI Code Tools");
-  });
-
-  it("shows Fortune 500 teams replaced count", () => {
-    const wrapper = mount(OQEconomicReality, { props: {}, global });
-    expect(wrapper.text()).toContain("F500 Teams Replaced");
-    expect(wrapper.text()).toContain("As of Feb 2026");
-  });
-
   it("shows 4-week trend when provided", () => {
     const wrapper = mount(OQEconomicReality, {
       props: {
@@ -102,11 +90,6 @@ describe("OQEconomicReality", () => {
     expect(trendEl.classes()).toContain("text-emerald-400");
   });
 
-  it("renders footer text about investor betting", () => {
-    const wrapper = mount(OQEconomicReality, { props: {}, global });
-    expect(wrapper.text()).toContain("Investors are betting billions");
-  });
-
   it("renders FRED source link", () => {
     const wrapper = mount(OQEconomicReality, { props: {}, global });
     const fredLink = wrapper.find(
@@ -117,24 +100,18 @@ describe("OQEconomicReality", () => {
     expect(fredLink.attributes("target")).toBe("_blank");
   });
 
-  it("renders VC date range", () => {
-    const wrapper = mount(OQEconomicReality, { props: {}, global });
-    expect(wrapper.text()).toContain("2024-2026");
-  });
-
   it("renders drill-down trigger", () => {
     const wrapper = mount(OQEconomicReality, { props: {}, global });
     expect(wrapper.text()).toContain("Drill down");
   });
 
-  it("shows VC breakdown in drill-down when expanded", async () => {
+  it("shows funding context in drill-down when expanded", async () => {
     const wrapper = mount(OQEconomicReality, { props: {}, global });
     const trigger = wrapper.find("[data-slot='collapsible-trigger']");
     await trigger.trigger("click");
 
-    expect(wrapper.text()).toContain("Cursor");
-    expect(wrapper.text()).toContain("$400M Series C");
-    expect(wrapper.text()).toContain("Cognition");
+    expect(wrapper.text()).toContain("AI Funding Context");
+    expect(wrapper.text()).toContain("daily RSS pipeline");
   });
 
   it("shows CEPR study in drill-down when expanded", async () => {
@@ -145,5 +122,33 @@ describe("OQEconomicReality", () => {
     expect(wrapper.text()).toContain("CEPR");
     expect(wrapper.text()).toContain("12,000+ European firms");
     expect(wrapper.text()).toContain("0 job losses");
+  });
+
+  it("renders dynamic note when provided", () => {
+    const wrapper = mount(OQEconomicReality, {
+      props: { note: "Indeed index dropped 2 points this week." },
+      global,
+    });
+    const noteEl = wrapper.find("[data-testid='economic-note']");
+    expect(noteEl.exists()).toBe(true);
+    expect(noteEl.text()).toContain("Indeed index dropped 2 points");
+  });
+
+  it("hides note when not provided", () => {
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
+    const noteEl = wrapper.find("[data-testid='economic-note']");
+    expect(noteEl.exists()).toBe(false);
+  });
+
+  it("shows Updated date in FRED link when softwareDate provided", () => {
+    const wrapper = mount(OQEconomicReality, {
+      props: { softwareIndex: 70, softwareDate: "2026-02-15" },
+      global,
+    });
+    const fredLink = wrapper.find(
+      'a[href="https://fred.stlouisfed.org/series/IHLIDXUSTPSOFTDEVE"]'
+    );
+    expect(fredLink.text()).toContain("Updated");
+    expect(fredLink.text()).toContain("2026-02-15");
   });
 });

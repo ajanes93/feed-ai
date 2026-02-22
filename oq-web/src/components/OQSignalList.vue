@@ -1,18 +1,31 @@
 <script setup lang="ts">
+import { ref, computed } from "vue";
 import type { OQSignal } from "@feed-ai/shared/oq-types";
 import { Badge } from "@feed-ai/shared/components/ui/badge";
-import { ExternalLink } from "lucide-vue-next";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+} from "@feed-ai/shared/components/ui/collapsible";
+import { ExternalLink, ChevronDown } from "lucide-vue-next";
 
-defineProps<{
-  signals: OQSignal[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    signals: OQSignal[];
+    initialCount?: number;
+  }>(),
+  { initialCount: 5 }
+);
+
+const isOpen = ref(false);
+const hiddenCount = computed(() => props.signals.length - props.initialCount);
 </script>
 
 <template>
   <div class="flex flex-col gap-2">
     <component
       :is="signal.url ? 'a' : 'div'"
-      v-for="signal in signals"
+      v-for="(signal, i) in signals"
+      v-show="i < initialCount || isOpen"
       :key="signal.text + signal.source"
       :href="signal.url"
       :target="signal.url ? '_blank' : undefined"
@@ -53,5 +66,17 @@ defineProps<{
         {{ signal.source }}
       </span>
     </component>
+
+    <Collapsible v-if="hiddenCount > 0" v-model:open="isOpen">
+      <CollapsibleTrigger
+        class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/50 py-2.5 text-[11px] text-muted-foreground/60 transition-colors hover:border-border hover:text-muted-foreground"
+      >
+        <span>+ {{ hiddenCount }} more signals</span>
+        <ChevronDown
+          class="h-3 w-3 transition-transform duration-200"
+          :class="{ 'rotate-180': isOpen }"
+        />
+      </CollapsibleTrigger>
+    </Collapsible>
   </div>
 </template>
