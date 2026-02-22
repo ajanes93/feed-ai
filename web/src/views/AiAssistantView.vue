@@ -195,7 +195,7 @@ onMounted(() => {
           <!-- Assistant card -->
           <Card
             v-else
-            class="border-border/50 bg-card/50 mb-4"
+            class="border-border/50 bg-card/50 mb-4 py-0"
           >
             <CardContent class="p-4">
               <!-- eslint-disable-next-line vue/no-v-html -- sanitized by DOMPurify -->
@@ -210,7 +210,7 @@ onMounted(() => {
         <!-- Loading indicator -->
         <Card
           v-if="loading"
-          class="border-border/50 bg-card/50 mb-4"
+          class="border-border/50 bg-card/50 mb-4 py-0"
         >
           <CardContent class="flex gap-1.5 p-4">
             <div

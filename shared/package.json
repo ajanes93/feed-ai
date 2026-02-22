@@ -10,7 +10,6 @@
     "./utils": "./utils.ts",
     "./lib/utils": "./lib/utils.ts",
     "./logger": "./logger.ts",
-    "./components/DropdownMenu": "./components/DropdownMenu.vue",
     "./components/StatCard": "./components/StatCard.vue",
     "./components/DataTable": "./components/DataTable.vue",
     "./components/LogViewer": "./components/LogViewer.vue",

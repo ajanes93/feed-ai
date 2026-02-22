@@ -146,6 +146,6 @@ test.describe("Category filter", () => {
 
     // AI is the default active category
     const aiBtn = filter.getByRole("button", { name: /AI/ });
-    await expect(aiBtn).toHaveClass(/text-gray-950/);
+    await expect(aiBtn).toHaveClass(/text-background/);
   });
 });

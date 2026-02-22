@@ -74,6 +74,8 @@ onMounted(fetchDashboard);
               <Button
                 variant="outline"
                 size="sm"
+                data-testid="actions-trigger"
+                :disabled="fetching || rebuilding || enriching"
               >
                 Actions
                 <ChevronDown class="size-4" />
@@ -81,6 +83,7 @@ onMounted(fetchDashboard);
             </DropdownMenuTrigger>
             <DropdownMenuContent class="w-64">
               <DropdownMenuItem
+                data-testid="action-fetch"
                 :disabled="fetching"
                 @click="fetchSources()"
               >
@@ -96,6 +99,7 @@ onMounted(fetchDashboard);
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
+                data-testid="action-rebuild"
                 :disabled="rebuilding"
                 @click="rebuildDigest()"
               >
@@ -110,6 +114,7 @@ onMounted(fetchDashboard);
                 </div>
               </DropdownMenuItem>
               <DropdownMenuItem
+                data-testid="action-append"
                 :disabled="rebuilding"
                 @click="appendToDigest()"
               >
@@ -125,6 +130,7 @@ onMounted(fetchDashboard);
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
+                data-testid="action-enrich"
                 :disabled="enriching"
                 @click="enrichComments()"
               >

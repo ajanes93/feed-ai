@@ -12,7 +12,7 @@ defineProps<{
 </script>
 
 <template>
-  <Card class="border-border bg-secondary/30">
+  <Card class="border-border bg-secondary/30 py-0">
     <CardContent class="p-4">
       <div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
         <span
@@ -21,7 +21,7 @@ defineProps<{
             'bg-emerald-500': modelAgreement === 'agree',
             'bg-yellow-500': modelAgreement === 'mostly_agree',
             'bg-red-500': modelAgreement === 'disagree',
-            'bg-muted-foreground': modelAgreement === 'partial',
+            'bg-gray-500': modelAgreement === 'partial',
           }"
         />
         <span v-if="modelAgreement === 'agree'">Models agree</span>
