@@ -30,6 +30,21 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.use("/*", cors());
 
+app.onError(async (err, c) => {
+  console.error("[oq:error]", err.message, err.stack);
+  try {
+    const log = createLogger(c.env.DB);
+    await log.error("system", "Unhandled route error", {
+      path: c.req.path,
+      method: c.req.method,
+      error: err.message,
+    });
+  } catch {
+    // DB logging failed — console.error above is the fallback
+  }
+  return c.json({ error: "Internal server error" }, 500);
+});
+
 // --- Auth middleware for admin endpoints ---
 
 function isAuthorized(authHeader: string, adminKey?: string): boolean {
@@ -63,54 +78,62 @@ app.use("/api/fetch-fred", adminAuth);
 // --- Admin dashboard ---
 
 app.get("/api/admin/dashboard", async (c) => {
-  const db = c.env.DB;
+  try {
+    const db = c.env.DB;
 
-  const [aiRows, sourceRows, scoreCount, articleCount, subscriberCount] =
-    await db.batch([
-      db.prepare(
-        "SELECT id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, created_at FROM oq_ai_usage ORDER BY created_at DESC LIMIT 50"
-      ),
-      db.prepare(
-        "SELECT source, pillar, COUNT(*) as article_count, MAX(fetched_at) as last_fetched FROM oq_articles GROUP BY source ORDER BY source"
-      ),
-      db.prepare("SELECT COUNT(*) as count FROM oq_scores"),
-      db.prepare("SELECT COUNT(*) as count FROM oq_articles"),
-      db.prepare("SELECT COUNT(*) as count FROM oq_subscribers"),
-    ]);
+    const [aiRows, sourceRows, scoreCount, articleCount, subscriberCount] =
+      await db.batch([
+        db.prepare(
+          "SELECT id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, created_at FROM oq_ai_usage ORDER BY created_at DESC LIMIT 50"
+        ),
+        db.prepare(
+          "SELECT source, pillar, COUNT(*) as article_count, MAX(fetched_at) as last_fetched FROM oq_articles GROUP BY source ORDER BY source"
+        ),
+        db.prepare("SELECT COUNT(*) as count FROM oq_scores"),
+        db.prepare("SELECT COUNT(*) as count FROM oq_articles"),
+        db.prepare("SELECT COUNT(*) as count FROM oq_subscribers"),
+      ]);
 
-  const recentCalls = aiRows.results.map((row) => ({
-    id: row.id,
-    model: row.model,
-    provider: row.provider,
-    inputTokens: row.input_tokens,
-    outputTokens: row.output_tokens,
-    totalTokens: row.total_tokens,
-    latencyMs: row.latency_ms,
-    wasFallback: row.was_fallback === 1,
-    error: row.error,
-    status: row.status,
-    createdAt: row.created_at,
-  }));
+    const recentCalls = aiRows.results.map((row) => ({
+      id: row.id,
+      model: row.model,
+      provider: row.provider,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      totalTokens: row.total_tokens,
+      latencyMs: row.latency_ms,
+      wasFallback: row.was_fallback === 1,
+      error: row.error,
+      status: row.status,
+      createdAt: row.created_at,
+    }));
 
-  const totalTokens = recentCalls.reduce(
-    (sum, c) => sum + ((c.totalTokens as number) ?? 0),
-    0
-  );
+    const totalTokens = recentCalls.reduce(
+      (sum, c) => sum + ((c.totalTokens as number) ?? 0),
+      0
+    );
 
-  const sources = sourceRows.results.map((row) => ({
-    sourceName: row.source,
-    pillar: row.pillar,
-    articleCount: row.article_count,
-    lastFetched: row.last_fetched,
-  }));
+    const sources = sourceRows.results.map((row) => ({
+      sourceName: row.source,
+      pillar: row.pillar,
+      articleCount: row.article_count,
+      lastFetched: row.last_fetched,
+    }));
 
-  return c.json({
-    ai: { recentCalls, totalTokens },
-    sources,
-    totalScores: (scoreCount.results[0]?.count as number) ?? 0,
-    totalArticles: (articleCount.results[0]?.count as number) ?? 0,
-    totalSubscribers: (subscriberCount.results[0]?.count as number) ?? 0,
-  });
+    return c.json({
+      ai: { recentCalls, totalTokens },
+      sources,
+      totalScores: (scoreCount.results[0]?.count as number) ?? 0,
+      totalArticles: (articleCount.results[0]?.count as number) ?? 0,
+      totalSubscribers: (subscriberCount.results[0]?.count as number) ?? 0,
+    });
+  } catch (err) {
+    const log = createLogger(c.env.DB);
+    await log.error("admin", "dashboard failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return c.json({ error: "Failed to load dashboard" }, 500);
+  }
 });
 
 app.get("/api/admin/external-history", async (c) => {
@@ -833,7 +856,7 @@ async function generateDailyScore(
         .slice(0, 20)
         .map(
           (a) =>
-            `- ${a.title}${a.summary ? ` — ${(a.summary as string).slice(0, 200)}` : ""} (${a.source})\n`
+            `- ${String(a.title).toWellFormed()}${a.summary ? ` — ${(a.summary as string).slice(0, 200).toWellFormed()}` : ""} (${a.source})\n`
         )
         .join(""),
     ])

@@ -22,6 +22,7 @@ const {
   scoreSuccess,
   scoreAlreadyExists,
   setAdminKey,
+  clearAdminKey,
   fetchDashboard,
   fetchArticles,
   generateScore,
@@ -160,8 +161,22 @@ onMounted(fetchDashboard);
       </div>
 
       <!-- Error -->
-      <div v-else-if="error" class="py-20 text-center text-sm text-red-400">
-        {{ error }}
+      <div v-else-if="error" class="py-20 text-center">
+        <p class="mb-4 text-sm text-red-400">{{ error }}</p>
+        <div class="flex justify-center gap-3">
+          <button
+            class="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 hover:border-gray-500 hover:text-white"
+            @click="fetchDashboard"
+          >
+            Retry
+          </button>
+          <button
+            class="rounded-lg border border-red-900 px-4 py-2 text-sm text-red-400 hover:border-red-700 hover:text-red-300"
+            @click="clearAdminKey"
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       <!-- Dashboard content -->

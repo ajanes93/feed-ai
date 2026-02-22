@@ -412,13 +412,15 @@ async function callModelWithRetry(
       return { result: await fn() };
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
-      await log?.warn("score", `${name} attempt ${attempt + 1} failed`, {
+      const isLastAttempt = attempt === MAX_RETRIES - 1;
+      const logFn = isLastAttempt ? log?.error : log?.warn;
+      await logFn?.call(log, "score", `${name} attempt ${attempt + 1} failed`, {
         model,
         provider,
         attempt: attempt + 1,
         error: lastError,
       });
-      if (attempt < MAX_RETRIES - 1) {
+      if (!isLastAttempt) {
         await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
       }
     }

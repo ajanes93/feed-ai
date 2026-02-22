@@ -218,6 +218,7 @@ export function useDashboard() {
     scoreSuccess,
     scoreAlreadyExists,
     setAdminKey,
+    clearAdminKey,
     fetchDashboard,
     fetchArticles,
     generateScore,
