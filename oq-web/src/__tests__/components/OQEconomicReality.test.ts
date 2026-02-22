@@ -3,41 +3,44 @@ import { mount } from "@vue/test-utils";
 import OQEconomicReality from "../../components/OQEconomicReality.vue";
 
 describe("OQEconomicReality", () => {
+  const global = { stubs: { OQExplainer: true } };
+
   it("renders section header", () => {
-    const wrapper = mount(OQEconomicReality, { props: {} });
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
     expect(wrapper.text()).toContain("The Economic Reality");
   });
 
   it("shows default software index (~70) when not provided", () => {
-    const wrapper = mount(OQEconomicReality, { props: {} });
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
     expect(wrapper.text()).toContain("~70");
   });
 
   it("shows provided software index", () => {
     const wrapper = mount(OQEconomicReality, {
       props: { softwareIndex: 47.3 },
+      global,
     });
     expect(wrapper.text()).toContain("~47.3");
   });
 
   it("shows Indeed Software Index label", () => {
-    const wrapper = mount(OQEconomicReality, { props: {} });
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
     expect(wrapper.text()).toContain("Indeed Software Index");
   });
 
   it("shows baseline reference", () => {
-    const wrapper = mount(OQEconomicReality, { props: {} });
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
     expect(wrapper.text()).toContain("vs 100 baseline");
   });
 
   it("shows VC funding section", () => {
-    const wrapper = mount(OQEconomicReality, { props: {} });
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
     expect(wrapper.text()).toContain("$4B+");
     expect(wrapper.text()).toContain("VC in AI Code Tools");
   });
 
   it("shows Fortune 500 teams replaced count", () => {
-    const wrapper = mount(OQEconomicReality, { props: {} });
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
     expect(wrapper.text()).toContain("F500 Teams Replaced");
     expect(wrapper.text()).toContain("As of Feb 2026");
   });
@@ -48,6 +51,7 @@ describe("OQEconomicReality", () => {
         softwareIndex: 47,
         softwareTrend: { change4w: -12.1 },
       },
+      global,
     });
     expect(wrapper.text()).toContain("-12.1%");
     expect(wrapper.text()).toContain("4wk");
@@ -59,6 +63,7 @@ describe("OQEconomicReality", () => {
         softwareIndex: 50,
         softwareTrend: { change4w: 3.5 },
       },
+      global,
     });
     expect(wrapper.text()).toContain("+3.5%");
   });
@@ -66,6 +71,7 @@ describe("OQEconomicReality", () => {
   it("hides trend when softwareTrend not provided", () => {
     const wrapper = mount(OQEconomicReality, {
       props: { softwareIndex: 47 },
+      global,
     });
     expect(wrapper.text()).not.toContain("4wk");
   });
@@ -76,6 +82,7 @@ describe("OQEconomicReality", () => {
         softwareIndex: 47,
         softwareTrend: { change4w: -5 },
       },
+      global,
     });
     const trendEl = wrapper.find("[data-testid='software-trend']");
     expect(trendEl.exists()).toBe(true);
@@ -88,6 +95,7 @@ describe("OQEconomicReality", () => {
         softwareIndex: 50,
         softwareTrend: { change4w: 2 },
       },
+      global,
     });
     const trendEl = wrapper.find("[data-testid='software-trend']");
     expect(trendEl.exists()).toBe(true);
@@ -95,12 +103,12 @@ describe("OQEconomicReality", () => {
   });
 
   it("renders footer text about investor betting", () => {
-    const wrapper = mount(OQEconomicReality, { props: {} });
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
     expect(wrapper.text()).toContain("Investors are betting billions");
   });
 
   it("renders FRED source link", () => {
-    const wrapper = mount(OQEconomicReality, { props: {} });
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
     const fredLink = wrapper.find(
       'a[href="https://fred.stlouisfed.org/series/IHLIDXUSTPSOFTDEVE"]'
     );
@@ -110,17 +118,17 @@ describe("OQEconomicReality", () => {
   });
 
   it("renders VC date range", () => {
-    const wrapper = mount(OQEconomicReality, { props: {} });
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
     expect(wrapper.text()).toContain("2024-2026");
   });
 
   it("renders drill-down trigger", () => {
-    const wrapper = mount(OQEconomicReality, { props: {} });
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
     expect(wrapper.text()).toContain("Drill down");
   });
 
   it("shows VC breakdown in drill-down when expanded", async () => {
-    const wrapper = mount(OQEconomicReality, { props: {} });
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
     const trigger = wrapper.find("[data-slot='collapsible-trigger']");
     await trigger.trigger("click");
 
@@ -130,7 +138,7 @@ describe("OQEconomicReality", () => {
   });
 
   it("shows CEPR study in drill-down when expanded", async () => {
-    const wrapper = mount(OQEconomicReality, { props: {} });
+    const wrapper = mount(OQEconomicReality, { props: {}, global });
     const trigger = wrapper.find("[data-slot='collapsible-trigger']");
     await trigger.trigger("click");
 

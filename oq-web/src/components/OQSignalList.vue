@@ -16,7 +16,7 @@ defineProps<{
       :key="i"
       :href="signal.url"
       :target="signal.url ? '_blank' : undefined"
-      :rel="signal.url ? 'noopener' : undefined"
+      :rel="signal.url ? 'noopener noreferrer' : undefined"
       class="flex items-center gap-3 rounded-xl border border-transparent bg-secondary/50 px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-border"
     >
       <Badge
@@ -36,6 +36,7 @@ defineProps<{
       <span class="flex-1">{{ signal.text }}</span>
       <ExternalLink
         v-if="signal.url"
+        data-testid="signal-external-link"
         class="h-3 w-3 shrink-0 text-muted-foreground/40"
       />
       <span

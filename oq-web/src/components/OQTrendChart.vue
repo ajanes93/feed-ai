@@ -134,8 +134,12 @@ const gridLines = computed(() => {
             :cy="point.y"
             r="10"
             fill="transparent"
+            role="link"
+            tabindex="0"
             class="cursor-pointer"
+            :aria-label="`Score ${point.entry.score}% on ${point.entry.date}`"
             @click="router.push(`/score/${point.entry.date}`)"
+            @keyup.enter="router.push(`/score/${point.entry.date}`)"
           >
             <title>{{ point.entry.date }}: {{ point.entry.score }}%</title>
           </circle>

@@ -342,7 +342,7 @@ onMounted(async () => {
                       :key="article.url"
                       :href="article.url"
                       target="_blank"
-                      rel="noopener"
+                      rel="noopener noreferrer"
                       class="flex items-start gap-2 rounded-lg py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
                     >
                       <ExternalLink

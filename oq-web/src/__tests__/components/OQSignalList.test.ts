@@ -45,7 +45,7 @@ describe("OQSignalList", () => {
     const link = wrapper.find('a[href="https://example.com/article1"]');
     expect(link.exists()).toBe(true);
     expect(link.attributes("target")).toBe("_blank");
-    expect(link.attributes("rel")).toBe("noopener");
+    expect(link.attributes("rel")).toBe("noopener noreferrer");
   });
 
   it("renders signal without URL as a div", () => {
@@ -60,8 +60,7 @@ describe("OQSignalList", () => {
 
   it("shows external link icon only for signals with URL", () => {
     const wrapper = mount(OQSignalList, { props: { signals } });
-    // ExternalLink icon should appear once (only for the signal with a URL)
-    const icons = wrapper.findAll("svg.lucide-external-link");
+    const icons = wrapper.findAll("[data-testid='signal-external-link']");
     expect(icons.length).toBe(1);
   });
 

@@ -8,37 +8,39 @@ describe("OQCapabilityGap", () => {
     pro: "~46%",
   };
 
+  const global = { stubs: { OQExplainer: true } };
+
   it("renders section header", () => {
-    const wrapper = mount(OQCapabilityGap, { props: defaultProps });
+    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
     expect(wrapper.text()).toContain("The Capability Gap");
   });
 
   it("displays verified score with description", () => {
-    const wrapper = mount(OQCapabilityGap, { props: defaultProps });
+    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
     expect(wrapper.text()).toContain("~79%");
     expect(wrapper.text()).toContain("SWE-bench Verified");
     expect(wrapper.text()).toContain("Curated open-source bugs");
   });
 
   it("displays pro score with description", () => {
-    const wrapper = mount(OQCapabilityGap, { props: defaultProps });
+    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
     expect(wrapper.text()).toContain("~46%");
     expect(wrapper.text()).toContain("SWE-bench Pro");
     expect(wrapper.text()).toContain("Unfamiliar real-world repos");
   });
 
   it("renders gap indicator", () => {
-    const wrapper = mount(OQCapabilityGap, { props: defaultProps });
+    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
     expect(wrapper.text()).toContain("gap");
   });
 
   it("renders narrative summary text", () => {
-    const wrapper = mount(OQCapabilityGap, { props: defaultProps });
+    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
     expect(wrapper.text()).toContain("AI solves 3 in 4 practiced problems");
   });
 
   it("does not render note when not provided", () => {
-    const wrapper = mount(OQCapabilityGap, { props: defaultProps });
+    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
     const noteEl = wrapper.find("[data-testid='capability-gap-note']");
     expect(noteEl.exists()).toBe(false);
   });
@@ -49,6 +51,7 @@ describe("OQCapabilityGap", () => {
         ...defaultProps,
         note: "SWE-bench Verified rose 2 points to 81%.",
       },
+      global,
     });
     expect(wrapper.text()).toContain(
       "SWE-bench Verified rose 2 points to 81%."
@@ -58,6 +61,7 @@ describe("OQCapabilityGap", () => {
   it("renders with dynamic score values", () => {
     const wrapper = mount(OQCapabilityGap, {
       props: { verified: "81%", pro: "48%" },
+      global,
     });
     expect(wrapper.text()).toContain("81%");
     expect(wrapper.text()).toContain("48%");
@@ -69,6 +73,7 @@ describe("OQCapabilityGap", () => {
         ...defaultProps,
         verifiedSource: "https://www.swebench.com",
       },
+      global,
     });
     const link = wrapper.find('a[href="https://www.swebench.com"]');
     expect(link.exists()).toBe(true);
@@ -82,6 +87,7 @@ describe("OQCapabilityGap", () => {
         ...defaultProps,
         proSource: "https://scale.com/leaderboard/swe_bench_pro_public",
       },
+      global,
     });
     const link = wrapper.find(
       'a[href="https://scale.com/leaderboard/swe_bench_pro_public"]'
@@ -91,13 +97,13 @@ describe("OQCapabilityGap", () => {
   });
 
   it("does not render source links when not provided", () => {
-    const wrapper = mount(OQCapabilityGap, { props: defaultProps });
+    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
     const links = wrapper.findAll("a");
     expect(links.length).toBe(0);
   });
 
   it("renders drill-down trigger", () => {
-    const wrapper = mount(OQCapabilityGap, { props: defaultProps });
+    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
     expect(wrapper.text()).toContain("Drill down");
   });
 
@@ -108,6 +114,7 @@ describe("OQCapabilityGap", () => {
         proPrivate: "~23%",
         proPrivateSource: "https://scale.com/leaderboard/swe_bench_pro_private",
       },
+      global,
     });
 
     // Open the collapsible

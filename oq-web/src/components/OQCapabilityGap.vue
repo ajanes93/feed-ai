@@ -54,7 +54,7 @@ const isOpen = ref(false);
             v-if="verifiedSource"
             :href="verifiedSource"
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/40 transition-colors hover:text-orange-500/60"
           >
             swebench.com
@@ -99,7 +99,7 @@ const isOpen = ref(false);
             v-if="proSource"
             :href="proSource"
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/40 transition-colors hover:text-orange-500/60"
           >
             Scale AI SEAL
@@ -145,7 +145,7 @@ const isOpen = ref(false);
                 v-if="proPrivateSource"
                 :href="proPrivateSource"
                 target="_blank"
-                rel="noopener"
+                rel="noopener noreferrer"
                 class="ml-1 inline-flex items-center gap-0.5 text-muted-foreground/50 transition-colors hover:text-orange-500/60"
               >
                 Source: Scale AI SEAL Private

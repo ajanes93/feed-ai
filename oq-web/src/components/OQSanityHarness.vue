@@ -110,7 +110,7 @@ function langBg(pct: number): string {
       <a
         href="https://sanityboard.lr7.dev"
         target="_blank"
-        rel="noopener"
+        rel="noopener noreferrer"
         class="ml-3 inline-flex shrink-0 items-center gap-0.5 text-[9px] text-gray-700 transition-colors hover:text-orange-500/60"
       >
         Source: SanityHarness
