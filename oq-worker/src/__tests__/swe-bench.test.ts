@@ -199,4 +199,21 @@ describe("parseScaleLeaderboard", () => {
     expect(result!.score).toBe(50.2);
     expect(result!.model).toBe("v2-agent");
   });
+
+  it("ignores version keys that are just numbers (Next.js page metadata)", () => {
+    // Next.js pages often have {"version":"2.0","score":97} in metadata
+    const chunk = `<script>self.__next_f.push([1,"{\\"version\\":\\"2.0\\",\\"score\\":97}"])</script>`;
+    const html = `<html>${chunk}</html>`;
+    const result = parseScaleLeaderboard(html);
+    expect(result).toBeNull();
+  });
+
+  it("ignores version keys that are just numbers alongside real model entries", () => {
+    const chunk = `<script>self.__next_f.push([1,"[{\\"version\\":\\"3.2\\",\\"score\\":97},{\\"model\\":\\"claude-3.5\\",\\"score\\":45.89}]"])</script>`;
+    const html = `<html>${chunk}</html>`;
+    const result = parseScaleLeaderboard(html);
+    expect(result).not.toBeNull();
+    expect(result!.score).toBe(45.89);
+    expect(result!.model).toBe("claude-3.5");
+  });
 });

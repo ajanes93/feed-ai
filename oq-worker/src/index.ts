@@ -703,6 +703,17 @@ async function fetchAndStoreSWEBench(db: D1Database): Promise<{
     throw new Error(`SWE-bench: invalid topVerified ${data.topVerified}`);
   }
 
+  // Pro is a harder benchmark — scores above Verified are bogus (parser noise)
+  const proMax = data.topVerified > 0 ? data.topVerified : 75;
+  if (data.topPro > proMax) {
+    data.topPro = 0;
+    data.topProModel = "Unknown";
+  }
+  if (data.topProPrivate > proMax) {
+    data.topProPrivate = 0;
+    data.topProPrivateModel = "Unknown";
+  }
+
   await storeExternalData(db, "swe_bench", data);
   return {
     stored: true,

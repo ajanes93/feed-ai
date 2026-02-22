@@ -17,7 +17,12 @@ defineProps<{
       :href="signal.url"
       :target="signal.url ? '_blank' : undefined"
       :rel="signal.url ? 'noopener noreferrer' : undefined"
-      class="flex items-center gap-3 rounded-xl border border-transparent bg-secondary/50 px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-border"
+      class="flex items-center gap-3 rounded-xl border bg-secondary/50 px-4 py-3 text-sm text-muted-foreground transition-colors"
+      :class="
+        signal.url
+          ? 'border-border/50 active:bg-secondary/80 hover:border-border'
+          : 'border-transparent'
+      "
     >
       <Badge
         :variant="
@@ -34,12 +39,20 @@ defineProps<{
         <span v-else>●</span>
       </Badge>
       <span class="flex-1">{{ signal.text }}</span>
-      <ExternalLink
+      <span
         v-if="signal.url"
-        data-testid="signal-external-link"
-        class="h-3 w-3 shrink-0 text-muted-foreground/40"
-      />
-      <span class="shrink-0 font-mono text-[10px] text-muted-foreground">
+        class="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground/60"
+      >
+        {{ signal.source }}
+        <ExternalLink
+          data-testid="signal-external-link"
+          class="h-2.5 w-2.5"
+        />
+      </span>
+      <span
+        v-else
+        class="shrink-0 font-mono text-[10px] text-muted-foreground/40"
+      >
         {{ signal.source }}
       </span>
     </component>
