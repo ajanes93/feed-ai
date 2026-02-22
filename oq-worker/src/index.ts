@@ -634,8 +634,16 @@ async function storeExternalData(
       "SELECT id FROM oq_external_data_history WHERE key = ? AND date(fetched_at) = date('now') LIMIT 1"
     )
     .bind(key)
-    .first();
-  if (existing) return;
+    .first<{ id: string }>();
+
+  if (existing) {
+    // Update existing row so re-fetches within the same day apply fixes
+    await db
+      .prepare("UPDATE oq_external_data_history SET value = ? WHERE id = ?")
+      .bind(JSON.stringify(data), existing.id)
+      .run();
+    return;
+  }
 
   await db
     .prepare(

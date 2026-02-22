@@ -359,7 +359,7 @@ describe("Admin API routes", () => {
 
   // --- External data dedup ---
 
-  describe("storeExternalData same-day dedup", () => {
+  describe("storeExternalData same-day upsert", () => {
     it("does not create duplicate rows when called twice on the same day", async () => {
       const html = buildSanityHtml([
         { rank: 1, agent: "Agent1", model: "GPT-4", score: 45, passRate: 42 },
@@ -375,7 +375,7 @@ describe("Admin API routes", () => {
       expect(res1.status).toBe(200);
       fetchMock.deactivate();
 
-      // Second call — storeExternalData should short-circuit
+      // Second call — updates existing row (no duplicate)
       mockSanityHarness(html);
       const res2 = await SELF.fetch("http://localhost/api/fetch-sanity", {
         method: "POST",
@@ -387,6 +387,35 @@ describe("Admin API routes", () => {
         "SELECT COUNT(*) as cnt FROM oq_external_data_history WHERE key = 'sanity_harness'"
       ).first();
       expect(rows!.cnt).toBe(1);
+    });
+
+    it("updates data when re-fetched on the same day", async () => {
+      // First call — stores initial data
+      const html1 = buildSanityHtml([
+        { rank: 1, agent: "Agent1", model: "GPT-4", score: 45, passRate: 42 },
+      ]);
+      mockSanityHarness(html1);
+      await SELF.fetch("http://localhost/api/fetch-sanity", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      fetchMock.deactivate();
+
+      // Second call — new data with different pass rate
+      const html2 = buildSanityHtml([
+        { rank: 1, agent: "Agent1", model: "GPT-4", score: 50, passRate: 48 },
+      ]);
+      mockSanityHarness(html2);
+      await SELF.fetch("http://localhost/api/fetch-sanity", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+
+      const row = await env.DB.prepare(
+        "SELECT value FROM oq_external_data_history WHERE key = 'sanity_harness' ORDER BY fetched_at DESC LIMIT 1"
+      ).first<{ value: string }>();
+      const data = JSON.parse(row!.value);
+      expect(data.topPassRate).toBe(48);
     });
   });
 
