@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import { nextTick } from "vue";
+import { nextTick, defineComponent } from "vue";
 import DashboardView from "../../views/DashboardView.vue";
 import type { DashboardData } from "../../composables/useDashboard";
 import { stubFetchJson, stubFetchResponses } from "../helpers";
@@ -29,12 +29,22 @@ const LOG_ENTRIES = {
   logs: [errorLogFactory.build({ message: "Connection timeout" })],
 };
 
+// Stub the reka-ui portal so dropdown menu items render inline (not teleported)
+const PortalStub = defineComponent({
+  name: "DropdownMenuPortal",
+  setup(_, { slots }) {
+    return () => slots.default?.();
+  },
+});
+
 const render = async (data = DASHBOARD_DATA, logs = LOG_ENTRIES) => {
   stubFetchResponses({
     "/api/admin/dashboard": { status: 200, body: data },
     "/api/admin/logs": { status: 200, body: logs },
   });
-  const wrapper = mount(DashboardView);
+  const wrapper = mount(DashboardView, {
+    global: { stubs: { DropdownMenuPortal: PortalStub } },
+  });
   await flushPromises();
   return { wrapper };
 };
@@ -185,36 +195,42 @@ describe("DashboardView", () => {
     async function openMenu(
       wrapper: ReturnType<typeof mount<typeof DashboardView>>
     ) {
-      const actionsBtn = wrapper
-        .findAll("button")
-        .find((b) => b.text().includes("Actions"));
-      expect(actionsBtn).toBeDefined();
-      await actionsBtn!.trigger("click");
+      const actionsBtn = wrapper.find("[data-testid='actions-trigger']");
+      expect(actionsBtn.exists()).toBe(true);
+      await actionsBtn.trigger("click");
       await nextTick();
     }
 
     it("renders Actions menu when dashboard is loaded", async () => {
       const { wrapper } = await render();
-      expect(wrapper.text()).toContain("Actions");
+      expect(wrapper.find("[data-testid='actions-trigger']").exists()).toBe(
+        true
+      );
     });
 
     it("does not render Actions menu before auth", async () => {
       sessionStorage.clear();
       stubFetchJson(DASHBOARD_DATA);
-      const wrapper = mount(DashboardView);
+      const wrapper = mount(DashboardView, {
+        global: { stubs: { DropdownMenuPortal: PortalStub } },
+      });
       await flushPromises();
 
-      expect(wrapper.text()).not.toContain("Actions");
+      expect(wrapper.find("[data-testid='actions-trigger']").exists()).toBe(
+        false
+      );
     });
 
     it("shows menu items when Actions is clicked", async () => {
       const { wrapper } = await render();
       await openMenu(wrapper);
 
-      expect(wrapper.text()).toContain("Fetch Sources");
-      expect(wrapper.text()).toContain("Rebuild Digest");
-      expect(wrapper.text()).toContain("Append New Items");
-      expect(wrapper.text()).toContain("Enrich Comments");
+      expect(wrapper.find("[data-testid='action-fetch']").exists()).toBe(true);
+      expect(wrapper.find("[data-testid='action-rebuild']").exists()).toBe(
+        true
+      );
+      expect(wrapper.find("[data-testid='action-append']").exists()).toBe(true);
+      expect(wrapper.find("[data-testid='action-enrich']").exists()).toBe(true);
     });
 
     it("shows success message after successful rebuild", async () => {
@@ -241,10 +257,7 @@ describe("DashboardView", () => {
         })
       );
 
-      const rebuildBtn = wrapper
-        .findAll("button")
-        .find((b) => b.text().includes("Rebuild Digest"));
-      await rebuildBtn!.trigger("click");
+      await wrapper.find("[data-testid='action-rebuild']").trigger("click");
       await flushPromises();
 
       expect(wrapper.text()).toContain("Generated digest with 10 items");
@@ -263,10 +276,7 @@ describe("DashboardView", () => {
         })
       );
 
-      const rebuildBtn = wrapper
-        .findAll("button")
-        .find((b) => b.text().includes("Rebuild Digest"));
-      await rebuildBtn!.trigger("click");
+      await wrapper.find("[data-testid='action-rebuild']").trigger("click");
       await flushPromises();
 
       expect(wrapper.text()).toContain("No items fetched");
