@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import { useHead } from "@unhead/vue";
 import { motion } from "motion-v";
 import { useDashboard } from "../composables/useDashboard";
 import { timeAgo, formatTokens, formatModelName } from "@feed-ai/shared/utils";
@@ -9,6 +10,13 @@ import LogViewer from "@feed-ai/shared/components/LogViewer";
 import { Button } from "@feed-ai/shared/components/ui/button";
 import { Input } from "@feed-ai/shared/components/ui/input";
 import { Badge } from "@feed-ai/shared/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@feed-ai/shared/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -40,6 +48,18 @@ const {
   rescoreScore,
 } = useDashboard();
 
+useHead({
+  title: "Dashboard — One Question",
+  meta: [
+    { property: "og:title", content: "Dashboard — One Question" },
+    {
+      property: "og:description",
+      content:
+        "Admin dashboard — source health, AI usage, and score management.",
+    },
+  ],
+});
+
 const keyInput = ref("");
 
 function submitKey() {
@@ -54,19 +74,17 @@ onMounted(fetchDashboard);
 </script>
 
 <template>
-  <div class="h-[100dvh] overflow-y-auto bg-background p-4 text-foreground">
+  <div
+    class="h-[100dvh] overflow-y-auto bg-background p-4 sm:p-6 text-foreground"
+  >
     <div class="mx-auto max-w-5xl">
       <!-- Header -->
-      <div class="mb-8 flex items-center justify-between">
-        <h1 class="text-2xl font-bold tracking-tight">OQ Dashboard</h1>
-        <div class="flex items-center gap-3">
+      <div class="mb-8 flex items-center justify-between gap-4">
+        <h1 class="text-2xl font-bold tracking-tight truncate">OQ Dashboard</h1>
+        <div class="flex shrink-0 items-center gap-3">
           <DropdownMenu v-if="data && !needsAuth">
             <DropdownMenuTrigger as-child>
-              <Button
-                variant="outline"
-                size="sm"
-                :disabled="fetching || scoring"
-              >
+              <Button variant="outline" size="sm">
                 Actions
                 <ChevronDown class="size-4" />
               </Button>
@@ -140,22 +158,29 @@ onMounted(fetchDashboard);
       </div>
 
       <!-- Auth prompt -->
-      <div v-if="needsAuth" class="mx-auto max-w-sm py-20">
-        <p class="mb-4 text-center text-sm text-muted-foreground">
-          Enter admin key to access the dashboard
-        </p>
-        <form class="flex gap-2" @submit.prevent="submitKey">
-          <Input
-            v-model="keyInput"
-            type="password"
-            placeholder="Admin key"
-            class="flex-1"
-          />
-          <Button type="submit"> Go </Button>
-        </form>
-        <p v-if="error" class="mt-3 text-center text-sm text-destructive">
-          {{ error }}
-        </p>
+      <div v-if="needsAuth" class="flex items-center justify-center py-20">
+        <Card class="w-full max-w-sm">
+          <CardHeader class="text-center">
+            <CardTitle>Authentication</CardTitle>
+            <CardDescription>
+              Enter admin key to access the dashboard
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form class="flex gap-2" @submit.prevent="submitKey">
+              <Input
+                v-model="keyInput"
+                type="password"
+                placeholder="Admin key"
+                class="flex-1"
+              />
+              <Button type="submit"> Go </Button>
+            </form>
+            <p v-if="error" class="mt-3 text-center text-sm text-destructive">
+              {{ error }}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <!-- Loading -->
@@ -186,7 +211,7 @@ onMounted(fetchDashboard);
       <!-- Dashboard content -->
       <template v-else-if="data">
         <!-- Stats row -->
-        <div class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <StatCard :value="data.totalScores" label="Total Scores" :index="0" />
           <StatCard
             :value="data.totalArticles"

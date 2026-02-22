@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from "vue";
+import { useHead } from "@unhead/vue";
 import { useRoute, useRouter } from "vue-router";
 import { Swiper, SwiperSlide } from "swiper/vue";
 import type Swiper_T from "swiper";
@@ -40,6 +41,22 @@ const {
   goToPrevious,
   goToNext,
 } = useDigest();
+
+useHead({
+  title: () =>
+    formattedDate.value ? `${formattedDate.value} — feed-ai` : "feed-ai",
+  meta: [
+    {
+      property: "og:title",
+      content: () =>
+        formattedDate.value ? `${formattedDate.value} — feed-ai` : "feed-ai",
+    },
+    {
+      property: "og:description",
+      content: "AI-curated daily digest — RSS, news, jobs, and sport.",
+    },
+  ],
+});
 
 function itemsForCategory(cat: string) {
   if (!digest.value) return [];

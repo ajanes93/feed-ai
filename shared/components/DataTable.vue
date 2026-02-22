@@ -16,14 +16,14 @@ defineProps<{
 </script>
 
 <template>
-  <div class="overflow-hidden rounded-xl border border-border bg-card/50">
+  <div class="overflow-x-auto rounded-xl border border-border bg-card">
     <Table>
       <TableHeader>
         <TableRow class="border-border/50 hover:bg-transparent">
           <TableHead
             v-for="col in columns"
             :key="col.key"
-            class="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+            class="text-xs font-medium uppercase tracking-wider"
           >
             {{ col.label }}
           </TableHead>

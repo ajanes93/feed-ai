@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, computed, nextTick, ref } from "vue";
+import { useHead } from "@unhead/vue";
 import { useRouter } from "vue-router";
 import { useAiChat, type PromptKey } from "../composables/useAiChat";
 import { renderMarkdown } from "../utils/markdown";
@@ -8,6 +9,18 @@ import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
 import { ArrowLeft, Sparkles, X } from "lucide-vue-next";
 
 const router = useRouter();
+
+useHead({
+  title: "AI Assistant — feed-ai",
+  meta: [
+    { property: "og:title", content: "AI Assistant — feed-ai" },
+    {
+      property: "og:description",
+      content: "AI-powered summaries and insights from your daily feed.",
+    },
+  ],
+});
+
 const {
   messages,
   loading,
