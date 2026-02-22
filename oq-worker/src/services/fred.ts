@@ -26,8 +26,8 @@ const SOFTWARE_SERIES = "IHLIDXUSTPSOFTDEVE";
 // Initial Claims - general labour market health
 const GENERAL_SERIES = "ICSA";
 
-// Fetch enough observations to compute 4-week trend
-const OBSERVATION_LIMIT = 8;
+// Fetch enough observations to compute 4-week trend (daily or weekly data)
+const OBSERVATION_LIMIT = 35;
 
 interface FREDObservation {
   date: string;
@@ -56,6 +56,29 @@ function pctChange(current: number, previous: number): number {
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
+// Find the observation closest to `targetDays` ago from the current date
+function findByDateOffset(
+  observations: FREDObservation[],
+  currentDate: string,
+  targetDays: number
+): FREDObservation | null {
+  const currentMs = new Date(currentDate).getTime();
+  const targetMs = currentMs - targetDays * 86400000;
+  let best: FREDObservation | null = null;
+  let bestDiff = Infinity;
+
+  for (let i = 1; i < observations.length; i++) {
+    const obsMs = new Date(observations[i].date).getTime();
+    const diff = Math.abs(obsMs - targetMs);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = observations[i];
+    }
+  }
+
+  return best;
+}
+
 export function buildTrend(
   observations: FREDObservation[]
 ): FREDSeriesTrend | null {
@@ -69,22 +92,30 @@ export function buildTrend(
     currentDate: observations[0].date,
   };
 
-  // ~1 week ago: index 1 (weekly data) or closest
+  // Previous observation (most recent before current)
   if (observations.length >= 2) {
     const prev = parseFloat(observations[1].value);
     if (!isNaN(prev)) {
       trend.previous = prev;
       trend.previousDate = observations[1].date;
-      trend.change1w = pctChange(current, prev);
     }
   }
 
-  // ~4 weeks ago: index 4 for weekly data, fall back to last available
-  const idx4w = Math.min(4, observations.length - 1);
-  if (idx4w >= 2) {
-    const prev4w = parseFloat(observations[idx4w].value);
-    if (!isNaN(prev4w)) {
-      trend.change4w = pctChange(current, prev4w);
+  // ~1 week ago: find observation closest to 7 days before current
+  const obs1w = findByDateOffset(observations, observations[0].date, 7);
+  if (obs1w) {
+    const val = parseFloat(obs1w.value);
+    if (!isNaN(val)) {
+      trend.change1w = pctChange(current, val);
+    }
+  }
+
+  // ~4 weeks ago: find observation closest to 28 days before current
+  const obs4w = findByDateOffset(observations, observations[0].date, 28);
+  if (obs4w) {
+    const val = parseFloat(obs4w.value);
+    if (!isNaN(val)) {
+      trend.change4w = pctChange(current, val);
     }
   }
 

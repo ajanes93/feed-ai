@@ -71,7 +71,7 @@ function parseSSREntries(html: string): SanityHarnessEntry[] {
   while ((rankMatch = rankPattern.exec(html)) !== null) {
     const rank = parseInt(rankMatch[1]);
     const windowStart = rankMatch.index;
-    const windowEnd = Math.min(html.length, windowStart + 5000);
+    const windowEnd = Math.min(html.length, windowStart + 8000);
     const window = html.slice(windowStart, windowEnd);
 
     // Agent name: first <a> with transition-colors class
@@ -98,10 +98,10 @@ function parseSSREntries(html: string): SanityHarnessEntry[] {
     const passMatch = window.match(/text-emerald-\d+[^"]*">([\d.]+)%/);
     const passRate = passMatch ? parseFloat(passMatch[1]) : 0;
 
-    // Language scores from the flight recorder links and language spectrum
+    // Language scores from the spectrum bar title attributes
+    // Format: title="dart: 33% Pass"
     const languages: Record<string, number> = {};
-    const langPattern =
-      /title="([a-z]+)"[^>]*>[^<]*<\/span>[^<]*<[^>]*>([\d.]+)%/gi;
+    const langPattern = /title="(\w+):\s*([\d.]+)%\s*Pass"/gi;
     let langMatch;
     while ((langMatch = langPattern.exec(window)) !== null) {
       languages[langMatch[1].toLowerCase()] = parseFloat(langMatch[2]);
