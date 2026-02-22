@@ -195,7 +195,10 @@ export function useDashboard() {
 
       data.value = await res.json();
     } catch (err) {
-      error.value = err instanceof Error ? err.message : "Network error";
+      // iOS Safari throws TypeError with message "Type error" for network failures
+      const msg = err instanceof Error ? err.message : "Network error";
+      error.value =
+        err instanceof TypeError ? "Network error — tap Refresh to retry" : msg;
     } finally {
       loading.value = false;
     }
@@ -215,6 +218,7 @@ export function useDashboard() {
     scoreSuccess,
     scoreAlreadyExists,
     setAdminKey,
+    clearAdminKey,
     fetchDashboard,
     fetchArticles,
     generateScore,
