@@ -55,17 +55,23 @@ export function useDashboard() {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const needsAuth = ref(false);
-  const adminKey = ref(sessionStorage.getItem(STORAGE_KEY) || "");
+  const adminKey = ref(
+    typeof sessionStorage !== "undefined"
+      ? sessionStorage.getItem(STORAGE_KEY) || ""
+      : ""
+  );
 
   function setAdminKey(key: string) {
     adminKey.value = key;
-    sessionStorage.setItem(STORAGE_KEY, key);
+    if (typeof sessionStorage !== "undefined")
+      sessionStorage.setItem(STORAGE_KEY, key);
     needsAuth.value = false;
   }
 
   function clearAdminKey() {
     adminKey.value = "";
-    sessionStorage.removeItem(STORAGE_KEY);
+    if (typeof sessionStorage !== "undefined")
+      sessionStorage.removeItem(STORAGE_KEY);
     needsAuth.value = true;
   }
 

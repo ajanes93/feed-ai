@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import { useHead } from "@unhead/vue";
 import { motion } from "motion-v";
 import { useDashboard } from "../composables/useDashboard";
 import { timeAgo, formatTokens, formatModelName } from "@feed-ai/shared/utils";
@@ -39,6 +40,18 @@ const {
   generateScore,
   rescoreScore,
 } = useDashboard();
+
+useHead({
+  title: "Dashboard — One Question",
+  meta: [
+    { property: "og:title", content: "Dashboard — One Question" },
+    {
+      property: "og:description",
+      content:
+        "Admin dashboard — source health, AI usage, and score management.",
+    },
+  ],
+});
 
 const keyInput = ref("");
 
