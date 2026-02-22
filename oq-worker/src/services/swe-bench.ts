@@ -191,15 +191,19 @@ export function parseScaleLeaderboard(html: string): ScaleProResult | null {
 
       // Look for JSON objects containing score data
       // Pattern: {"model":"...","score":45.89,...} — limit gap to 200 chars
-      // to avoid matching across unrelated JSON objects
+      // to avoid matching across unrelated JSON objects.
+      // Also accept "version" as key, but require the name to contain a letter
+      // to filter out Next.js page metadata like {"version":"2.0","score":97}
       const scoreMatches = str.matchAll(
         /"(?:model|version)"\s*:\s*"([^"]+)"[^}]{0,200}"score"\s*:\s*([\d.]+)/g
       );
       for (const m of scoreMatches) {
+        const name = m[1];
+        if (!/[a-zA-Z]/.test(name)) continue;
         const score = parseFloat(m[2]);
         if (score > bestScore && score <= 100) {
           bestScore = score;
-          bestModel = m[1];
+          bestModel = name;
         }
       }
 
@@ -208,10 +212,12 @@ export function parseScaleLeaderboard(html: string): ScaleProResult | null {
         /"score"\s*:\s*([\d.]+)[^}]{0,200}"(?:model|version)"\s*:\s*"([^"]+)"/g
       );
       for (const m of reversedMatches) {
+        const name = m[2];
+        if (!/[a-zA-Z]/.test(name)) continue;
         const score = parseFloat(m[1]);
         if (score > bestScore && score <= 100) {
           bestScore = score;
-          bestModel = m[2];
+          bestModel = name;
         }
       }
     }

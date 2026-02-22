@@ -36,7 +36,7 @@ export function buildSanityHtml(
       const langHtml = Object.entries(e.languages ?? {})
         .map(
           ([lang, pct]) =>
-            `<span title="${lang}"><span>${lang}</span></span><span>${pct}%</span>`
+            `<div class="h-full bg-cyan-500" title="${lang}: ${pct}% Pass"></div>`
         )
         .join("");
       return `

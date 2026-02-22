@@ -703,6 +703,18 @@ async function fetchAndStoreSWEBench(db: D1Database): Promise<{
     throw new Error(`SWE-bench: invalid topVerified ${data.topVerified}`);
   }
 
+  // Warn if Pro scores look suspicious (above Verified), but still store them
+  if (data.topPro > data.topVerified && data.topVerified > 0) {
+    console.warn(
+      `[oq:swe-bench] Pro score (${data.topPro}) exceeds Verified (${data.topVerified}) — verify parser output`
+    );
+  }
+  if (data.topProPrivate > data.topVerified && data.topVerified > 0) {
+    console.warn(
+      `[oq:swe-bench] Pro Private score (${data.topProPrivate}) exceeds Verified (${data.topVerified}) — verify parser output`
+    );
+  }
+
   await storeExternalData(db, "swe_bench", data);
   return {
     stored: true,
