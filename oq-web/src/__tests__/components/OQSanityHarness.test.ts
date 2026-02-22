@@ -91,4 +91,12 @@ describe("OQSanityHarness", () => {
     const wrapper = mount(OQSanityHarness, { props: defaultProps });
     expect(wrapper.text()).toContain("generalist replacement");
   });
+
+  it("renders source link to SanityHarness", () => {
+    const wrapper = mount(OQSanityHarness, { props: defaultProps });
+    const link = wrapper.find('a[href="https://sanityboard.lr7.dev"]');
+    expect(link.exists()).toBe(true);
+    expect(link.text()).toContain("SanityHarness");
+    expect(link.attributes("target")).toBe("_blank");
+  });
 });

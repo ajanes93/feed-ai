@@ -16,6 +16,8 @@ interface SWEBenchContext {
   topBashOnlyModel: string;
   topPro?: number;
   topProModel?: string;
+  topProPrivate?: number;
+  topProPrivateModel?: string;
 }
 
 interface PromptContext {
@@ -60,8 +62,9 @@ A human engineer is no longer needed.
 KEY FRAMING: The central metric is the "Capability Gap":
 - SWE-bench Verified (best agent+model, curated open-source): ${ctx.sweBench ? `${ctx.sweBench.topVerified}% (${ctx.sweBench.topVerifiedModel})` : "~79%"}
 - SWE-bench Bash Only (raw model capability, standardized agent): ${ctx.sweBench ? `${ctx.sweBench.topBashOnly}% (${ctx.sweBench.topBashOnlyModel})` : "~77%"}
-- SWE-bench Pro (private codebases, harder problems): ${typeof ctx.sweBench?.topPro === "number" && ctx.sweBench.topPro > 0 ? `${ctx.sweBench.topPro}% (${ctx.sweBench.topProModel})` : "~46%"}
-The gap between Verified (~79%) and Pro (~46%) IS the story. Curated open-source benchmarks flatter AI capabilities. Private codebases expose the real gap.
+- SWE-bench Pro Public (unfamiliar real-world repos, Scale AI SEAL): ${typeof ctx.sweBench?.topPro === "number" && ctx.sweBench.topPro > 0 ? `${ctx.sweBench.topPro}% (${ctx.sweBench.topProModel})` : "~46%"}
+- SWE-bench Pro Private (truly private startup codebases, Scale AI SEAL): ${typeof ctx.sweBench?.topProPrivate === "number" && ctx.sweBench.topProPrivate > 0 ? `${ctx.sweBench.topProPrivate}% (${ctx.sweBench.topProPrivateModel})` : "~23%"}
+The gap between Verified (~77%) and Pro Public (~46%) IS the story. Curated open-source benchmarks flatter AI capabilities. On private codebases it drops to ~23%.
 
 Current score: ${ctx.currentScore}/100
 Technical sub-score: ${ctx.technicalScore}/100
@@ -119,7 +122,8 @@ Provide your assessment as JSON:
       "text": "<one-sentence summary, max 100 chars>",
       "direction": "up" | "down" | "neutral",
       "source": "<publication name>",
-      "impact": <-5 to +5>
+      "impact": <-5 to +5>,
+      "url": "<article URL from [url] tag if available, otherwise omit>"
     }
   ],
   "delta_explanation": "<one sentence explaining what drove the delta, referencing specific signals by name>",

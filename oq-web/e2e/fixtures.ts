@@ -25,6 +25,7 @@ function buildTodayResponse(overrides: Record<string, unknown> = {}) {
         direction: "up",
         source: "TechCrunch",
         impact: 2,
+        url: "https://techcrunch.com/gpt5-rumor",
       }),
       oqSignalFactory.build({
         text: "Developer survey shows declining trust in AI code",
@@ -103,10 +104,14 @@ function buildMethodologyResponse() {
     startingScore: 32,
     currentPromptHash: "abc123def456",
     capabilityGap: {
-      verified: "~79%",
+      verified: "~77%",
+      verifiedSource: "https://www.swebench.com",
       pro: "~46%",
+      proSource: "https://scale.com/leaderboard/swe_bench_pro_public",
+      proPrivate: "~23%",
+      proPrivateSource: "https://scale.com/leaderboard/swe_bench_pro_private",
       description:
-        "SWE-bench scores on curated open-source issues. Real enterprise engineering involves ambiguous requirements.",
+        "SWE-bench (Princeton) measures AI on curated open-source bugs. SWE-bench Pro (Scale AI SEAL) uses unfamiliar real-world repos AI hasn't seen in training.",
     },
     sanityHarness: {
       topPassRate: 72.5,
@@ -178,6 +183,56 @@ async function mockApi(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(buildMethodologyResponse()),
+    })
+  );
+
+  await page.route("**/api/score/*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...todayData,
+        deltaExplanation:
+          "Minor benchmark movement drove a small upward change.",
+        promptHash: "abc123def456",
+        articles: [
+          {
+            title: "AI coding agents improve on Python tasks",
+            url: "https://example.com/article1",
+            source: "Ars Technica",
+            pillar: "capability",
+            publishedAt: "2026-02-22T10:00:00Z",
+          },
+          {
+            title: "Software job postings continue to decline",
+            url: "https://example.com/article2",
+            source: "Indeed Blog",
+            pillar: "labour_market",
+            publishedAt: "2026-02-22T08:00:00Z",
+          },
+        ],
+        modelResponses: [
+          {
+            model: "claude-sonnet-4-5-20250929",
+            provider: "anthropic",
+            pillarScores: {
+              capability: 1,
+              labour_market: -0.5,
+              sentiment: 0,
+              industry: 0,
+              barriers: 0,
+            },
+            technicalDelta: 0.5,
+            economicDelta: -0.3,
+            suggestedDelta: 0.3,
+            analysis: "Claude sees minor benchmark improvements.",
+            topSignals: [],
+            inputTokens: 5000,
+            outputTokens: 500,
+            latencyMs: 3200,
+          },
+        ],
+      }),
     })
   );
 }

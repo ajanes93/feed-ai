@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
 import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
+import OQExplainer from "./OQExplainer.vue";
 
 const props = defineProps<{
   score: number;
@@ -66,8 +67,13 @@ const barWidth = computed(() => (showBar.value ? `${props.score}%` : "0%"));
             {{ scoreTechnical
             }}<span class="text-xs text-muted-foreground">%</span>
           </div>
-          <div class="text-[11px] text-muted-foreground">
+          <div
+            class="flex items-center gap-1 text-[11px] text-muted-foreground"
+          >
             Technical Feasibility
+            <OQExplainer
+              text="Can AI do the work? Based on benchmarks and capabilities (SWE-bench, SanityHarness)."
+            />
           </div>
         </CardContent>
       </Card>
@@ -77,8 +83,13 @@ const barWidth = computed(() => (showBar.value ? `${props.score}%` : "0%"));
             {{ scoreEconomic
             }}<span class="text-xs text-muted-foreground">%</span>
           </div>
-          <div class="text-[11px] text-muted-foreground">
+          <div
+            class="flex items-center gap-1 text-[11px] text-muted-foreground"
+          >
             Economic Replacement
+            <OQExplainer
+              text="Will companies actually replace engineers? Based on jobs, funding, and headcount data."
+            />
           </div>
         </CardContent>
       </Card>

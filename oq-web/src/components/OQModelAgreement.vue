@@ -3,6 +3,7 @@ import type { OQModelScore, OQModelAgreement } from "@feed-ai/shared/oq-types";
 import { formatModelName } from "@feed-ai/shared/utils";
 import { Badge } from "@feed-ai/shared/components/ui/badge";
 import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
+import OQExplainer from "./OQExplainer.vue";
 
 defineProps<{
   modelAgreement: OQModelAgreement;
@@ -30,8 +31,13 @@ defineProps<{
         >
         <span v-else-if="modelAgreement === 'disagree'">Models disagree</span>
         <span v-else>Partial consensus</span>
-        <span class="ml-auto font-mono text-[10px] text-muted-foreground">
+        <span
+          class="ml-auto flex items-center gap-1 font-mono text-[10px] text-muted-foreground"
+        >
           spread: {{ modelSpread }}
+          <OQExplainer
+            text="How much the three AI models disagree. 0 = identical scores, 10 = maximum disagreement. Under 3 = broad consensus."
+          />
         </span>
       </div>
 

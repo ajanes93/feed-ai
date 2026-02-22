@@ -263,6 +263,64 @@ app.get("/api/history", async (c) => {
   );
 });
 
+app.get("/api/score/:date", async (c) => {
+  const date = c.req.param("date");
+
+  // Validate date format
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return c.json({ error: "Invalid date format. Use YYYY-MM-DD." }, 400);
+  }
+
+  const row = await c.env.DB.prepare("SELECT * FROM oq_scores WHERE date = ?")
+    .bind(date)
+    .first();
+
+  if (!row) {
+    return c.json({ error: "No score found for this date" }, 404);
+  }
+
+  const scoreData = mapScoreRow(row);
+
+  // Load articles linked to this score
+  const articleRows = await c.env.DB.prepare(
+    "SELECT a.title, a.url, a.source, a.pillar, a.published_at FROM oq_score_articles sa JOIN oq_articles a ON sa.article_id = a.id WHERE sa.score_id = ? ORDER BY a.pillar, a.published_at DESC"
+  )
+    .bind(row.id)
+    .all();
+
+  // Load model responses for this score
+  const modelRows = await c.env.DB.prepare(
+    "SELECT model, provider, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, input_tokens, output_tokens, latency_ms FROM oq_model_responses WHERE score_id = ? ORDER BY model"
+  )
+    .bind(row.id)
+    .all();
+
+  return c.json({
+    ...scoreData,
+    articles: articleRows.results.map((a) => ({
+      title: a.title,
+      url: a.url,
+      source: a.source,
+      pillar: a.pillar,
+      publishedAt: a.published_at,
+    })),
+    modelResponses: modelRows.results.map((m) => ({
+      model: m.model,
+      provider: m.provider,
+      pillarScores: safeJsonParse(m.pillar_scores, {}),
+      technicalDelta: m.technical_delta,
+      economicDelta: m.economic_delta,
+      suggestedDelta: m.suggested_delta,
+      analysis: m.analysis,
+      topSignals: safeJsonParse(m.top_signals, []),
+      capabilityGapNote: m.capability_gap_note,
+      inputTokens: m.input_tokens,
+      outputTokens: m.output_tokens,
+      latencyMs: m.latency_ms,
+    })),
+  });
+});
+
 app.post("/api/subscribe", async (c) => {
   const body = await c.req.json<{ email: string }>();
   const email = body.email?.trim().toLowerCase();
@@ -337,14 +395,22 @@ app.get("/api/methodology", async (c) => {
     capabilityGap: {
       verified: externalData.sweBench
         ? `${externalData.sweBench.topVerified}%`
-        : "~79%",
+        : "~77%",
+      verifiedSource: "https://www.swebench.com",
       pro:
         typeof externalData.sweBench?.topPro === "number" &&
         externalData.sweBench.topPro > 0
           ? `~${Math.round(externalData.sweBench.topPro)}%`
           : "~46%",
+      proSource: "https://scale.com/leaderboard/swe_bench_pro_public",
+      proPrivate:
+        typeof externalData.sweBench?.topProPrivate === "number" &&
+        externalData.sweBench.topProPrivate > 0
+          ? `~${Math.round(externalData.sweBench.topProPrivate)}%`
+          : "~23%",
+      proPrivateSource: "https://scale.com/leaderboard/swe_bench_pro_private",
       description:
-        "SWE-bench scores on curated open-source issues. Real enterprise engineering involves ambiguous requirements, system design, and cross-team coordination.",
+        "SWE-bench (Princeton) measures AI on curated open-source bugs. SWE-bench Pro (Scale AI SEAL) uses unfamiliar real-world repos AI hasn't seen in training.",
     },
     sanityHarness: externalData.sanityHarness
       ? {
@@ -486,6 +552,8 @@ interface ExternalData {
     topBashOnlyModel: string;
     topPro?: number;
     topProModel?: string;
+    topProPrivate?: number;
+    topProPrivateModel?: string;
   };
   softwareIndex?: number;
   softwareDate?: string;
@@ -616,6 +684,7 @@ async function fetchAndStoreSWEBench(db: D1Database): Promise<{
   verified: number;
   bashOnly: number;
   pro: number;
+  proPrivate: number;
 }> {
   const data = await fetchSWEBenchLeaderboard();
 
@@ -634,6 +703,7 @@ async function fetchAndStoreSWEBench(db: D1Database): Promise<{
     verified: data.topVerified,
     bashOnly: data.topBashOnly,
     pro: data.topPro,
+    proPrivate: data.topProPrivate,
   };
 }
 
@@ -860,7 +930,7 @@ async function generateDailyScore(
         .slice(0, 20)
         .map(
           (a) =>
-            `- ${String(a.title).toWellFormed()}${a.summary ? ` — ${(a.summary as string).slice(0, 200).toWellFormed()}` : ""} (${a.source})\n`
+            `- ${String(a.title).toWellFormed()}${a.summary ? ` — ${(a.summary as string).slice(0, 200).toWellFormed()}` : ""} (${a.source}) [${a.url}]\n`
         )
         .join(""),
     ])

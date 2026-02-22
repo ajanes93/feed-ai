@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { ExternalLink } from "lucide-vue-next";
+import OQExplainer from "./OQExplainer.vue";
 
 const props = defineProps<{
   topPassRate: number;
@@ -35,8 +37,13 @@ function langBg(pct: number): string {
 
 <template>
   <div class="rounded-2xl border border-gray-800 bg-gray-900 p-6 sm:p-8">
-    <div class="mb-4 text-[10px] tracking-widest text-gray-600 uppercase">
+    <div
+      class="mb-4 flex items-center gap-1.5 text-[10px] tracking-widest text-gray-600 uppercase"
+    >
       AI Agent Reality Check
+      <OQExplainer
+        text="Independent benchmark testing AI coding agents across multiple languages. Created by Can Boluk."
+      />
     </div>
 
     <!-- Top vs Median -->
@@ -95,9 +102,20 @@ function langBg(pct: number): string {
       </div>
     </div>
 
-    <p class="mt-4 text-xs leading-relaxed text-gray-500">
-      AI agents ace some languages but fail others. A generalist replacement
-      would need all of them.
-    </p>
+    <div class="mt-4 flex items-baseline justify-between">
+      <p class="text-xs leading-relaxed text-gray-500">
+        AI agents ace some languages but fail others. A generalist replacement
+        would need all of them.
+      </p>
+      <a
+        href="https://sanityboard.lr7.dev"
+        target="_blank"
+        rel="noopener"
+        class="ml-3 inline-flex shrink-0 items-center gap-0.5 text-[9px] text-gray-700 transition-colors hover:text-orange-500/60"
+      >
+        Source: SanityHarness
+        <ExternalLink class="h-2 w-2" />
+      </a>
+    </div>
   </div>
 </template>

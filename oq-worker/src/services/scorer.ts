@@ -184,7 +184,15 @@ function parseModelResponse(text: string, model: string): OQModelScore {
     economic_delta: parsed.economic_delta ?? 0,
     suggested_delta: parsed.suggested_delta,
     analysis: parsed.analysis,
-    top_signals: (parsed.top_signals ?? []) as OQSignal[],
+    top_signals: (parsed.top_signals ?? []).map(
+      (s: Record<string, unknown>) => ({
+        text: s.text,
+        direction: s.direction,
+        source: s.source,
+        impact: s.impact,
+        ...(typeof s.url === "string" && s.url ? { url: s.url } : {}),
+      })
+    ) as OQSignal[],
     delta_explanation:
       typeof parsed.delta_explanation === "string"
         ? parsed.delta_explanation.slice(0, 200)
@@ -386,6 +394,8 @@ interface ScoringInput {
     topBashOnlyModel: string;
     topPro?: number;
     topProModel?: string;
+    topProPrivate?: number;
+    topProPrivateModel?: string;
   };
   softwareIndex?: number;
   softwareDate?: string;

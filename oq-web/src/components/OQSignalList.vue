@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { OQSignal } from "@feed-ai/shared/oq-types";
 import { Badge } from "@feed-ai/shared/components/ui/badge";
+import { ExternalLink } from "lucide-vue-next";
 
 defineProps<{
   signals: OQSignal[];
@@ -9,9 +10,13 @@ defineProps<{
 
 <template>
   <div class="flex flex-col gap-2">
-    <div
+    <component
+      :is="signal.url ? 'a' : 'div'"
       v-for="(signal, i) in signals"
       :key="i"
+      :href="signal.url"
+      :target="signal.url ? '_blank' : undefined"
+      :rel="signal.url ? 'noopener' : undefined"
       class="flex items-center gap-3 rounded-xl border border-transparent bg-secondary/50 px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-border"
     >
       <Badge
@@ -29,11 +34,15 @@ defineProps<{
         <span v-else>●</span>
       </Badge>
       <span class="flex-1">{{ signal.text }}</span>
+      <ExternalLink
+        v-if="signal.url"
+        class="h-3 w-3 shrink-0 text-muted-foreground/40"
+      />
       <span
         class="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground"
       >
         {{ signal.source }}
       </span>
-    </div>
+    </component>
   </div>
 </template>
