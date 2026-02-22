@@ -123,7 +123,7 @@ Provide your assessment as JSON:
       "direction": "up" | "down" | "neutral",
       "source": "<publication name>",
       "impact": <-5 to +5>,
-      "url": "<article URL from [url] tag if available, otherwise omit>"
+      "url": "<REQUIRED: article URL from [url] tag, or source URL for data signals (https://www.swebench.com for SWE-bench, https://sanityboard.lr7.dev for SanityHarness, https://fred.stlouisfed.org for FRED/Indeed data)>"
     }
   ],
   "delta_explanation": "<one sentence explaining what drove the delta, referencing specific signals by name>",
