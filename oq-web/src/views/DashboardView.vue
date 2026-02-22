@@ -48,17 +48,7 @@ const {
   rescoreScore,
 } = useDashboard();
 
-useHead({
-  title: "Dashboard — One Question",
-  meta: [
-    { property: "og:title", content: "Dashboard — One Question" },
-    {
-      property: "og:description",
-      content:
-        "Admin dashboard — source health, AI usage, and score management.",
-    },
-  ],
-});
+useHead({ title: "Dashboard — One Question" });
 
 const keyInput = ref("");
 

@@ -10,10 +10,6 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  ssgOptions: {
-    script: "async",
-    includedRoutes: () => ["/", "/methodology", "/dashboard"],
-  },
   server: {
     fs: {
       allow: [path.resolve(__dirname, "..")],

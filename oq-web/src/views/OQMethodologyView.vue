@@ -8,17 +8,7 @@ import { Separator } from "@feed-ai/shared/components/ui/separator";
 
 const { methodology, fetchMethodology } = useOneQuestion();
 
-useHead({
-  title: "Methodology — One Question",
-  meta: [
-    { property: "og:title", content: "Methodology — One Question" },
-    {
-      property: "og:description",
-      content:
-        "How three AI models score the probability of AI replacing software engineers.",
-    },
-  ],
-});
+useHead({ title: "Methodology — One Question" });
 
 onMounted(() => fetchMethodology());
 </script>
