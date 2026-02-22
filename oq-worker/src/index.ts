@@ -128,10 +128,14 @@ app.get("/api/admin/dashboard", async (c) => {
       totalSubscribers: (subscriberCount.results[0]?.count as number) ?? 0,
     });
   } catch (err) {
-    const log = createLogger(c.env.DB);
-    await log.error("admin", "dashboard failed", {
-      error: err instanceof Error ? err.message : String(err),
-    });
+    try {
+      const log = createLogger(c.env.DB);
+      await log.error("admin", "dashboard failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } catch {
+      // DB logging failed — global onError console.error is the fallback
+    }
     return c.json({ error: "Failed to load dashboard" }, 500);
   }
 });

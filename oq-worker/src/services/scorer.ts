@@ -354,6 +354,11 @@ interface ScorerLogger {
     message: string,
     details?: Record<string, unknown>
   ) => Promise<void>;
+  error: (
+    category: string,
+    message: string,
+    details?: Record<string, unknown>
+  ) => Promise<void>;
 }
 
 interface ScoringInput {

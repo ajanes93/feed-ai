@@ -266,9 +266,7 @@ test.describe("Dashboard", () => {
     await page.goto("/dashboard");
 
     // Should show friendly network error, not raw "Type error"
-    await expect(
-      page.getByText(/Network error.*Refresh|Failed to fetch/)
-    ).toBeVisible();
+    await expect(page.getByText(/Network error.*Refresh/)).toBeVisible();
     await expect(page.getByText("Type error")).not.toBeVisible();
   });
 });
