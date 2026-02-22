@@ -88,16 +88,15 @@ onMounted(fetchDashboard);
   >
     <div class="mx-auto max-w-5xl">
       <!-- Header -->
-      <div class="mb-8 flex items-center justify-between">
-        <h1 class="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <div class="flex items-center gap-3">
+      <div class="mb-8 flex items-center justify-between gap-4">
+        <h1 class="truncate text-2xl font-bold tracking-tight">Dashboard</h1>
+        <div class="flex shrink-0 items-center gap-3">
           <DropdownMenu v-if="data && !needsAuth">
             <DropdownMenuTrigger as-child>
               <Button
                 variant="outline"
                 size="sm"
                 data-testid="actions-trigger"
-                :disabled="fetching || rebuilding || enriching"
               >
                 Actions
                 <ChevronDown class="size-4" />
