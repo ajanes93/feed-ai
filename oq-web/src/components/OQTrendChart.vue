@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRouter } from "vue-router";
 import type { OQHistoryEntry } from "@feed-ai/shared/oq-types";
 import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
+
+const router = useRouter();
 
 const props = defineProps<{
   history: OQHistoryEntry[];
@@ -54,7 +57,13 @@ const chartData = computed(() => {
     };
   });
 
-  return { linePath, areaPath, lastPoint: points[points.length - 1], labels };
+  return {
+    linePath,
+    areaPath,
+    points,
+    lastPoint: points[points.length - 1],
+    labels,
+  };
 });
 
 const gridLines = computed(() => {
@@ -116,6 +125,25 @@ const gridLines = computed(() => {
             class="stroke-background"
             stroke-width="3"
           />
+
+          <!-- Clickable hit areas for each data point -->
+          <circle
+            v-for="point in chartData.points"
+            :key="point.entry.date"
+            :cx="point.x"
+            :cy="point.y"
+            r="10"
+            fill="transparent"
+            role="link"
+            tabindex="0"
+            class="cursor-pointer"
+            :aria-label="`Score ${point.entry.score}% on ${point.entry.date}`"
+            @click="router.push(`/score/${point.entry.date}`)"
+            @keyup.enter="router.push(`/score/${point.entry.date}`)"
+            @keyup.space.prevent="router.push(`/score/${point.entry.date}`)"
+          >
+            <title>{{ point.entry.date }}: {{ point.entry.score }}%</title>
+          </circle>
         </svg>
 
         <!-- Labels -->

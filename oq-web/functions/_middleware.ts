@@ -38,7 +38,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (!data) return response;
 
   const ogTitle = `Will AI Replace Software Engineers? Today: ${data.score}%`;
-  const ogDesc = `Three AI models read the signals daily. Technical: ${data.scoreTechnical}%. Economic: ${data.scoreEconomic}%. ${data.analysis.slice(0, 100)}`;
+  const analysisSnippet = data.analysis.slice(0, 140).replace(/[^.!?]*$/, "").trim() || data.analysis.slice(0, 100).trim() + "...";
+  const ogDesc = `Three AI models read the signals daily. Technical: ${data.scoreTechnical}%. Economic: ${data.scoreEconomic}%. ${analysisSnippet}`;
 
   return new HTMLRewriter()
     .on("title", {

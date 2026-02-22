@@ -71,6 +71,84 @@ describe("parseModelResponse", () => {
     expect(result.economic_delta).toBe(0);
   });
 
+  it("preserves URL in signal when provided by model", () => {
+    const json = JSON.stringify({
+      pillar_scores: {
+        capability: 1,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
+      technical_delta: 0.5,
+      economic_delta: 0,
+      suggested_delta: 0.3,
+      analysis: "Test",
+      top_signals: [
+        {
+          text: "Signal with URL",
+          direction: "up",
+          source: "Test Source",
+          impact: 2,
+          url: "https://example.com/article",
+        },
+        {
+          text: "Signal without URL",
+          direction: "down",
+          source: "Other",
+          impact: -1,
+        },
+      ],
+    });
+    const result = parseModelResponse(json, "test-model");
+    expect(result.top_signals).toHaveLength(2);
+    expect(result.top_signals[0].url).toBe("https://example.com/article");
+    expect(result.top_signals[1].url).toBeUndefined();
+  });
+
+  it("strips non-http(s) URLs from signals to prevent XSS", () => {
+    const json = JSON.stringify({
+      pillar_scores: {
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
+      technical_delta: 0,
+      economic_delta: 0,
+      suggested_delta: 0,
+      analysis: "Test",
+      top_signals: [
+        {
+          text: "Malicious signal",
+          direction: "up",
+          source: "Evil",
+          impact: 1,
+          url: "javascript:alert(1)",
+        },
+        {
+          text: "Data URI signal",
+          direction: "up",
+          source: "Evil",
+          impact: 1,
+          url: "data:text/html,<script>alert(1)</script>",
+        },
+        {
+          text: "Valid HTTPS signal",
+          direction: "up",
+          source: "Good",
+          impact: 1,
+          url: "https://example.com",
+        },
+      ],
+    });
+    const result = parseModelResponse(json, "test-model");
+    expect(result.top_signals[0].url).toBeUndefined();
+    expect(result.top_signals[1].url).toBeUndefined();
+    expect(result.top_signals[2].url).toBe("https://example.com");
+  });
+
   it("defaults top_signals to empty array when missing", () => {
     const json = JSON.stringify({
       pillar_scores: {

@@ -39,7 +39,11 @@ export interface MethodologyResponse {
   };
   capabilityGap: {
     verified: string;
+    verifiedSource?: string;
     pro: string;
+    proSource?: string;
+    proPrivate?: string;
+    proPrivateSource?: string;
     description: string;
   };
   sanityHarness: SanityHarnessData | null;
@@ -73,6 +77,8 @@ interface ExternalDataSnapshot {
     topBashOnlyModel: string;
     topPro?: number;
     topProModel?: string;
+    topProPrivate?: number;
+    topProPrivateModel?: string;
   };
   softwareIndex?: number;
   softwareDate?: string;

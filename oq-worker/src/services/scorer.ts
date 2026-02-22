@@ -184,7 +184,17 @@ function parseModelResponse(text: string, model: string): OQModelScore {
     economic_delta: parsed.economic_delta ?? 0,
     suggested_delta: parsed.suggested_delta,
     analysis: parsed.analysis,
-    top_signals: (parsed.top_signals ?? []) as OQSignal[],
+    top_signals: (parsed.top_signals ?? []).map(
+      (s: Record<string, unknown>) => ({
+        text: s.text,
+        direction: s.direction,
+        source: s.source,
+        impact: s.impact,
+        ...(typeof s.url === "string" && /^https?:\/\//.test(s.url)
+          ? { url: s.url }
+          : {}),
+      })
+    ) as OQSignal[],
     delta_explanation:
       typeof parsed.delta_explanation === "string"
         ? parsed.delta_explanation.slice(0, 200)
@@ -386,6 +396,8 @@ interface ScoringInput {
     topBashOnlyModel: string;
     topPro?: number;
     topProModel?: string;
+    topProPrivate?: number;
+    topProPrivateModel?: string;
   };
   softwareIndex?: number;
   softwareDate?: string;
@@ -418,14 +430,24 @@ async function callModelWithRetry(
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       const isLastAttempt = attempt === MAX_RETRIES - 1;
-      const logFn = isLastAttempt ? log?.error : log?.warn;
-      await logFn?.call(log, "score", `${name} attempt ${attempt + 1} failed`, {
+      const details = {
         model,
         provider,
         attempt: attempt + 1,
         error: lastError,
-      });
-      if (!isLastAttempt) {
+      };
+      if (isLastAttempt) {
+        await log?.error(
+          "score",
+          `${name} attempt ${attempt + 1} failed`,
+          details
+        );
+      } else {
+        await log?.warn(
+          "score",
+          `${name} attempt ${attempt + 1} failed`,
+          details
+        );
         await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
       }
     }
@@ -505,12 +527,9 @@ export async function runScoring(
     .map((r) => r.result)
     .filter((r): r is ModelResult => r !== null);
 
-  // Collect both successful and failed usage entries
   const aiUsages: AIUsageEntry[] = [
     ...modelResults.map((r) => r.usage),
-    ...callResults
-      .filter((r) => r.failedUsage)
-      .map((r) => r.failedUsage as AIUsageEntry),
+    ...callResults.flatMap((r) => (r.failedUsage ? [r.failedUsage] : [])),
   ];
 
   if (modelResults.length === 0) {

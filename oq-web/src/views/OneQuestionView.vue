@@ -215,6 +215,14 @@ onMounted(async () => {
                 :signals="today.signals"
                 class="mt-6"
               />
+
+              <!-- Full breakdown link -->
+              <router-link
+                :to="`/score/${today.date}`"
+                class="mt-4 block text-center text-[11px] text-muted-foreground/50 transition-colors hover:text-orange-500/60"
+              >
+                Full breakdown: model reasoning, articles, pillar scores →
+              </router-link>
             </CardContent>
           </Card>
         </motion.section>
@@ -237,14 +245,30 @@ onMounted(async () => {
 
         <!-- ═══ CAPABILITY GAP (Technical evidence) ═══ -->
         <motion.section
-          class="mt-6"
+          class="mt-10"
           :initial="{ opacity: 0, y: 20 }"
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.6, delay: 0.35 }"
         >
+          <div class="mb-3 flex items-baseline gap-3">
+            <span
+              class="text-[10px] tracking-widest text-muted-foreground uppercase"
+              >Can AI actually do the job?</span
+            >
+            <Badge
+              variant="outline"
+              class="border-border text-[9px] font-mono text-muted-foreground"
+            >
+              Technical: {{ today.scoreTechnical }}%
+            </Badge>
+          </div>
           <OQCapabilityGap
-            :verified="methodology?.capabilityGap?.verified ?? '~79%'"
+            :verified="methodology?.capabilityGap?.verified ?? '~77%'"
             :pro="methodology?.capabilityGap?.pro ?? '~46%'"
+            :verified-source="methodology?.capabilityGap?.verifiedSource"
+            :pro-source="methodology?.capabilityGap?.proSource"
+            :pro-private="methodology?.capabilityGap?.proPrivate"
+            :pro-private-source="methodology?.capabilityGap?.proPrivateSource"
             :note="today.capabilityGap"
           />
         </motion.section>
@@ -252,11 +276,17 @@ onMounted(async () => {
         <!-- ═══ SANITY HARNESS (Agent Reality Check) ═══ -->
         <motion.section
           v-if="methodology?.sanityHarness"
-          class="mt-6"
+          class="mt-8"
           :initial="{ opacity: 0, y: 20 }"
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.6, delay: 0.4 }"
         >
+          <div class="mb-3">
+            <span
+              class="text-[10px] tracking-widest text-muted-foreground uppercase"
+              >How reliable are AI agents?</span
+            >
+          </div>
           <OQSanityHarness
             :top-pass-rate="methodology.sanityHarness.topPassRate"
             :top-agent="methodology.sanityHarness.topAgent"
@@ -268,11 +298,23 @@ onMounted(async () => {
 
         <!-- ═══ ECONOMIC REALITY ═══ -->
         <motion.section
-          class="mt-6"
+          class="mt-8"
           :initial="{ opacity: 0, y: 20 }"
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.6, delay: 0.45 }"
         >
+          <div class="mb-3 flex items-baseline gap-3">
+            <span
+              class="text-[10px] tracking-widest text-muted-foreground uppercase"
+              >Will companies actually do it?</span
+            >
+            <Badge
+              variant="outline"
+              class="border-border text-[9px] font-mono text-muted-foreground"
+            >
+              Economic: {{ today.scoreEconomic }}%
+            </Badge>
+          </div>
           <OQEconomicReality
             :software-index="methodology?.fredData?.softwareIndex"
             :software-date="methodology?.fredData?.softwareDate"
@@ -288,6 +330,12 @@ onMounted(async () => {
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.6, delay: 0.5 }"
         >
+          <div class="mb-3">
+            <span
+              class="text-[10px] tracking-widest text-muted-foreground uppercase"
+              >What should you watch for?</span
+            >
+          </div>
           <OQWhatWouldChange
             :to50="methodology.whatWouldChange.to50"
             :to70="methodology.whatWouldChange.to70"

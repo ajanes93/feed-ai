@@ -530,7 +530,7 @@ describe("Admin API routes", () => {
       const data = await res.json();
       // Should still have capabilityGap with fallback values
       expect(data.capabilityGap).toBeTruthy();
-      expect(data.capabilityGap.verified).toBe("~79%");
+      expect(data.capabilityGap.verified).toBe("~77%");
       expect(data.capabilityGap.pro).toBe("~46%");
     });
   });

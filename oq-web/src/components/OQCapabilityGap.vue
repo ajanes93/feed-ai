@@ -1,11 +1,25 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@feed-ai/shared/components/ui/collapsible";
+import { ExternalLink, ChevronDown } from "lucide-vue-next";
+import OQExplainer from "./OQExplainer.vue";
 
 defineProps<{
   verified: string;
   pro: string;
+  verifiedSource?: string;
+  proSource?: string;
+  proPrivate?: string;
+  proPrivateSource?: string;
   note?: string;
 }>();
+
+const isOpen = ref(false);
 </script>
 
 <template>
@@ -26,13 +40,26 @@ defineProps<{
             {{ verified }}
           </div>
           <div
-            class="mt-1 max-w-[100px] text-[10px] leading-tight tracking-widest text-muted-foreground uppercase"
+            class="mt-1 flex max-w-[120px] items-center justify-center gap-1 text-[10px] leading-tight tracking-widest text-muted-foreground uppercase"
           >
             SWE-bench Verified
+            <OQExplainer
+              text="AI agents fix real bugs from 12 popular open-source Python repos. 'Verified' = human-reviewed test cases. Run by Princeton's SWE-bench team."
+            />
           </div>
           <div class="mt-0.5 text-[9px] text-muted-foreground/60">
-            Curated bugs
+            Curated open-source bugs AI may have memorised
           </div>
+          <a
+            v-if="verifiedSource"
+            :href="verifiedSource"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/40 transition-colors hover:text-orange-500/60"
+          >
+            swebench.com
+            <ExternalLink class="h-2 w-2" />
+          </a>
         </div>
 
         <!-- Gap indicator -->
@@ -58,19 +85,32 @@ defineProps<{
             {{ pro }}
           </div>
           <div
-            class="mt-1 max-w-[100px] text-[10px] leading-tight tracking-widest text-muted-foreground uppercase"
+            class="mt-1 flex max-w-[120px] items-center justify-center gap-1 text-[10px] leading-tight tracking-widest text-muted-foreground uppercase"
           >
             SWE-bench Pro
+            <OQExplainer
+              text="Harder benchmark using repos AI hasn't seen in training. GPL licences deter training inclusion. Run by Scale AI, separate from SWE-bench team."
+            />
           </div>
           <div class="mt-0.5 text-[9px] text-muted-foreground/60">
-            Private codebases
+            Unfamiliar real-world repos AI hasn't seen in training
           </div>
+          <a
+            v-if="proSource"
+            :href="proSource"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/40 transition-colors hover:text-orange-500/60"
+          >
+            Scale AI SEAL
+            <ExternalLink class="h-2 w-2" />
+          </a>
         </div>
       </div>
 
       <p class="mt-5 text-center text-xs leading-relaxed text-muted-foreground">
-        Best AI scores on curated open-source vs. private real-world code. The
-        gap is the story.
+        AI solves 3 in 4 practiced problems. Less than 1 in 2 on code it hasn't
+        seen before.
       </p>
 
       <p
@@ -80,6 +120,50 @@ defineProps<{
       >
         {{ note }}
       </p>
+
+      <!-- Drill-down -->
+      <Collapsible v-model:open="isOpen" class="mt-4">
+        <CollapsibleTrigger
+          class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-[10px] tracking-widest text-muted-foreground/60 uppercase transition-colors hover:text-muted-foreground"
+        >
+          <span>Drill down: Private codebases</span>
+          <ChevronDown
+            class="h-3 w-3 transition-transform duration-200"
+            :class="{ 'rotate-180': isOpen }"
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div
+            class="mt-3 space-y-3 rounded-xl border border-border bg-secondary/30 p-4 text-xs leading-relaxed text-muted-foreground"
+          >
+            <p v-if="proPrivate">
+              On truly private code (startup codebases AI can never have seen):
+              top score drops to
+              <span class="font-semibold text-orange-400">{{ proPrivate }}</span
+              >.
+              <a
+                v-if="proPrivateSource"
+                :href="proPrivateSource"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="ml-1 inline-flex items-center gap-0.5 text-muted-foreground/50 transition-colors hover:text-orange-500/60"
+              >
+                Source: Scale AI SEAL Private
+                <ExternalLink class="h-2 w-2" />
+              </a>
+            </p>
+
+            <div>
+              <p class="mb-1 text-[10px] tracking-widest uppercase">Note</p>
+              <p>
+                SWE-bench (Princeton) and SWE-bench Pro (Scale AI) are separate
+                benchmarks with different datasets and evaluation methods. High
+                Verified scores don't predict Pro performance.
+              </p>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </CardContent>
   </Card>
 </template>

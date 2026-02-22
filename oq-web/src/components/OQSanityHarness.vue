@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { ExternalLink } from "lucide-vue-next";
+import OQExplainer from "./OQExplainer.vue";
 
 const props = defineProps<{
   topPassRate: number;
@@ -20,13 +22,13 @@ const langs = computed(() =>
     .sort((a, b) => b.pct - a.pct)
 );
 
-function langColor(pct: number): string {
+function langColor(pct: number) {
   if (pct >= 80) return "text-emerald-400";
   if (pct >= 50) return "text-yellow-400";
   return "text-red-400";
 }
 
-function langBg(pct: number): string {
+function langBg(pct: number) {
   if (pct >= 80) return "bg-emerald-500";
   if (pct >= 50) return "bg-yellow-500";
   return "bg-red-500";
@@ -34,23 +36,30 @@ function langBg(pct: number): string {
 </script>
 
 <template>
-  <div class="rounded-2xl border border-gray-800 bg-gray-900 p-6 sm:p-8">
-    <div class="mb-4 text-[10px] tracking-widest text-gray-600 uppercase">
+  <div class="rounded-2xl border border-border bg-card p-6 sm:p-8">
+    <div
+      class="mb-4 flex items-center gap-1.5 text-[10px] tracking-widest text-muted-foreground uppercase"
+    >
       AI Agent Reality Check
+      <OQExplainer
+        text="Independent benchmark testing AI coding agents across multiple languages. Created by Can Boluk."
+      />
     </div>
 
     <!-- Top vs Median -->
     <div class="flex items-center justify-center gap-8 sm:gap-12">
       <div class="text-center">
         <div
-          class="text-3xl font-semibold tracking-tight text-gray-200 sm:text-4xl"
+          class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
         >
-          {{ topPassRate }}<span class="text-lg text-gray-600">%</span>
+          {{ topPassRate }}<span class="text-lg text-muted-foreground">%</span>
         </div>
-        <div class="mt-1 text-[10px] tracking-widest text-gray-600 uppercase">
+        <div
+          class="mt-1 text-[10px] tracking-widest text-muted-foreground uppercase"
+        >
           Top Agent
         </div>
-        <div class="mt-0.5 text-[9px] text-gray-700">
+        <div class="mt-0.5 text-[9px] text-muted-foreground/50">
           {{ topAgent }} + {{ topModel }}
         </div>
       </div>
@@ -61,16 +70,22 @@ function langBg(pct: number): string {
         >
           ~{{ medianPassRate }}<span class="text-lg text-orange-500/50">%</span>
         </div>
-        <div class="mt-1 text-[10px] tracking-widest text-gray-600 uppercase">
+        <div
+          class="mt-1 text-[10px] tracking-widest text-muted-foreground uppercase"
+        >
           Median Agent
         </div>
-        <div class="mt-0.5 text-[9px] text-gray-700">Across all agents</div>
+        <div class="mt-0.5 text-[9px] text-muted-foreground/50">
+          Across all agents
+        </div>
       </div>
     </div>
 
     <!-- Language spread -->
-    <div v-if="languageBreakdown" class="mt-5 border-t border-gray-800 pt-4">
-      <div class="mb-2 text-[10px] tracking-widest text-gray-600 uppercase">
+    <div v-if="languageBreakdown" class="mt-5 border-t border-border pt-4">
+      <div
+        class="mb-2 text-[10px] tracking-widest text-muted-foreground uppercase"
+      >
         Language spread (top agent)
       </div>
       <div class="flex flex-wrap gap-2">
@@ -78,10 +93,10 @@ function langBg(pct: number): string {
           v-for="lang in langs"
           :key="lang.lang"
           data-testid="lang-chip"
-          class="flex items-center gap-1.5 rounded-lg bg-gray-800/50 px-2.5 py-1.5"
+          class="flex items-center gap-1.5 rounded-lg bg-secondary/50 px-2.5 py-1.5"
         >
           <span class="h-1.5 w-1.5 rounded-full" :class="langBg(lang.pct)" />
-          <span class="text-xs font-medium capitalize text-gray-400">
+          <span class="text-xs font-medium capitalize text-muted-foreground">
             {{ lang.lang }}
           </span>
           <span
@@ -95,9 +110,20 @@ function langBg(pct: number): string {
       </div>
     </div>
 
-    <p class="mt-4 text-xs leading-relaxed text-gray-500">
-      AI agents ace some languages but fail others. A generalist replacement
-      would need all of them.
-    </p>
+    <div class="mt-4 flex items-baseline justify-between">
+      <p class="text-xs leading-relaxed text-muted-foreground">
+        AI agents ace some languages but fail others. A generalist replacement
+        would need all of them.
+      </p>
+      <a
+        href="https://sanityboard.lr7.dev"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="ml-3 inline-flex shrink-0 items-center gap-0.5 text-[9px] text-muted-foreground/50 transition-colors hover:text-orange-500/60"
+      >
+        Source: SanityHarness
+        <ExternalLink class="h-2 w-2" />
+      </a>
+    </div>
   </div>
 </template>

@@ -16,6 +16,7 @@ export interface OQSignal {
   direction: "up" | "down" | "neutral";
   source: string;
   impact: number;
+  url?: string;
 }
 
 export interface OQPillarScores {

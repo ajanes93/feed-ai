@@ -88,13 +88,15 @@ describe("parseSWEBenchHtml", () => {
     expect(result.topVerified).toBe(0);
   });
 
-  it("initializes topPro to 0 and topProModel to Unknown", () => {
+  it("initializes topPro and topProPrivate to 0 and models to Unknown", () => {
     const html = buildHtml([
       { name: "verified", results: [{ name: "A", resolved: 80 }] },
     ]);
     const result = parseSWEBenchHtml(html);
     expect(result.topPro).toBe(0);
     expect(result.topProModel).toBe("Unknown");
+    expect(result.topProPrivate).toBe(0);
+    expect(result.topProPrivateModel).toBe("Unknown");
   });
 
   it("parses resolved as string number", () => {

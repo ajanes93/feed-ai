@@ -22,6 +22,7 @@
     "./components/ui/separator": "./components/ui/separator/index.ts",
     "./components/ui/alert": "./components/ui/alert/index.ts",
     "./components/ui/tooltip": "./components/ui/tooltip/index.ts",
+    "./components/ui/collapsible": "./components/ui/collapsible/index.ts",
     "./components/ui/skeleton": "./components/ui/skeleton/index.ts",
     "./composables/useLogs": "./composables/useLogs.ts"
   },

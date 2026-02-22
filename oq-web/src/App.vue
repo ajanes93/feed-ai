@@ -1,3 +1,9 @@
+<script setup lang="ts">
+import { TooltipProvider } from "@feed-ai/shared/components/ui/tooltip";
+</script>
+
 <template>
-  <router-view />
+  <TooltipProvider>
+    <router-view />
+  </TooltipProvider>
 </template>

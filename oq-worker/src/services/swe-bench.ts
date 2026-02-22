@@ -1,6 +1,6 @@
 // SWE-bench leaderboard scraper
 // Extracts top scores for Verified and Bash Only tracks from embedded JSON
-// Also scrapes SWE-bench Pro from Scale AI leaderboard
+// Also scrapes SWE-bench Pro (Public + Private) from Scale AI SEAL leaderboard
 
 export interface SWEBenchData {
   topVerified: number;
@@ -9,15 +9,20 @@ export interface SWEBenchData {
   topBashOnlyModel: string;
   topPro: number;
   topProModel: string;
+  topProPrivate: number;
+  topProPrivateModel: string;
   fetchedAt: string;
 }
 
 export async function fetchSWEBenchLeaderboard(): Promise<SWEBenchData> {
-  const [swebenchRes, proRes] = await Promise.all([
+  const [swebenchRes, proPublicRes, proPrivateRes] = await Promise.all([
     fetch("https://www.swebench.com", {
       headers: { "User-Agent": "FeedAI-OQ/1.0" },
     }),
-    fetch("https://scale.com/leaderboard", {
+    fetch("https://scale.com/leaderboard/swe_bench_pro_public", {
+      headers: { "User-Agent": "FeedAI-OQ/1.0" },
+    }).catch(() => null),
+    fetch("https://scale.com/leaderboard/swe_bench_pro_private", {
       headers: { "User-Agent": "FeedAI-OQ/1.0" },
     }).catch(() => null),
   ]);
@@ -29,13 +34,23 @@ export async function fetchSWEBenchLeaderboard(): Promise<SWEBenchData> {
   const html = await swebenchRes.text();
   const data = parseSWEBenchHtml(html);
 
-  // Try to enrich with SWE-bench Pro data from Scale AI
-  if (proRes?.ok) {
-    const proHtml = await proRes.text();
+  // Enrich with SWE-bench Pro Public from Scale AI SEAL
+  if (proPublicRes?.ok) {
+    const proHtml = await proPublicRes.text();
     const pro = parseScaleLeaderboard(proHtml);
     if (pro) {
       data.topPro = pro.score;
       data.topProModel = pro.model;
+    }
+  }
+
+  // Enrich with SWE-bench Pro Private from Scale AI SEAL
+  if (proPrivateRes?.ok) {
+    const privateHtml = await proPrivateRes.text();
+    const proPrivate = parseScaleLeaderboard(privateHtml);
+    if (proPrivate) {
+      data.topProPrivate = proPrivate.score;
+      data.topProPrivateModel = proPrivate.model;
     }
   }
 
@@ -112,6 +127,8 @@ function parseLeaderboardJson(json: string): SWEBenchData {
     topBashOnlyModel,
     topPro: 0,
     topProModel: "Unknown",
+    topProPrivate: 0,
+    topProPrivateModel: "Unknown",
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -140,11 +157,13 @@ function parseMarkdownFallback(text: string): SWEBenchData {
     topBashOnlyModel: "Unknown",
     topPro: 0,
     topProModel: "Unknown",
+    topProPrivate: 0,
+    topProPrivateModel: "Unknown",
     fetchedAt: new Date().toISOString(),
   };
 }
 
-// Scale AI leaderboard parser for SWE-bench Pro scores
+// Scale AI SEAL leaderboard parser for SWE-bench Pro scores
 // Data is embedded in Next.js __next_f.push() calls as serialized JSON
 interface ScaleProResult {
   score: number;

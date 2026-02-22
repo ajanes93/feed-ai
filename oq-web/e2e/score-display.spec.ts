@@ -11,7 +11,9 @@ test.describe("Score display", () => {
   test("displays the score gauge", async ({ mockPage }) => {
     await mockPage.goto("/");
     // The animated score should reach 33
-    await expect(mockPage.getByText("33")).toBeVisible({ timeout: 5000 });
+    await expect(mockPage.getByText("33").first()).toBeVisible({
+      timeout: 5000,
+    });
     await expect(mockPage.getByText("Safe for now")).toBeVisible();
   });
 
@@ -72,8 +74,8 @@ test.describe("Trend chart", () => {
   test("renders the trend chart section", async ({ mockPage }) => {
     await mockPage.goto("/");
     await expect(mockPage.getByText("Score over time")).toBeVisible();
-    // SVG should be present
-    await expect(mockPage.locator("svg")).toBeVisible();
+    // Chart SVG should be present (use viewBox to target the chart, not icon SVGs)
+    await expect(mockPage.locator('svg[viewBox="0 0 656 200"]')).toBeVisible();
   });
 
   test("shows Today label on chart", async ({ mockPage }) => {
