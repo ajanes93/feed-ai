@@ -44,10 +44,7 @@ defineProps<{
         class="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground/60"
       >
         {{ signal.source }}
-        <ExternalLink
-          data-testid="signal-external-link"
-          class="h-2.5 w-2.5"
-        />
+        <ExternalLink data-testid="signal-external-link" class="h-2.5 w-2.5" />
       </span>
       <span
         v-else
