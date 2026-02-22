@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@source "../../shared/components/**/*.vue";
+@source "../../shared/components/**/*.ts";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

@@ -17,8 +17,8 @@ defineProps<{
     :animate="{ opacity: 1, y: 0 }"
     :transition="{ duration: 0.35, delay: (index ?? 0) * 0.05 }"
   >
-    <Card class="gap-0 py-0">
-      <CardContent class="p-5">
+    <Card class="gap-0 py-4">
+      <CardContent class="px-5">
         <div
           class="text-2xl font-bold tracking-tight"
           :class="

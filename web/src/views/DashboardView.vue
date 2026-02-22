@@ -11,6 +11,13 @@ import { Button } from "@feed-ai/shared/components/ui/button";
 import { Input } from "@feed-ai/shared/components/ui/input";
 import { Badge } from "@feed-ai/shared/components/ui/badge";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@feed-ai/shared/components/ui/card";
+import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
@@ -76,19 +83,20 @@ onMounted(fetchDashboard);
 </script>
 
 <template>
-  <div class="bg-background text-foreground h-[100dvh] overflow-y-auto p-4">
+  <div
+    class="bg-background text-foreground h-[100dvh] overflow-y-auto p-4 sm:p-6"
+  >
     <div class="mx-auto max-w-5xl">
       <!-- Header -->
-      <div class="mb-8 flex items-center justify-between">
-        <h1 class="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <div class="flex items-center gap-3">
+      <div class="mb-8 flex items-center justify-between gap-4">
+        <h1 class="truncate text-2xl font-bold tracking-tight">Dashboard</h1>
+        <div class="flex shrink-0 items-center gap-3">
           <DropdownMenu v-if="data && !needsAuth">
             <DropdownMenuTrigger as-child>
               <Button
                 variant="outline"
                 size="sm"
                 data-testid="actions-trigger"
-                :disabled="fetching || rebuilding || enriching"
               >
                 Actions
                 <ChevronDown class="size-4" />
@@ -208,29 +216,36 @@ onMounted(fetchDashboard);
       <!-- Auth prompt -->
       <div
         v-if="needsAuth"
-        class="mx-auto max-w-sm py-20"
+        class="flex items-center justify-center py-20"
       >
-        <p class="text-muted-foreground mb-4 text-center text-sm">
-          Enter admin key to access the dashboard
-        </p>
-        <form
-          class="flex gap-2"
-          @submit.prevent="submitKey"
-        >
-          <Input
-            v-model="keyInput"
-            type="password"
-            placeholder="Admin key"
-            class="flex-1"
-          />
-          <Button type="submit"> Go </Button>
-        </form>
-        <p
-          v-if="error"
-          class="text-destructive mt-3 text-center text-sm"
-        >
-          {{ error }}
-        </p>
+        <Card class="w-full max-w-sm">
+          <CardHeader class="text-center">
+            <CardTitle>Authentication</CardTitle>
+            <CardDescription>
+              Enter admin key to access the dashboard
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              class="flex gap-2"
+              @submit.prevent="submitKey"
+            >
+              <Input
+                v-model="keyInput"
+                type="password"
+                placeholder="Admin key"
+                class="flex-1"
+              />
+              <Button type="submit"> Go </Button>
+            </form>
+            <p
+              v-if="error"
+              class="text-destructive mt-3 text-center text-sm"
+            >
+              {{ error }}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <!-- Loading -->
@@ -254,7 +269,7 @@ onMounted(fetchDashboard);
       <!-- Dashboard content -->
       <template v-else-if="data">
         <!-- Stats row -->
-        <div class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <StatCard
             :value="data.totalDigests"
             label="Total Digests"
