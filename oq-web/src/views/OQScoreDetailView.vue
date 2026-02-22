@@ -110,19 +110,15 @@ const pillarLabels: Record<string, string> = {
 };
 
 const articlesByPillar = computed(() => {
-  if (!data.value) return {};
-  const grouped: Record<string, Article[]> = {};
-  for (const a of data.value.articles) {
-    if (!grouped[a.pillar]) grouped[a.pillar] = [];
-    grouped[a.pillar].push(a);
-  }
-  return grouped;
+  if (!data.value) return {} as Record<string, Article[]>;
+  return data.value.articles.reduce<Record<string, Article[]>>((acc, a) => {
+    (acc[a.pillar] ??= []).push(a);
+    return acc;
+  }, {});
 });
 
 onMounted(async () => {
-  const date = Array.isArray(route.params.date)
-    ? route.params.date[0]
-    : route.params.date;
+  const date = [route.params.date].flat()[0];
   try {
     const res = await fetch(`/api/score/${date}`);
     if (!res.ok) {

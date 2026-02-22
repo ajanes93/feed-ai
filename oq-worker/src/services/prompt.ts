@@ -37,15 +37,15 @@ interface PromptContext {
 }
 
 function formatTrend(trend: FREDSeriesTrend): string {
-  const parts: string[] = [];
-  if (trend.change1w !== undefined) {
-    const sign = trend.change1w > 0 ? "+" : "";
-    parts.push(`${sign}${trend.change1w}% week-over-week`);
-  }
-  if (trend.change4w !== undefined) {
-    const sign = trend.change4w > 0 ? "+" : "";
-    parts.push(`${sign}${trend.change4w}% over 4 weeks`);
-  }
+  const sign = (n: number) => (n > 0 ? "+" : "");
+  const parts = [
+    trend.change1w !== undefined
+      ? `${sign(trend.change1w)}${trend.change1w}% week-over-week`
+      : null,
+    trend.change4w !== undefined
+      ? `${sign(trend.change4w)}${trend.change4w}% over 4 weeks`
+      : null,
+  ].filter(Boolean);
   return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 

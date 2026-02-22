@@ -39,9 +39,7 @@ defineProps<{
         data-testid="signal-external-link"
         class="h-3 w-3 shrink-0 text-muted-foreground/40"
       />
-      <span
-        class="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground"
-      >
+      <span class="shrink-0 font-mono text-[10px] text-muted-foreground">
         {{ signal.source }}
       </span>
     </component>

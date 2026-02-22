@@ -190,8 +190,7 @@ function parseModelResponse(text: string, model: string): OQModelScore {
         direction: s.direction,
         source: s.source,
         impact: s.impact,
-        ...(typeof s.url === "string" &&
-        /^https?:\/\//.test(s.url)
+        ...(typeof s.url === "string" && /^https?:\/\//.test(s.url)
           ? { url: s.url }
           : {}),
       })
@@ -431,14 +430,24 @@ async function callModelWithRetry(
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       const isLastAttempt = attempt === MAX_RETRIES - 1;
-      const logFn = isLastAttempt ? log?.error : log?.warn;
-      await logFn?.call(log, "score", `${name} attempt ${attempt + 1} failed`, {
+      const details = {
         model,
         provider,
         attempt: attempt + 1,
         error: lastError,
-      });
-      if (!isLastAttempt) {
+      };
+      if (isLastAttempt) {
+        await log?.error(
+          "score",
+          `${name} attempt ${attempt + 1} failed`,
+          details
+        );
+      } else {
+        await log?.warn(
+          "score",
+          `${name} attempt ${attempt + 1} failed`,
+          details
+        );
         await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
       }
     }
@@ -518,12 +527,9 @@ export async function runScoring(
     .map((r) => r.result)
     .filter((r): r is ModelResult => r !== null);
 
-  // Collect both successful and failed usage entries
   const aiUsages: AIUsageEntry[] = [
     ...modelResults.map((r) => r.usage),
-    ...callResults
-      .filter((r) => r.failedUsage)
-      .map((r) => r.failedUsage as AIUsageEntry),
+    ...callResults.flatMap((r) => (r.failedUsage ? [r.failedUsage] : [])),
   ];
 
   if (modelResults.length === 0) {
