@@ -10,16 +10,7 @@ import { ArrowLeft, Sparkles, X } from "lucide-vue-next";
 
 const router = useRouter();
 
-useHead({
-  title: "AI Assistant — feed-ai",
-  meta: [
-    { property: "og:title", content: "AI Assistant — feed-ai" },
-    {
-      property: "og:description",
-      content: "AI-powered summaries and insights from your daily feed.",
-    },
-  ],
-});
+useHead({ title: "AI Assistant — feed-ai" });
 
 const {
   messages,

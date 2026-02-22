@@ -58,6 +58,22 @@ export function useDigest() {
   }
 
   async function fetchToday() {
+    // Use SSR-injected data if available (from Pages Function middleware)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    if (w.__FEED_DATA__) {
+      digest.value = w.__FEED_DATA__ as Digest;
+      delete w.__FEED_DATA__;
+      // Still fetch digest list in background for navigation
+      fetchDigestList().then(() => {
+        if (digest.value) {
+          const idx = availableDates.value.indexOf(digest.value.date);
+          if (idx >= 0) currentDateIndex.value = idx;
+        }
+      });
+      return;
+    }
+
     await fetchDigestList();
     const today = todayDate();
     if (availableDates.value.includes(today)) {

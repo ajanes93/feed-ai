@@ -2,25 +2,29 @@ interface Env {
   API: Fetcher;
 }
 
-// Cache today's score in-memory (refreshed each cold start, ~once per minute in prod)
-let cachedScore: { score: number; analysis: string } | null = null;
+interface TodayData {
+  score: number;
+  scoreTechnical: number;
+  scoreEconomic: number;
+  analysis: string;
+  [key: string]: unknown;
+}
+
+// Cache today's data in-memory (refreshed each cold start, ~once per minute in prod)
+let cachedData: TodayData | null = null;
 let cacheTime = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-async function getScore(api: Fetcher): Promise<typeof cachedScore> {
-  if (cachedScore && Date.now() - cacheTime < CACHE_TTL) return cachedScore;
+async function getTodayData(api: Fetcher): Promise<TodayData | null> {
+  if (cachedData && Date.now() - cacheTime < CACHE_TTL) return cachedData;
   try {
     const res = await api.fetch(new Request("https://api/api/today"));
     if (!res.ok) return null;
-    const { score, analysis } = (await res.json()) as {
-      score: number;
-      analysis: string;
-    };
-    cachedScore = { score, analysis };
+    cachedData = (await res.json()) as TodayData;
     cacheTime = Date.now();
-    return cachedScore;
+    return cachedData;
   } catch {
-    return cachedScore; // stale is better than nothing
+    return cachedData; // stale is better than nothing
   }
 }
 
@@ -30,17 +34,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("text/html")) return response;
 
-  const data = await getScore(context.env.API);
+  const data = await getTodayData(context.env.API);
   if (!data) return response;
 
   const ogTitle = `Will AI Replace Software Engineers? Today: ${data.score}%`;
-  const ogDesc = `Three AI models read the signals daily. The Capability Gap: ~79% on benchmarks, ~46% on real code. ${data.analysis.slice(0, 100)}`;
+  const ogDesc = `Three AI models read the signals daily. Technical: ${data.scoreTechnical}%. Economic: ${data.scoreEconomic}%. ${data.analysis.slice(0, 100)}`;
 
   return new HTMLRewriter()
     .on("title", {
       element(el) {
         el.setInnerContent(
-          `One Question — ${data.score}% | Will AI replace software engineers?`
+          `One Question — ${data.score}% | Will AI replace software engineers?`,
         );
       },
     })
@@ -57,6 +61,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     .on('meta[name="description"]', {
       element(el) {
         el.setAttribute("content", ogDesc);
+      },
+    })
+    .on("head", {
+      element(el) {
+        el.append(
+          `<script>window.__OQ_DATA__=${JSON.stringify(data)}</script>`,
+          { html: true },
+        );
       },
     })
     .transform(response);

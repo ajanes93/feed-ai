@@ -37,20 +37,6 @@ useHead({
     today.value
       ? `Will AI Replace Engineers? ${today.value.score}% — One Question`
       : "Will AI Replace Software Engineers? — One Question",
-  meta: [
-    {
-      property: "og:title",
-      content: () =>
-        today.value
-          ? `Will AI Replace Engineers? Today: ${today.value.score}%`
-          : "Will AI Replace Software Engineers?",
-    },
-    {
-      property: "og:description",
-      content:
-        "Three AI models read the signals daily. The gap between benchmarks and real engineering is the story.",
-    },
-  ],
 });
 
 onMounted(async () => {
