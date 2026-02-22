@@ -2,16 +2,10 @@
 import { onMounted, watch } from "vue";
 import { useLogs, type LogEntry } from "../composables/useLogs";
 import { timeAgo } from "../utils";
+import DataTable from "./DataTable.vue";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "./ui/table";
+import { TableRow, TableCell } from "./ui/table";
 
 const props = defineProps<{
   adminKey: string;
@@ -117,67 +111,35 @@ onMounted(() => {
     </div>
 
     <!-- Table -->
-    <div class="overflow-hidden rounded-xl border border-border bg-card/50">
-      <Table>
-        <TableHeader>
-          <TableRow class="border-border/50 hover:bg-transparent">
-            <TableHead
-              class="text-xs font-medium uppercase tracking-wider text-muted-foreground"
-            >
-              When
-            </TableHead>
-            <TableHead
-              class="text-xs font-medium uppercase tracking-wider text-muted-foreground"
-            >
-              Level
-            </TableHead>
-            <TableHead
-              class="text-xs font-medium uppercase tracking-wider text-muted-foreground"
-            >
-              Category
-            </TableHead>
-            <TableHead
-              class="text-xs font-medium uppercase tracking-wider text-muted-foreground"
-            >
-              Message
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <template v-if="logs.length > 0">
-            <TableRow
-              v-for="entry in logs"
-              :key="entry.id"
-            >
-              <TableCell class="text-muted-foreground">
-                {{ timeAgo(entry.createdAt) }}
-              </TableCell>
-              <TableCell>
-                <Badge :variant="levelVariant(entry)">
-                  {{ entry.level }}
-                </Badge>
-              </TableCell>
-              <TableCell class="text-muted-foreground">
-                {{ entry.category }}
-              </TableCell>
-              <TableCell class="max-w-md truncate text-muted-foreground">
-                {{ entry.message }}
-              </TableCell>
-            </TableRow>
-          </template>
-          <TableRow
-            v-else
-            class="hover:bg-transparent"
-          >
-            <TableCell
-              colspan="4"
-              class="py-8 text-center text-muted-foreground"
-            >
-              No logs found
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </div>
+    <DataTable
+      :columns="[
+        { key: 'when', label: 'When' },
+        { key: 'level', label: 'Level' },
+        { key: 'category', label: 'Category' },
+        { key: 'message', label: 'Message' },
+      ]"
+      :row-count="logs.length"
+      empty-message="No logs found"
+    >
+      <TableRow
+        v-for="entry in logs"
+        :key="entry.id"
+      >
+        <TableCell class="text-muted-foreground">
+          {{ timeAgo(entry.createdAt) }}
+        </TableCell>
+        <TableCell>
+          <Badge :variant="levelVariant(entry)">
+            {{ entry.level }}
+          </Badge>
+        </TableCell>
+        <TableCell class="text-muted-foreground">
+          {{ entry.category }}
+        </TableCell>
+        <TableCell class="max-w-md truncate text-muted-foreground">
+          {{ entry.message }}
+        </TableCell>
+      </TableRow>
+    </DataTable>
   </section>
 </template>
