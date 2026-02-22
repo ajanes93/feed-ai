@@ -12,7 +12,7 @@ defineProps<{
 </script>
 
 <template>
-  <Card class="border-border bg-secondary/30">
+  <Card class="border-border bg-secondary/30 py-0">
     <CardContent class="p-4">
       <div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
         <span

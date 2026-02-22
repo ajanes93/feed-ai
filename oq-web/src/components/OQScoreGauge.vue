@@ -60,7 +60,7 @@ const barWidth = computed(() => (showBar.value ? `${props.score}%` : "0%"));
 
     <!-- Sub-scores -->
     <div class="mt-6 grid grid-cols-2 gap-3">
-      <Card class="border-border bg-secondary/30">
+      <Card class="border-border bg-secondary/30 py-0">
         <CardContent class="p-3">
           <div class="font-mono text-lg font-medium text-foreground">
             {{ scoreTechnical
@@ -71,7 +71,7 @@ const barWidth = computed(() => (showBar.value ? `${props.score}%` : "0%"));
           </div>
         </CardContent>
       </Card>
-      <Card class="border-border bg-secondary/30">
+      <Card class="border-border bg-secondary/30 py-0">
         <CardContent class="p-3">
           <div class="font-mono text-lg font-medium text-foreground">
             {{ scoreEconomic

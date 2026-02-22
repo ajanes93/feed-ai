@@ -23,7 +23,7 @@ function onSubmit() {
 </script>
 
 <template>
-  <Card class="relative overflow-hidden border-border bg-card text-center">
+  <Card class="relative overflow-hidden border-border bg-card py-0 text-center">
     <!-- Bottom accent line -->
     <div
       class="absolute right-0 bottom-0 left-0 h-px"

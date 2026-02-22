@@ -108,7 +108,7 @@ onMounted(async () => {
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ duration: 0.6, delay: 0.2 }"
         >
-          <Card class="relative overflow-hidden border-border bg-card">
+          <Card class="relative overflow-hidden border-border bg-card py-0">
             <!-- Top accent line -->
             <div
               class="absolute top-0 right-0 left-0 h-px"

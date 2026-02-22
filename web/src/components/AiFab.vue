@@ -12,7 +12,7 @@ function openAi() {
 
 <template>
   <Button
-    class="fab fixed right-5 bottom-6 z-50 h-12 w-12 rounded-full bg-blue-500 shadow-lg shadow-blue-500/25 hover:bg-blue-400 hover:shadow-blue-400/30 active:scale-95"
+    class="fab fixed right-5 bottom-6 z-50 h-12 w-12 rounded-full bg-blue-500 shadow-lg shadow-blue-500/25 hover:scale-105 hover:bg-blue-400 hover:shadow-blue-400/30 active:scale-95"
     size="icon"
     aria-label="Open AI Assistant"
     @click="openAi"

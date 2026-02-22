@@ -74,6 +74,7 @@ onMounted(fetchDashboard);
               <Button
                 variant="outline"
                 size="sm"
+                :disabled="fetching || rebuilding || enriching"
               >
                 Actions
                 <ChevronDown class="size-4" />

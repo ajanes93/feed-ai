@@ -67,7 +67,7 @@ const gridLines = computed(() => {
 </script>
 
 <template>
-  <Card class="border-border bg-card">
+  <Card class="border-border bg-card py-0">
     <CardContent class="p-5 sm:p-8">
       <div v-if="chartData" class="relative">
         <svg

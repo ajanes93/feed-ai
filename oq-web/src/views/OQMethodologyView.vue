@@ -56,7 +56,7 @@ onMounted(() => fetchMethodology());
             <Card
               v-for="pillar in methodology.pillars"
               :key="pillar.key"
-              class="border-border bg-card"
+              class="border-border bg-card py-0"
             >
               <CardContent class="flex items-center justify-between px-5 py-3">
                 <span class="text-sm text-foreground/80">{{
@@ -80,7 +80,7 @@ onMounted(() => fetchMethodology());
           >
             Consensus Formula
           </h2>
-          <Card class="border-border bg-card">
+          <Card class="border-border bg-card py-0">
             <CardContent
               class="p-5 text-sm leading-relaxed text-muted-foreground"
             >
@@ -145,7 +145,7 @@ onMounted(() => fetchMethodology());
           >
             The Capability Gap
           </h2>
-          <Card class="border-border bg-card">
+          <Card class="border-border bg-card py-0">
             <CardContent class="p-5">
               <div class="flex items-center gap-6">
                 <div class="text-center">
@@ -189,7 +189,7 @@ onMounted(() => fetchMethodology());
                 'Below 20': methodology.whatWouldChange.below20,
               }"
               :key="label"
-              class="border-border bg-card"
+              class="border-border bg-card py-0"
             >
               <CardContent class="p-5">
                 <Badge

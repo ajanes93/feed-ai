@@ -31,7 +31,7 @@ const sections = [
 </script>
 
 <template>
-  <Card class="border-border bg-card">
+  <Card class="border-border bg-card py-0">
     <CardContent class="p-6 sm:p-8">
       <div
         class="mb-4 text-[10px] tracking-widest text-muted-foreground uppercase"
