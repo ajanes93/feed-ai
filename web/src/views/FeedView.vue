@@ -5,7 +5,6 @@ import { Swiper, SwiperSlide } from "swiper/vue";
 import type Swiper_T from "swiper";
 import "swiper/css";
 import { useDigest } from "../composables/useDigest";
-import { Skeleton } from "@feed-ai/shared/components/ui/skeleton";
 import DigestFeed from "../components/DigestFeed.vue";
 import DateHeader from "../components/DateHeader.vue";
 import EmptyState from "../components/EmptyState.vue";
@@ -270,20 +269,20 @@ onMounted(async () => {
         v-if="loading && !digest"
         class="h-[100dvh] overflow-hidden pt-16"
       >
-        <div class="mx-auto flex max-w-lg flex-col gap-3 px-4">
+        <div class="mx-auto flex max-w-lg animate-pulse flex-col gap-3 px-4">
           <div
             v-for="n in 5"
             :key="n"
             class="border-border/50 bg-card/60 rounded-xl border p-5"
           >
             <div class="mb-3 flex items-center gap-3">
-              <Skeleton class="h-5 w-10 rounded-full" />
-              <Skeleton class="h-4 w-12" />
-              <Skeleton class="ml-auto h-4 w-20" />
+              <div class="bg-primary/10 h-5 w-10 rounded-full" />
+              <div class="bg-primary/10 h-4 w-12 rounded-md" />
+              <div class="bg-primary/10 ml-auto h-4 w-20 rounded-md" />
             </div>
-            <Skeleton class="h-5 w-3/4" />
-            <Skeleton class="mt-3 h-4 w-full" />
-            <Skeleton class="mt-1.5 h-4 w-5/6" />
+            <div class="bg-primary/10 h-5 w-3/4 rounded-md" />
+            <div class="bg-primary/10 mt-3 h-4 w-full rounded-md" />
+            <div class="bg-primary/10 mt-1.5 h-4 w-5/6 rounded-md" />
           </div>
         </div>
       </div>

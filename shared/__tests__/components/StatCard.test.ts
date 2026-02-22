@@ -45,14 +45,14 @@ describe("StatCard", () => {
       expect(getValue().classes()).toContain("text-amber-400");
     });
 
-    it("uses white text when highlight is false", () => {
+    it("uses card-foreground text when highlight is false", () => {
       const { getValue } = render({ props: { highlight: false } });
-      expect(getValue().classes()).toContain("text-white");
+      expect(getValue().classes()).toContain("text-card-foreground");
     });
 
-    it("defaults to white text without highlight prop", () => {
+    it("defaults to card-foreground text without highlight prop", () => {
       const { getValue } = render();
-      expect(getValue().classes()).toContain("text-white");
+      expect(getValue().classes()).toContain("text-card-foreground");
     });
   });
 

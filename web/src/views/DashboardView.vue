@@ -330,7 +330,7 @@ onMounted(fetchDashboard);
                     v-if="call.wasFallback"
                     class="opacity-60"
                   >
-                    (fb)
+                    (fallback)
                   </span>
                 </Badge>
               </TableCell>
