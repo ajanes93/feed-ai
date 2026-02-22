@@ -12,8 +12,8 @@ defineProps<{
   <div class="flex flex-col gap-2">
     <component
       :is="signal.url ? 'a' : 'div'"
-      v-for="(signal, i) in signals"
-      :key="i"
+      v-for="signal in signals"
+      :key="signal.text + signal.source"
       :href="signal.url"
       :target="signal.url ? '_blank' : undefined"
       :rel="signal.url ? 'noopener noreferrer' : undefined"

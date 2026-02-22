@@ -140,6 +140,7 @@ const gridLines = computed(() => {
             :aria-label="`Score ${point.entry.score}% on ${point.entry.date}`"
             @click="router.push(`/score/${point.entry.date}`)"
             @keyup.enter="router.push(`/score/${point.entry.date}`)"
+            @keyup.space.prevent="router.push(`/score/${point.entry.date}`)"
           >
             <title>{{ point.entry.date }}: {{ point.entry.score }}%</title>
           </circle>

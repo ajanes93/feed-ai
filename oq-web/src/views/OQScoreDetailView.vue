@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import { useHead } from "@unhead/vue";
 import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
 import { Badge } from "@feed-ai/shared/components/ui/badge";
@@ -67,7 +67,6 @@ interface ScoreDetail {
 }
 
 const route = useRoute();
-const router = useRouter();
 
 const data = ref<ScoreDetail | null>(null);
 const loading = ref(true);
@@ -146,13 +145,13 @@ onMounted(async () => {
   <div class="h-[100dvh] overflow-y-auto bg-background text-foreground">
     <div class="relative z-10 mx-auto max-w-2xl px-4 py-8 sm:px-6">
       <!-- Back link -->
-      <button
+      <router-link
+        to="/"
         class="mb-6 flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        @click="router.push('/')"
       >
         <ArrowLeft class="h-3 w-3" />
         Back to today
-      </button>
+      </router-link>
 
       <!-- Loading -->
       <div v-if="loading" class="flex justify-center py-20">

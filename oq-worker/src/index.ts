@@ -301,13 +301,15 @@ app.get("/api/score/:date", async (c) => {
 
   return c.json({
     ...publicScore,
-    articles: articleRows.results.map((a) => ({
-      title: a.title,
-      url: a.url,
-      source: a.source,
-      pillar: a.pillar,
-      publishedAt: a.published_at,
-    })),
+    articles: articleRows.results
+      .filter((a) => /^https?:\/\//.test(String(a.url ?? "")))
+      .map((a) => ({
+        title: a.title,
+        url: a.url,
+        source: a.source,
+        pillar: a.pillar,
+        publishedAt: a.published_at,
+      })),
     modelResponses: modelRows.results.map((m) => ({
       model: m.model,
       provider: m.provider,
