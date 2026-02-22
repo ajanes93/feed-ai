@@ -1,4 +1,8 @@
 import { config, VueWrapper } from "@vue/test-utils";
+import { createHead } from "@unhead/vue/client";
+
+// Provide @unhead/vue so useHead() works in component tests
+config.global.plugins = [createHead()];
 
 // Stub motion-v components as pass-through wrappers
 const createMotionStub = (tag: string) => ({

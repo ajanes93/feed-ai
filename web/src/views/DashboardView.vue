@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import { useHead } from "@unhead/vue";
 import { motion } from "motion-v";
 import { useDashboard } from "../composables/useDashboard";
 import { timeAgo, formatTokens, formatModelName } from "@feed-ai/shared/utils";
@@ -48,6 +49,18 @@ const {
   appendToDigest,
   enrichComments,
 } = useDashboard();
+
+useHead({
+  title: "Dashboard — feed-ai",
+  meta: [
+    { property: "og:title", content: "Dashboard — feed-ai" },
+    {
+      property: "og:description",
+      content:
+        "Admin dashboard — source health, AI usage, and digest management.",
+    },
+  ],
+});
 
 const keyInput = ref("");
 
