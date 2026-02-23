@@ -1043,11 +1043,10 @@ async function generateDailyScore(
     .map((r) => `${r.date}: ${r.score} (${r.delta > 0 ? "+" : ""}${r.delta})`)
     .join(", ");
 
-  // Use articles since the last scored date (avoids re-sending already-scored articles).
-  // Falls back to 24h window for the first run or if no previous score exists.
-  const articleCutoff = prevRow
-    ? new Date((prevRow.date as string) + "T00:00:00Z").toISOString()
-    : new Date(Date.now() - 86400000).toISOString();
+  // Only send recent articles to models — 2-day window keeps token usage low on
+  // subsequent runs while still catching anything published since the last score.
+  const TWO_DAYS_MS = 2 * 86400000;
+  const articleCutoff = new Date(Date.now() - TWO_DAYS_MS).toISOString();
   const articles = await env.DB.prepare(
     "SELECT a.id, a.title, a.url, a.source, a.pillar, a.summary FROM oq_articles a LEFT JOIN oq_score_articles sa ON a.id = sa.article_id WHERE a.published_at >= ? AND sa.article_id IS NULL ORDER BY a.published_at DESC"
   )
