@@ -1,16 +1,58 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, ref } from "vue";
 import { useHead } from "@unhead/vue";
 import { useOneQuestion } from "../composables/useOneQuestion";
 import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
 import { Badge } from "@feed-ai/shared/components/ui/badge";
 import { Separator } from "@feed-ai/shared/components/ui/separator";
+import OQExplainer from "../components/OQExplainer.vue";
 
 const { methodology, fetchMethodology } = useOneQuestion();
 
 useHead({ title: "Methodology — One Question" });
 
-onMounted(() => fetchMethodology());
+interface PromptVersion {
+  hash: string;
+  firstUsed: string | null;
+  lastUsed: string | null;
+  changeSummary: string | null;
+  createdAt: string;
+}
+
+const promptHistory = ref<PromptVersion[]>([]);
+const promptHistoryLoading = ref(false);
+
+async function fetchPromptHistory() {
+  promptHistoryLoading.value = true;
+  try {
+    const res = await fetch("/api/prompt-history");
+    if (res.ok) {
+      promptHistory.value = await res.json();
+    }
+  } finally {
+    promptHistoryLoading.value = false;
+  }
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatDateRange(first: string | null, last: string | null): string {
+  return first === last
+    ? formatDate(first)
+    : `${formatDate(first)} — ${formatDate(last)}`;
+}
+
+onMounted(() => {
+  fetchMethodology();
+  fetchPromptHistory();
+});
 </script>
 
 <template>
@@ -224,19 +266,76 @@ onMounted(() => fetchMethodology());
           </div>
         </section>
 
-        <!-- Prompt Hash -->
-        <section class="mt-10 pb-16">
-          <div
-            class="text-[10px] tracking-widest text-muted-foreground uppercase"
+        <!-- Prompt Audit Trail -->
+        <section id="prompt-audit" class="mt-10 pb-16">
+          <h2
+            class="mb-1 flex items-center gap-1.5 text-[10px] tracking-widest text-muted-foreground uppercase"
           >
-            Current Prompt Hash
-          </div>
-          <div class="mt-1 font-mono text-xs text-muted-foreground">
-            {{ methodology.currentPromptHash }}
-          </div>
-          <p class="mt-2 text-xs text-muted-foreground">
+            Prompt Audit Trail
+            <OQExplainer
+              text="A fingerprint of the exact scoring instructions given to the AI models. If the methodology changes, this hash changes. You can verify that today's score used the same rules as yesterday's."
+            />
+          </h2>
+          <p class="mb-4 text-xs text-muted-foreground">
             Every prompt version is hashed and stored. If the scoring
             methodology changes, the hash changes — full auditability.
+          </p>
+
+          <div class="mb-4">
+            <div class="text-[10px] text-muted-foreground">
+              Current Prompt Hash
+            </div>
+            <div class="mt-0.5 font-mono text-xs text-foreground/80">
+              {{ methodology.currentPromptHash }}
+            </div>
+          </div>
+
+          <!-- Version history timeline -->
+          <div v-if="promptHistoryLoading" class="py-4 text-center">
+            <div
+              class="inline-block h-4 w-4 animate-spin rounded-full border border-border border-t-orange-500"
+            />
+          </div>
+          <div
+            v-else-if="promptHistory.length > 0"
+            class="space-y-0 border-l border-border pl-4"
+          >
+            <div
+              v-for="(version, i) in promptHistory"
+              :id="`prompt-${version.hash}`"
+              :key="version.hash"
+              class="relative pb-4"
+            >
+              <!-- Timeline dot -->
+              <div
+                class="absolute -left-[calc(1rem+3px)] top-1 h-1.5 w-1.5 rounded-full"
+                :class="i === 0 ? 'bg-orange-500' : 'bg-border'"
+              />
+              <div class="flex items-baseline gap-2">
+                <code class="text-xs text-foreground/80">{{
+                  version.hash
+                }}</code>
+                <Badge
+                  v-if="i === 0"
+                  variant="outline"
+                  class="border-orange-500/30 text-[9px] text-orange-500"
+                >
+                  current
+                </Badge>
+              </div>
+              <div class="mt-0.5 text-[10px] text-muted-foreground/60">
+                {{ formatDateRange(version.firstUsed, version.lastUsed) }}
+              </div>
+              <p
+                v-if="version.changeSummary"
+                class="mt-1 text-xs text-muted-foreground"
+              >
+                {{ version.changeSummary }}
+              </p>
+            </div>
+          </div>
+          <p v-else class="text-xs text-muted-foreground/50">
+            No prompt history available yet.
           </p>
         </section>
       </template>

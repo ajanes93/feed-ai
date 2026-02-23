@@ -107,6 +107,21 @@ describe("OQCapabilityGap", () => {
     expect(wrapper.text()).toContain("Drill down");
   });
 
+  it("shows Updated date in source link when lastUpdated provided", () => {
+    const wrapper = mount(OQCapabilityGap, {
+      props: {
+        ...defaultProps,
+        verifiedSource: "https://www.swebench.com",
+        lastUpdated: "2026-02-18",
+      },
+      global,
+    });
+    const link = wrapper.find('a[href="https://www.swebench.com"]');
+    expect(link.exists()).toBe(true);
+    expect(link.text()).toContain("Updated");
+    expect(link.text()).toContain("18 Feb");
+  });
+
   it("shows pro private score in drill-down when provided", async () => {
     const wrapper = mount(OQCapabilityGap, {
       props: {

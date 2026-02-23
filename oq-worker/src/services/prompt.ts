@@ -128,7 +128,20 @@ Provide your assessment as JSON:
   ],
   "delta_explanation": "<one sentence explaining what drove the delta, referencing specific signals by name>",
   "analysis": "<2-3 sentences. Be specific. Reference concrete data. Mention the Capability Gap if relevant. Avoid generic statements.>",
-  "capability_gap_note": "<optional: note if SWE-bench Verified, Bash Only, or Pro changed today>"
+  "capability_gap_note": "<optional: note if SWE-bench Verified, Bash Only, or Pro changed today>",
+  "sanity_harness_note": "<optional: one-sentence interpretation of today's SanityHarness agent benchmark data — language spread, top agent performance, what it means for replacement>",
+  "economic_note": "<optional: one-sentence interpretation of today's economic signals — Indeed index trend, funding activity, hiring/layoff patterns>",
+  "funding_events": [
+    {
+      "company": "<company name>",
+      "amount": "<e.g. $30B>",
+      "round": "<e.g. Series G>",
+      "valuation": "<if mentioned>",
+      "source_url": "<article URL>",
+      "date": "<YYYY-MM-DD if available>",
+      "relevance": "<AI lab funding | AI code tool | AI infrastructure>"
+    }
+  ]
 }
 
 IMPORTANT: Return 3-5 top_signals. Fewer than 3 looks broken. Include a mix of up/down/neutral directions.

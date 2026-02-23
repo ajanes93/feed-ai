@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
 import {
   Collapsible,
@@ -9,7 +9,7 @@ import {
 import { ExternalLink, ChevronDown } from "lucide-vue-next";
 import OQExplainer from "./OQExplainer.vue";
 
-defineProps<{
+const props = defineProps<{
   verified: string;
   pro: string;
   verifiedSource?: string;
@@ -17,9 +17,36 @@ defineProps<{
   proPrivate?: string;
   proPrivateSource?: string;
   note?: string;
+  lastUpdated?: string;
 }>();
 
+function formatUpdatedDate(iso: string | undefined): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
 const isOpen = ref(false);
+
+function toFraction(pctStr: string): string {
+  const n = parseFloat(pctStr.replace("~", "").replace("%", ""));
+  if (isNaN(n)) return "unknown";
+  if (n >= 75) return "3 in 4";
+  if (n >= 66) return "2 in 3";
+  if (n >= 50) return "1 in 2";
+  return "less than 1 in 2";
+}
+
+const gapText = computed(() => {
+  const vFrac = toFraction(props.verified);
+  const pFrac = toFraction(props.pro);
+  if (vFrac === pFrac) {
+    return `AI solves ${vFrac} problems on both curated and unfamiliar codebases.`;
+  }
+  return `AI solves ${vFrac} practiced problems. ${pFrac.charAt(0).toUpperCase() + pFrac.slice(1)} on code it hasn't seen before.`;
+});
 </script>
 
 <template>
@@ -57,7 +84,9 @@ const isOpen = ref(false);
             rel="noopener noreferrer"
             class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/40 transition-colors hover:text-orange-500/60"
           >
-            swebench.com
+            swebench.com<span v-if="lastUpdated" class="ml-0.5"
+              >· Updated {{ formatUpdatedDate(lastUpdated) }}</span
+            >
             <ExternalLink class="h-2 w-2" />
           </a>
         </div>
@@ -109,8 +138,7 @@ const isOpen = ref(false);
       </div>
 
       <p class="mt-5 text-center text-xs leading-relaxed text-muted-foreground">
-        AI solves 3 in 4 practiced problems. Less than 1 in 2 on code it hasn't
-        seen before.
+        {{ gapText }}
       </p>
 
       <p

@@ -12,17 +12,10 @@ defineProps<{
   softwareIndex?: number;
   softwareDate?: string;
   softwareTrend?: { change1w?: number; change4w?: number };
+  note?: string;
 }>();
 
 const isOpen = ref(false);
-
-const vcRaises = [
-  { name: "Cursor", amount: "$400M Series C", date: "Aug 2024" },
-  { name: "Poolside", amount: "$500M", date: "Jul 2024" },
-  { name: "Magic", amount: "$320M", date: "Aug 2024" },
-  { name: "Cognition (Devin)", amount: "$175M", date: "Mar 2024" },
-  { name: "Augment", amount: "$227M", date: "2024" },
-];
 </script>
 
 <template>
@@ -33,85 +26,57 @@ const vcRaises = [
       The Economic Reality
     </div>
 
-    <div class="grid grid-cols-3 gap-4 text-center">
-      <!-- Indeed Software Index -->
-      <div>
-        <div
-          class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl"
-        >
-          ~{{ softwareIndex ?? 70 }}
-        </div>
-        <div
-          class="mt-1 flex items-center justify-center gap-1 text-[10px] leading-tight text-muted-foreground uppercase"
-        >
-          Indeed Software Index
-          <OQExplainer
-            text="Job postings for software engineers vs a Feb 2020 baseline (100). ~70 = 30% below baseline. Compared against general postings to isolate software-specific trends."
-          />
-        </div>
-        <div class="mt-0.5 text-[9px] text-muted-foreground/50">
-          vs 100 baseline
-        </div>
-        <a
-          href="https://fred.stlouisfed.org/series/IHLIDXUSTPSOFTDEVE"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="mt-0.5 inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/50 transition-colors hover:text-orange-500/60"
-        >
-          FRED
-          <ExternalLink class="h-2 w-2" />
-        </a>
-        <div
-          v-if="softwareTrend?.change4w !== undefined"
-          data-testid="software-trend"
-          class="mt-1 font-mono text-[10px]"
-          :class="
-            (softwareTrend?.change4w ?? 0) < 0
-              ? 'text-red-400'
-              : 'text-emerald-400'
-          "
-        >
-          {{ (softwareTrend?.change4w ?? 0) > 0 ? "+" : ""
-          }}{{ softwareTrend?.change4w }}% 4wk
-        </div>
+    <!-- Indeed Software Index — single dynamic stat -->
+    <div class="text-center">
+      <div
+        class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
+      >
+        ~{{ softwareIndex ?? 70 }}
       </div>
-
-      <!-- VC Funding -->
-      <div>
-        <div
-          class="text-2xl font-semibold tracking-tight text-orange-500 sm:text-3xl"
-        >
-          $4B+
-        </div>
-        <div
-          class="mt-1 text-[10px] leading-tight text-muted-foreground uppercase"
-        >
-          VC in AI Code Tools
-        </div>
-        <div class="mt-0.5 text-[9px] text-muted-foreground/50">2024-2026</div>
+      <div
+        class="mt-1 flex items-center justify-center gap-1 text-[10px] leading-tight text-muted-foreground uppercase"
+      >
+        Indeed Software Index
+        <OQExplainer
+          text="Job postings for software engineers vs a Feb 2020 baseline (100). ~70 = 30% below baseline. Compared against general postings to isolate software-specific trends."
+        />
       </div>
-
-      <!-- Fortune 500 -->
-      <div>
-        <div
-          class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl"
+      <div class="mt-0.5 text-[9px] text-muted-foreground/50">
+        vs 100 baseline
+      </div>
+      <a
+        href="https://fred.stlouisfed.org/series/IHLIDXUSTPSOFTDEVE"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="mt-0.5 inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/50 transition-colors hover:text-orange-500/60"
+      >
+        FRED<span v-if="softwareDate" class="ml-0.5"
+          >· Updated {{ softwareDate }}</span
         >
-          0
-        </div>
-        <div
-          class="mt-1 text-[10px] leading-tight text-muted-foreground uppercase"
-        >
-          F500 Teams Replaced
-        </div>
-        <div class="mt-0.5 text-[9px] text-muted-foreground/50">
-          As of Feb 2026
-        </div>
+        <ExternalLink class="h-2 w-2" />
+      </a>
+      <div
+        v-if="softwareTrend?.change4w !== undefined"
+        data-testid="software-trend"
+        class="mt-1 font-mono text-[10px]"
+        :class="
+          (softwareTrend?.change4w ?? 0) < 0
+            ? 'text-red-400'
+            : 'text-emerald-400'
+        "
+      >
+        {{ (softwareTrend?.change4w ?? 0) > 0 ? "+" : ""
+        }}{{ softwareTrend?.change4w }}% 4wk
       </div>
     </div>
 
-    <p class="mt-5 text-xs leading-relaxed text-muted-foreground">
-      Investors are betting billions that AI will replace engineers. Companies
-      haven't done it yet.
+    <!-- Dynamic note from scorer -->
+    <p
+      v-if="note"
+      data-testid="economic-note"
+      class="mt-4 rounded-lg bg-orange-500/5 px-3 py-2 text-center text-xs leading-relaxed text-orange-400/80"
+    >
+      {{ note }}
     </p>
 
     <!-- Drill-down -->
@@ -129,28 +94,18 @@ const vcRaises = [
         <div
           class="mt-3 space-y-4 rounded-xl border border-border bg-secondary/30 p-4 text-xs leading-relaxed text-muted-foreground"
         >
-          <!-- VC Breakdown -->
+          <!-- Funding context -->
           <div>
             <p
-              class="mb-2 text-[10px] tracking-widest text-muted-foreground/60 uppercase"
+              class="mb-1 text-[10px] tracking-widest text-muted-foreground/60 uppercase"
             >
-              VC in AI Code Tools breakdown
+              AI Funding Context
             </p>
-            <div class="space-y-1">
-              <div
-                v-for="raise in vcRaises"
-                :key="raise.name"
-                class="flex items-center justify-between"
-              >
-                <span>{{ raise.name }}</span>
-                <span class="font-mono text-muted-foreground/70">
-                  {{ raise.amount }}
-                  <span class="text-muted-foreground/50"
-                    >({{ raise.date }})</span
-                  >
-                </span>
-              </div>
-            </div>
+            <p>
+              Funding data flows through our daily RSS pipeline and is factored
+              into the Economic Replacement sub-score by each model. Major
+              rounds are surfaced as signals on the homepage.
+            </p>
           </div>
 
           <!-- CEPR Study -->

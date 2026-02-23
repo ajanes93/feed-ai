@@ -59,6 +59,11 @@ export interface MethodologyResponse {
   };
   startingScore: number;
   currentPromptHash: string;
+  lastUpdated?: {
+    sanityHarness?: string;
+    sweBench?: string;
+    fred?: string;
+  };
 }
 
 interface ExternalDataSnapshot {
@@ -102,6 +107,8 @@ export interface TodayResponse {
   modelAgreement: OQModelAgreement;
   modelSpread: number;
   capabilityGap?: string;
+  sanityHarnessNote?: string;
+  economicNote?: string;
   externalData?: ExternalDataSnapshot;
   isSeed?: boolean;
 }

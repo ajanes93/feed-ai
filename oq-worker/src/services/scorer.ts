@@ -5,6 +5,7 @@ import type {
   OQPillarScores,
   OQSignal,
   OQModelAgreement,
+  OQFundingEvent,
 } from "@feed-ai/shared/oq-types";
 import { buildScoringPrompt, hashPrompt } from "./prompt";
 import type { AIUsageEntry } from "@feed-ai/shared/types";
@@ -200,6 +201,36 @@ function parseModelResponse(text: string, model: string): OQModelScore {
         ? parsed.delta_explanation.slice(0, 200)
         : undefined,
     capability_gap_note: parsed.capability_gap_note,
+    sanity_harness_note:
+      typeof parsed.sanity_harness_note === "string"
+        ? parsed.sanity_harness_note.slice(0, 300)
+        : undefined,
+    economic_note:
+      typeof parsed.economic_note === "string"
+        ? parsed.economic_note.slice(0, 300)
+        : undefined,
+    funding_events: Array.isArray(parsed.funding_events)
+      ? parsed.funding_events
+          .filter(
+            (e: Record<string, unknown>) =>
+              typeof e.company === "string" && e.company.length > 0
+          )
+          .map((e: Record<string, unknown>) => ({
+            company: e.company as string,
+            amount: typeof e.amount === "string" ? e.amount : undefined,
+            round: typeof e.round === "string" ? e.round : undefined,
+            valuation:
+              typeof e.valuation === "string" ? e.valuation : undefined,
+            source_url:
+              typeof e.source_url === "string" &&
+              /^https?:\/\//.test(e.source_url)
+                ? e.source_url
+                : undefined,
+            date: typeof e.date === "string" ? e.date : undefined,
+            relevance:
+              typeof e.relevance === "string" ? e.relevance : undefined,
+          }))
+      : undefined,
   };
 }
 
@@ -354,7 +385,11 @@ export interface OQScoringResult {
   modelAgreement: OQModelAgreement;
   modelSpread: number;
   capabilityGap?: string;
+  sanityHarnessNote?: string;
+  economicNote?: string;
+  fundingEvents: OQFundingEvent[];
   promptHash: string;
+  promptText: string;
   aiUsages: AIUsageEntry[];
 }
 
@@ -574,16 +609,34 @@ export async function runScoring(
   const pillarScores = mergePillarScores(scores);
   const analysis = synthesizeAnalysis(scores, agreement);
 
+  // Prefer Claude's value for a field, fall back to first model that has one
+  const preferClaude = <K extends keyof OQModelScore>(field: K) =>
+    scores.find((s) => s.model.includes("claude"))?.[field] ??
+    scores.find((s) => s[field])?.[field];
+
   // Merge capability gap notes
   const gapNotes = scores
     .map((s) => s.capability_gap_note)
     .filter(Boolean)
     .join(" ");
 
-  // Pick best delta explanation (prefer Claude's, fall back to first available)
-  const deltaExplanation =
-    scores.find((s) => s.model.includes("claude"))?.delta_explanation ??
-    scores.find((s) => s.delta_explanation)?.delta_explanation;
+  const sanityHarnessNote = preferClaude("sanity_harness_note");
+  const economicNote = preferClaude("economic_note");
+
+  // Merge and deduplicate funding events from all models
+  const fundingEvents: OQFundingEvent[] = [];
+  const seenCompanies = new Set<string>();
+  for (const s of scores) {
+    for (const fe of s.funding_events ?? []) {
+      const key = `${fe.company}-${fe.amount ?? ""}`.toLowerCase();
+      if (!seenCompanies.has(key)) {
+        seenCompanies.add(key);
+        fundingEvents.push(fe);
+      }
+    }
+  }
+
+  const deltaExplanation = preferClaude("delta_explanation");
 
   return {
     score: newScore,
@@ -599,7 +652,11 @@ export async function runScoring(
     modelAgreement: agreement,
     modelSpread: Math.round(spread * 10) / 10,
     capabilityGap: gapNotes || undefined,
+    sanityHarnessNote: sanityHarnessNote || undefined,
+    economicNote: economicNote || undefined,
+    fundingEvents,
     promptHash,
+    promptText: prompt,
     aiUsages,
   };
 }

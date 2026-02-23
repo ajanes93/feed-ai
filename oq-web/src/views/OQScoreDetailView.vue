@@ -11,6 +11,7 @@ import {
 } from "@feed-ai/shared/components/ui/collapsible";
 import { ChevronDown, ArrowLeft, ExternalLink } from "lucide-vue-next";
 import OQSignalList from "../components/OQSignalList.vue";
+import OQExplainer from "../components/OQExplainer.vue";
 import { formatModelName } from "@feed-ai/shared/utils";
 
 interface ModelResponse {
@@ -404,12 +405,18 @@ onMounted(async () => {
         <!-- Prompt hash -->
         <div
           v-if="data.promptHash"
-          class="mt-6 text-center text-[10px] text-muted-foreground/40"
+          class="mt-6 flex items-center justify-center gap-1 text-center text-[10px] text-muted-foreground/40"
         >
           Generated with prompt version
-          <code class="rounded bg-secondary/50 px-1.5 py-0.5 font-mono">
+          <router-link
+            :to="`/methodology#prompt-${data.promptHash}`"
+            class="rounded bg-secondary/50 px-1.5 py-0.5 font-mono transition-colors hover:text-orange-500/60"
+          >
             {{ data.promptHash }}
-          </code>
+          </router-link>
+          <OQExplainer
+            text="A fingerprint of the exact scoring instructions given to the AI models. If the methodology changes, this hash changes. Click the hash to see the full prompt audit trail."
+          />
           ·
           <router-link to="/methodology" class="hover:text-orange-500/60">
             Methodology

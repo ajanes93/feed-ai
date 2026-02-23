@@ -90,16 +90,30 @@ describe("OQSanityHarness", () => {
     expect(wrapper.text()).not.toContain("Language spread");
   });
 
-  it("renders footer text about generalist replacement", () => {
-    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
-    expect(wrapper.text()).toContain("generalist replacement");
-  });
-
   it("renders source link to SanityHarness", () => {
     const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
     const link = wrapper.find('a[href="https://sanityboard.lr7.dev"]');
     expect(link.exists()).toBe(true);
     expect(link.text()).toContain("SanityHarness");
     expect(link.attributes("target")).toBe("_blank");
+  });
+
+  it("renders dynamic note when provided", () => {
+    const wrapper = mount(OQSanityHarness, {
+      props: {
+        ...defaultProps,
+        note: "Top agent improved 3% this week in Go.",
+      },
+      global,
+    });
+    const noteEl = wrapper.find("[data-testid='sanity-harness-note']");
+    expect(noteEl.exists()).toBe(true);
+    expect(noteEl.text()).toContain("Top agent improved 3%");
+  });
+
+  it("hides note when not provided", () => {
+    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
+    const noteEl = wrapper.find("[data-testid='sanity-harness-note']");
+    expect(noteEl.exists()).toBe(false);
   });
 });
