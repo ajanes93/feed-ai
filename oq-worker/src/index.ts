@@ -358,7 +358,10 @@ app.post("/api/subscribe", async (c) => {
 });
 
 app.get("/api/methodology", async (c) => {
-  const externalData = await loadExternalData(c.env.DB);
+  const [externalData, deltas] = await Promise.all([
+    loadExternalData(c.env.DB),
+    loadExternalDeltas(c.env.DB),
+  ]);
   const prompt = buildScoringPrompt({
     currentScore: 0,
     technicalScore: 0,
@@ -438,6 +441,7 @@ app.get("/api/methodology", async (c) => {
       generalTrend: externalData.generalTrend,
     },
     lastUpdated: externalData.lastUpdated ?? {},
+    deltas,
     whatWouldChange: {
       to50: [
         "SWE-bench Verified consistently above 90% with diverse agents",
@@ -596,6 +600,81 @@ interface ExternalData {
 
 const LATEST_EXTERNAL_SQL =
   "SELECT value, fetched_at FROM oq_external_data_history WHERE key = ? ORDER BY fetched_at DESC LIMIT 1";
+
+const LATEST_TWO_EXTERNAL_SQL =
+  "SELECT value, fetched_at FROM oq_external_data_history WHERE key = ? ORDER BY fetched_at DESC LIMIT 2";
+
+interface ExternalDeltas {
+  sweBench?: {
+    verifiedDelta: number;
+    bashOnlyDelta: number;
+    proDelta?: number;
+    proPrivateDelta?: number;
+    previousDate?: string;
+  };
+  sanityHarness?: {
+    topPassRateDelta: number;
+    medianPassRateDelta: number;
+    previousDate?: string;
+  };
+}
+
+async function loadExternalDeltas(db: D1Database): Promise<ExternalDeltas> {
+  const result: ExternalDeltas = {};
+  try {
+    const [sweRows, sanityRows] = await db.batch([
+      db.prepare(LATEST_TWO_EXTERNAL_SQL).bind("swe_bench"),
+      db.prepare(LATEST_TWO_EXTERNAL_SQL).bind("sanity_harness"),
+    ]);
+
+    if (sweRows.results.length === 2) {
+      try {
+        const current = JSON.parse(sweRows.results[0].value as string);
+        const previous = JSON.parse(sweRows.results[1].value as string);
+        result.sweBench = {
+          verifiedDelta: round1(current.topVerified - previous.topVerified),
+          bashOnlyDelta: round1(current.topBashOnly - previous.topBashOnly),
+          proDelta:
+            typeof current.topPro === "number" &&
+            typeof previous.topPro === "number"
+              ? round1(current.topPro - previous.topPro)
+              : undefined,
+          proPrivateDelta:
+            typeof current.topProPrivate === "number" &&
+            typeof previous.topProPrivate === "number"
+              ? round1(current.topProPrivate - previous.topProPrivate)
+              : undefined,
+          previousDate: sweRows.results[1].fetched_at as string,
+        };
+      } catch {
+        // Corrupt data — skip deltas
+      }
+    }
+
+    if (sanityRows.results.length === 2) {
+      try {
+        const current = JSON.parse(sanityRows.results[0].value as string);
+        const previous = JSON.parse(sanityRows.results[1].value as string);
+        result.sanityHarness = {
+          topPassRateDelta: round1(current.topPassRate - previous.topPassRate),
+          medianPassRateDelta: round1(
+            current.medianPassRate - previous.medianPassRate
+          ),
+          previousDate: sanityRows.results[1].fetched_at as string,
+        };
+      } catch {
+        // Corrupt data — skip deltas
+      }
+    }
+  } catch {
+    // Non-critical — deltas are optional
+  }
+  return result;
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
 
 async function loadExternalData(
   db: D1Database,
@@ -964,11 +1043,15 @@ async function generateDailyScore(
     .map((r) => `${r.date}: ${r.score} (${r.delta > 0 ? "+" : ""}${r.delta})`)
     .join(", ");
 
-  const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString();
+  // Use articles since the last scored date (avoids re-sending already-scored articles).
+  // Falls back to 24h window for the first run or if no previous score exists.
+  const articleCutoff = prevRow
+    ? new Date((prevRow.date as string) + "T00:00:00Z").toISOString()
+    : new Date(Date.now() - 86400000).toISOString();
   const articles = await env.DB.prepare(
-    "SELECT id, title, url, source, pillar, summary FROM oq_articles WHERE published_at >= ? ORDER BY published_at DESC"
+    "SELECT a.id, a.title, a.url, a.source, a.pillar, a.summary FROM oq_articles a LEFT JOIN oq_score_articles sa ON a.id = sa.article_id WHERE a.published_at >= ? AND sa.article_id IS NULL ORDER BY a.published_at DESC"
   )
-    .bind(twoDaysAgo)
+    .bind(articleCutoff)
     .all();
 
   const pillars: OQPillar[] = [
@@ -1441,37 +1524,37 @@ export default {
         let cronError: string | undefined;
 
         try {
-          // Weekly external data fetches (Sundays)
+          // Daily external data fetches (same-day dedup handled by storeExternalData)
+          const externalResults = await Promise.allSettled([
+            fetchAndStoreSanityHarness(env.DB),
+            fetchAndStoreSWEBench(env.DB),
+            ...(env.FRED_API_KEY
+              ? [fetchAndStoreFRED(env.DB, env.FRED_API_KEY, cronLog)]
+              : []),
+          ]);
+
+          const externalLabels = [
+            "sanity_harness",
+            "swe_bench",
+            ...(env.FRED_API_KEY ? ["fred"] : []),
+          ];
+          externalResults.forEach((r, i) => {
+            externalStatus[externalLabels[i]] =
+              r.status === "fulfilled" ? "success" : `failed: ${r.reason}`;
+          });
+
+          for (const [source, status] of Object.entries(externalStatus)) {
+            if (status !== "success") {
+              await cronLog.warn("external", `Fetch failed: ${source}`, {
+                source,
+                status,
+              });
+            }
+          }
+
+          // Weekly data retention cleanup (Sundays)
           const dayOfWeek = new Date().getUTCDay();
           if (dayOfWeek === 0) {
-            const results = await Promise.allSettled([
-              fetchAndStoreSanityHarness(env.DB),
-              fetchAndStoreSWEBench(env.DB),
-              ...(env.FRED_API_KEY
-                ? [fetchAndStoreFRED(env.DB, env.FRED_API_KEY, cronLog)]
-                : []),
-            ]);
-
-            const labels = [
-              "sanity_harness",
-              "swe_bench",
-              ...(env.FRED_API_KEY ? ["fred"] : []),
-            ];
-            results.forEach((r, i) => {
-              externalStatus[labels[i]] =
-                r.status === "fulfilled" ? "success" : `failed: ${r.reason}`;
-            });
-
-            for (const [source, status] of Object.entries(externalStatus)) {
-              if (status !== "success") {
-                await cronLog.warn("external", `Fetch failed: ${source}`, {
-                  source,
-                  status,
-                });
-              }
-            }
-
-            // Weekly data retention cleanup
             await env.DB.batch([
               env.DB.prepare(
                 "DELETE FROM oq_articles WHERE fetched_at < datetime('now', '-90 days')"

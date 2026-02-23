@@ -11,7 +11,21 @@ const props = defineProps<{
   languageBreakdown: string;
   note?: string;
   lastUpdated?: string;
+  topPassRateDelta?: number;
+  medianPassRateDelta?: number;
+  previousDate?: string;
 }>();
+
+function formatDelta(delta: number | undefined): string {
+  if (delta === undefined || delta === 0) return "";
+  const sign = delta > 0 ? "+" : "";
+  return `${sign}${delta}%`;
+}
+
+function deltaColor(delta: number | undefined): string {
+  if (delta === undefined || delta === 0) return "";
+  return delta > 0 ? "text-emerald-400" : "text-red-400";
+}
 
 function formatUpdatedDate(iso: string | undefined): string {
   if (!iso) return "";
@@ -63,6 +77,13 @@ function langBg(pct: number) {
           class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
         >
           {{ topPassRate }}<span class="text-lg text-muted-foreground">%</span>
+          <span
+            v-if="topPassRateDelta !== undefined && topPassRateDelta !== 0"
+            class="ml-1 text-sm font-normal"
+            :class="deltaColor(topPassRateDelta)"
+          >
+            {{ formatDelta(topPassRateDelta) }}
+          </span>
         </div>
         <div
           class="mt-1 text-[10px] tracking-widest text-muted-foreground uppercase"
@@ -79,6 +100,15 @@ function langBg(pct: number) {
           class="text-3xl font-semibold tracking-tight text-orange-500 sm:text-4xl"
         >
           ~{{ medianPassRate }}<span class="text-lg text-orange-500/50">%</span>
+          <span
+            v-if="
+              medianPassRateDelta !== undefined && medianPassRateDelta !== 0
+            "
+            class="ml-1 text-sm font-normal"
+            :class="deltaColor(medianPassRateDelta)"
+          >
+            {{ formatDelta(medianPassRateDelta) }}
+          </span>
         </div>
         <div
           class="mt-1 text-[10px] tracking-widest text-muted-foreground uppercase"
