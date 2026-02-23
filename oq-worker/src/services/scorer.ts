@@ -614,11 +614,7 @@ export async function runScoring(
     scores.find((s) => s.model.includes("claude"))?.[field] ??
     scores.find((s) => s[field])?.[field];
 
-  // Merge capability gap notes
-  const gapNotes = scores
-    .map((s) => s.capability_gap_note)
-    .filter(Boolean)
-    .join(" ");
+  const capabilityGapNote = preferClaude("capability_gap_note");
 
   const sanityHarnessNote = preferClaude("sanity_harness_note");
   const economicNote = preferClaude("economic_note");
@@ -651,7 +647,7 @@ export async function runScoring(
     modelResponses,
     modelAgreement: agreement,
     modelSpread: Math.round(spread * 10) / 10,
-    capabilityGap: gapNotes || undefined,
+    capabilityGap: capabilityGapNote || undefined,
     sanityHarnessNote: sanityHarnessNote || undefined,
     economicNote: economicNote || undefined,
     fundingEvents,

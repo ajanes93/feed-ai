@@ -128,7 +128,7 @@ Provide your assessment as JSON:
   ],
   "delta_explanation": "<one sentence explaining what drove the delta, referencing specific signals by name>",
   "analysis": "<2-3 sentences. Be specific. Reference concrete data. Mention the Capability Gap if relevant. Avoid generic statements.>",
-  "capability_gap_note": "<optional: note if SWE-bench Verified, Bash Only, or Pro changed today>",
+  "capability_gap_note": "<ONLY if SWE-bench Verified, Bash Only, or Pro scores changed today — describe what changed. If unchanged, set to null>",
   "sanity_harness_note": "<optional: one-sentence interpretation of today's SanityHarness agent benchmark data — language spread, top agent performance, what it means for replacement>",
   "economic_note": "<optional: one-sentence interpretation of today's economic signals — Indeed index trend, funding activity, hiring/layoff patterns>",
   "funding_events": [
