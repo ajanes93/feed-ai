@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref, reactive } from "vue";
+import { nextTick, onMounted, ref, reactive } from "vue";
 import { useHead } from "@unhead/vue";
+import { useRoute } from "vue-router";
 import { useOneQuestion } from "../composables/useOneQuestion";
 import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
 import { Badge } from "@feed-ai/shared/components/ui/badge";
@@ -8,6 +9,7 @@ import { Separator } from "@feed-ai/shared/components/ui/separator";
 import { ChevronRight } from "lucide-vue-next";
 import OQExplainer from "../components/OQExplainer.vue";
 
+const route = useRoute();
 const { methodology, fetchMethodology } = useOneQuestion();
 
 useHead({ title: "Methodology — One Question" });
@@ -78,9 +80,19 @@ function formatDateRange(first: string | null, last: string | null): string {
     : `${formatDate(first)} — ${formatDate(last)}`;
 }
 
-onMounted(() => {
+onMounted(async () => {
   fetchMethodology();
-  fetchPromptHistory();
+  await fetchPromptHistory();
+
+  // Auto-expand if URL has a #prompt-<hash> fragment
+  const fragment = route.hash;
+  const match = fragment.match(/^#prompt-(.+)$/);
+  if (match) {
+    const hash = match[1];
+    await nextTick();
+    togglePrompt(hash);
+    document.getElementById(`prompt-${hash}`)?.scrollIntoView({ behavior: "smooth" });
+  }
 });
 </script>
 
