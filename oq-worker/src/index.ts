@@ -482,6 +482,26 @@ app.get("/api/prompt-history", async (c) => {
   );
 });
 
+app.get("/api/prompt/:hash", async (c) => {
+  const hash = c.req.param("hash");
+  const row = await c.env.DB.prepare(
+    "SELECT hash, prompt_text, first_used, last_used, change_summary, created_at FROM oq_prompt_versions WHERE hash = ?"
+  )
+    .bind(hash)
+    .first();
+
+  if (!row) return c.json({ error: "Prompt version not found" }, 404);
+
+  return c.json({
+    hash: row.hash,
+    promptText: row.prompt_text,
+    firstUsed: row.first_used,
+    lastUsed: row.last_used,
+    changeSummary: row.change_summary,
+    createdAt: row.created_at,
+  });
+});
+
 // --- Admin endpoints ---
 
 async function adminHandler(
