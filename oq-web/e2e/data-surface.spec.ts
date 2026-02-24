@@ -278,17 +278,62 @@ test.describe("Signal card links", () => {
   });
 });
 
-test.describe("Economic Reality drill-down", () => {
-  test("drill-down reveals funding context and CEPR study", async ({
-    mockPage,
-  }) => {
+test.describe("Economic Reality FRED delta", () => {
+  test("shows FRED index delta badge", async ({ mockPage }) => {
     await mockPage.goto("/");
-    // Click the drill-down trigger in Economic Reality
+    const delta = mockPage.locator("[data-testid='fred-delta']");
+    await expect(delta).toBeVisible();
+    await expect(delta).toContainText("-1.8");
+  });
+});
+
+test.describe("Economic Reality funding headline", () => {
+  test("shows headline funding total", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    const total = mockPage.locator("[data-testid='funding-total']");
+    await expect(total).toBeVisible();
+    await expect(total).toContainText("$2.1B");
+  });
+
+  test("shows funding round count", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    const count = mockPage.locator("[data-testid='funding-count']");
+    await expect(count).toBeVisible();
+    await expect(count).toContainText("4 rounds");
+  });
+
+  test("shows top round callout", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    const topRound = mockPage.locator("[data-testid='top-round']");
+    await expect(topRound).toBeVisible();
+    await expect(topRound).toContainText("OpenAI");
+    await expect(topRound).toContainText("$1.5B");
+  });
+});
+
+test.describe("Economic Reality drill-down", () => {
+  test("drill-down shows real funding events", async ({ mockPage }) => {
+    await mockPage.goto("/");
     const drillDowns = mockPage.getByText("Drill down", { exact: true });
-    // Economic Reality's drill down
     await drillDowns.last().click();
-    await expect(mockPage.getByText("AI Funding Context")).toBeVisible();
-    await expect(mockPage.getByText("daily RSS pipeline")).toBeVisible();
+    await expect(mockPage.getByText("Recent AI Funding")).toBeVisible();
+    const events = mockPage.locator("[data-testid='funding-event']");
+    await expect(events).toHaveCount(2);
+  });
+
+  test("shows funding event with company and amount", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    const drillDowns = mockPage.getByText("Drill down", { exact: true });
+    await drillDowns.last().click();
+    await expect(mockPage.getByText("Cursor")).toBeVisible();
+    await expect(mockPage.getByText("$400M")).toBeVisible();
+    await expect(mockPage.getByText("Series C")).toBeVisible();
+  });
+
+  test("drill-down still shows CEPR study", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    const drillDowns = mockPage.getByText("Drill down", { exact: true });
+    await drillDowns.last().click();
     await expect(mockPage.getByText("CEPR / BIS / EIB Study")).toBeVisible();
     await expect(mockPage.getByText("12,000+ European firms")).toBeVisible();
     await expect(mockPage.getByText("0 job losses")).toBeVisible();

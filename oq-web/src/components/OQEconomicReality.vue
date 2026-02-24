@@ -12,8 +12,31 @@ defineProps<{
   softwareIndex?: number;
   softwareDate?: string;
   softwareTrend?: { change1w?: number; change4w?: number };
+  softwareIndexDelta?: number;
   note?: string;
+  totalRaised?: string;
+  fundingCount?: number;
+  topRound?: { company: string; amount: string; round?: string };
+  fundingEvents?: {
+    company: string;
+    amount?: string;
+    round?: string;
+    sourceUrl?: string;
+    date?: string;
+    relevance?: string;
+  }[];
 }>();
+
+function formatDelta(delta: number | undefined): string {
+  if (delta === undefined || delta === 0) return "";
+  const sign = delta > 0 ? "+" : "";
+  return `${sign}${delta}`;
+}
+
+function deltaColor(delta: number | undefined): string {
+  if (delta === undefined || delta === 0) return "";
+  return delta > 0 ? "text-emerald-400" : "text-red-400";
+}
 
 const isOpen = ref(false);
 </script>
@@ -26,47 +49,88 @@ const isOpen = ref(false);
       The Economic Reality
     </div>
 
-    <!-- Indeed Software Index — single dynamic stat -->
-    <div class="text-center">
-      <div
-        class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
-      >
-        ~{{ softwareIndex ?? 70 }}
-      </div>
-      <div
-        class="mt-1 flex items-center justify-center gap-1 text-[10px] leading-tight text-muted-foreground uppercase"
-      >
-        Indeed Software Index
-        <OQExplainer
-          text="Job postings for software engineers vs a Feb 2020 baseline (100). ~70 = 30% below baseline. Compared against general postings to isolate software-specific trends."
-        />
-      </div>
-      <div class="mt-0.5 text-[9px] text-muted-foreground/50">
-        vs 100 baseline
-      </div>
-      <a
-        href="https://fred.stlouisfed.org/series/IHLIDXUSTPSOFTDEVE"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="mt-0.5 inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/50 transition-colors hover:text-orange-500/60"
-      >
-        FRED<span v-if="softwareDate" class="ml-0.5"
-          >· Updated {{ softwareDate }}</span
+    <!-- Dual-stat layout -->
+    <div class="flex items-start justify-center gap-6 sm:gap-10">
+      <!-- Left column: Indeed Software Index -->
+      <div class="text-center">
+        <div
+          class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
         >
-        <ExternalLink class="h-2 w-2" />
-      </a>
-      <div
-        v-if="softwareTrend?.change4w !== undefined"
-        data-testid="software-trend"
-        class="mt-1 font-mono text-[10px]"
-        :class="
-          (softwareTrend?.change4w ?? 0) < 0
-            ? 'text-red-400'
-            : 'text-emerald-400'
-        "
-      >
-        {{ (softwareTrend?.change4w ?? 0) > 0 ? "+" : ""
-        }}{{ softwareTrend?.change4w }}% 4wk
+          ~{{ softwareIndex ?? 70 }}
+          <span
+            v-if="softwareIndexDelta !== undefined && softwareIndexDelta !== 0"
+            data-testid="fred-delta"
+            class="ml-1 text-sm font-normal"
+            :class="deltaColor(softwareIndexDelta)"
+          >
+            {{ formatDelta(softwareIndexDelta) }}
+          </span>
+        </div>
+        <div
+          class="mt-1 flex max-w-[140px] items-center justify-center gap-1 text-[10px] leading-tight text-muted-foreground uppercase"
+        >
+          Indeed Software Index
+          <OQExplainer
+            text="Job postings for software engineers vs a Feb 2020 baseline (100). ~70 = 30% below baseline. Compared against general postings to isolate software-specific trends."
+          />
+        </div>
+        <div class="mt-0.5 text-[9px] text-muted-foreground/50">
+          vs 100 baseline
+        </div>
+        <a
+          href="https://fred.stlouisfed.org/series/IHLIDXUSTPSOFTDEVE"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-0.5 inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/50 transition-colors hover:text-orange-500/60"
+        >
+          FRED<span v-if="softwareDate" class="ml-0.5"
+            >· Updated {{ softwareDate }}</span
+          >
+          <ExternalLink class="h-2 w-2" />
+        </a>
+        <div
+          v-if="softwareTrend?.change4w !== undefined"
+          data-testid="software-trend"
+          class="mt-1 font-mono text-[10px]"
+          :class="
+            (softwareTrend?.change4w ?? 0) < 0
+              ? 'text-red-400'
+              : 'text-emerald-400'
+          "
+        >
+          {{ (softwareTrend?.change4w ?? 0) > 0 ? "+" : ""
+          }}{{ softwareTrend?.change4w }}% 4wk
+        </div>
+      </div>
+
+      <!-- Right column: Funding headline -->
+      <div v-if="totalRaised && totalRaised !== '$0'" class="text-center">
+        <div
+          class="text-3xl font-semibold tracking-tight text-orange-500 sm:text-4xl"
+          data-testid="funding-total"
+        >
+          {{ totalRaised }}
+        </div>
+        <div
+          class="mt-1 max-w-[140px] text-[10px] leading-tight text-muted-foreground uppercase"
+        >
+          AI Funding (30d)
+        </div>
+        <div
+          v-if="fundingCount"
+          class="mt-0.5 text-[9px] text-muted-foreground/50"
+          data-testid="funding-count"
+        >
+          across {{ fundingCount }} round{{ fundingCount !== 1 ? "s" : "" }}
+        </div>
+        <div
+          v-if="topRound"
+          class="mt-1 text-[9px] text-muted-foreground/50"
+          data-testid="top-round"
+        >
+          Top: {{ topRound.company }} · {{ topRound.amount
+          }}<span v-if="topRound.round"> · {{ topRound.round }}</span>
+        </div>
       </div>
     </div>
 
@@ -94,17 +158,52 @@ const isOpen = ref(false);
         <div
           class="mt-3 space-y-4 rounded-xl border border-border bg-secondary/30 p-4 text-xs leading-relaxed text-muted-foreground"
         >
-          <!-- Funding context -->
+          <!-- Funding events -->
           <div>
             <p
               class="mb-1 text-[10px] tracking-widest text-muted-foreground/60 uppercase"
             >
-              AI Funding Context
+              Recent AI Funding
             </p>
-            <p>
-              Funding data flows through our daily RSS pipeline and is factored
-              into the Economic Replacement sub-score by each model. Major
-              rounds are surfaced as signals on the homepage.
+            <div
+              v-if="fundingEvents && fundingEvents.length > 0"
+              class="space-y-2"
+            >
+              <div
+                v-for="(event, i) in fundingEvents"
+                :key="i"
+                class="flex flex-wrap items-center gap-1.5"
+                data-testid="funding-event"
+              >
+                <span class="font-medium text-foreground/80">{{
+                  event.company
+                }}</span>
+                <span
+                  v-if="event.amount"
+                  class="rounded-md bg-orange-500/10 px-1.5 py-0.5 font-mono text-[10px] text-orange-400"
+                  >{{ event.amount }}</span
+                >
+                <span v-if="event.round" class="text-muted-foreground/60">{{
+                  event.round
+                }}</span>
+                <span
+                  v-if="event.relevance"
+                  class="rounded-full bg-secondary px-1.5 py-0.5 text-[9px] text-muted-foreground/50"
+                  >{{ event.relevance }}</span
+                >
+                <a
+                  v-if="event.sourceUrl"
+                  :href="event.sourceUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center text-muted-foreground/40 transition-colors hover:text-orange-500/60"
+                >
+                  <ExternalLink class="h-2.5 w-2.5" />
+                </a>
+              </div>
+            </div>
+            <p v-else class="text-muted-foreground/50">
+              No recent funding events tracked.
             </p>
           </div>
 

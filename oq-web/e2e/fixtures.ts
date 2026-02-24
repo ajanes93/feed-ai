@@ -97,6 +97,23 @@ function buildTodayResponse(overrides: Record<string, unknown> = {}) {
     modelSpread: 0.4,
     capabilityGap:
       "SWE-bench Verified: ~79% | Bash Only: ~77% — curated benchmarks; real engineering is harder.",
+    fundingEvents: [
+      {
+        company: "Cursor",
+        amount: "$400M",
+        round: "Series C",
+        sourceUrl: "https://bloomberg.com/cursor",
+        date: "2026-02-22",
+        relevance: "AI code tool",
+      },
+      {
+        company: "Anysphere",
+        amount: "$200M",
+        round: "Series B",
+        date: "2026-02-20",
+        relevance: "AI code tool",
+      },
+    ],
     isSeed: false,
     ...overrides,
   };
@@ -171,6 +188,22 @@ function buildMethodologyResponse() {
       sanityHarness: "2026-02-20",
       sweBench: "2026-02-18",
       fred: "2026-02-14",
+    },
+    deltas: {
+      fred: {
+        softwareIndexDelta: -1.8,
+        generalIndexDelta: 3000,
+        previousDate: "2026-02-07",
+      },
+    },
+    fundingSummary: {
+      totalRaised: "$2.1B",
+      count: 4,
+      topRound: {
+        company: "OpenAI",
+        amount: "$1.5B",
+        round: "Series G",
+      },
     },
     whatWouldChange: {
       to50: [

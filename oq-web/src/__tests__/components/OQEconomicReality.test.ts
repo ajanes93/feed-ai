@@ -105,13 +105,13 @@ describe("OQEconomicReality", () => {
     expect(wrapper.text()).toContain("Drill down");
   });
 
-  it("shows funding context in drill-down when expanded", async () => {
+  it("shows funding section in drill-down when expanded", async () => {
     const wrapper = mount(OQEconomicReality, { props: {}, global });
     const trigger = wrapper.find("[data-slot='collapsible-trigger']");
     await trigger.trigger("click");
 
-    expect(wrapper.text()).toContain("AI Funding Context");
-    expect(wrapper.text()).toContain("daily RSS pipeline");
+    expect(wrapper.text()).toContain("Recent AI Funding");
+    expect(wrapper.text()).toContain("No recent funding events tracked");
   });
 
   it("shows CEPR study in drill-down when expanded", async () => {

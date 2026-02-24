@@ -236,10 +236,13 @@ app.get("/api/today", async (c) => {
       capabilityGap:
         "SWE-bench Verified: ~79% | Bash Only: ~77% — curated benchmarks; real engineering is harder.",
       isSeed: true,
+      fundingEvents: [],
     });
   }
 
-  return c.json(mapScoreRow(row));
+  const log = createLogger(c.env.DB);
+  const fundingEvents = await loadRecentFundingEvents(c.env.DB, 7, 5, log);
+  return c.json({ ...mapScoreRow(row), fundingEvents });
 });
 
 app.get("/api/history", async (c) => {
@@ -358,9 +361,11 @@ app.post("/api/subscribe", async (c) => {
 });
 
 app.get("/api/methodology", async (c) => {
-  const [externalData, deltas] = await Promise.all([
-    loadExternalData(c.env.DB),
-    loadExternalDeltas(c.env.DB),
+  const log = createLogger(c.env.DB);
+  const [externalData, deltas, fundingSummary] = await Promise.all([
+    loadExternalData(c.env.DB, log),
+    loadExternalDeltas(c.env.DB, log),
+    loadFundingSummary(c.env.DB, log),
   ]);
   const prompt = buildScoringPrompt({
     currentScore: 0,
@@ -442,6 +447,7 @@ app.get("/api/methodology", async (c) => {
     },
     lastUpdated: externalData.lastUpdated ?? {},
     deltas,
+    fundingSummary,
     whatWouldChange: {
       to50: [
         "SWE-bench Verified consistently above 90% with diverse agents",
@@ -640,14 +646,23 @@ interface ExternalDeltas {
     medianPassRateDelta: number;
     previousDate?: string;
   };
+  fred?: {
+    softwareIndexDelta: number;
+    generalIndexDelta?: number;
+    previousDate?: string;
+  };
 }
 
-async function loadExternalDeltas(db: D1Database): Promise<ExternalDeltas> {
+async function loadExternalDeltas(
+  db: D1Database,
+  log?: Logger
+): Promise<ExternalDeltas> {
   const result: ExternalDeltas = {};
   try {
-    const [sweRows, sanityRows] = await db.batch([
+    const [sweRows, sanityRows, fredRows] = await db.batch([
       db.prepare(LATEST_TWO_EXTERNAL_SQL).bind("swe_bench"),
       db.prepare(LATEST_TWO_EXTERNAL_SQL).bind("sanity_harness"),
+      db.prepare(LATEST_TWO_EXTERNAL_SQL).bind("fred_labour"),
     ]);
 
     if (sweRows.results.length === 2) {
@@ -669,8 +684,10 @@ async function loadExternalDeltas(db: D1Database): Promise<ExternalDeltas> {
               : undefined,
           previousDate: sweRows.results[1].fetched_at as string,
         };
-      } catch {
-        // Corrupt data — skip deltas
+      } catch (err) {
+        await log?.warn("external", "Corrupt swe_bench delta data", {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -685,12 +702,43 @@ async function loadExternalDeltas(db: D1Database): Promise<ExternalDeltas> {
           ),
           previousDate: sanityRows.results[1].fetched_at as string,
         };
-      } catch {
-        // Corrupt data — skip deltas
+      } catch (err) {
+        await log?.warn("external", "Corrupt sanity_harness delta data", {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
-  } catch {
-    // Non-critical — deltas are optional
+
+    if (fredRows.results.length === 2) {
+      try {
+        const current = JSON.parse(fredRows.results[0].value as string);
+        const previous = JSON.parse(fredRows.results[1].value as string);
+        if (
+          typeof current.softwareIndex === "number" &&
+          typeof previous.softwareIndex === "number"
+        ) {
+          result.fred = {
+            softwareIndexDelta: round1(
+              current.softwareIndex - previous.softwareIndex
+            ),
+            generalIndexDelta:
+              typeof current.generalIndex === "number" &&
+              typeof previous.generalIndex === "number"
+                ? round1(current.generalIndex - previous.generalIndex)
+                : undefined,
+            previousDate: fredRows.results[1].fetched_at as string,
+          };
+        }
+      } catch (err) {
+        await log?.warn("external", "Corrupt fred_labour delta data", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  } catch (err) {
+    await log?.error("external", "loadExternalDeltas failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
   return result;
 }
@@ -749,6 +797,142 @@ async function loadExternalData(
   }
   result.lastUpdated = lastUpdated;
   return result;
+}
+
+// --- Funding data loading ---
+
+interface FundingSummary {
+  totalRaised: string;
+  count: number;
+  topRound?: { company: string; amount: string; round?: string };
+}
+
+interface FundingEventRow {
+  company: string;
+  amount: string | null;
+  round: string | null;
+  source_url: string | null;
+  date: string | null;
+  relevance: string | null;
+}
+
+async function loadFundingSummary(
+  db: D1Database,
+  log?: Logger
+): Promise<FundingSummary> {
+  try {
+    const rows = await db
+      .prepare(
+        "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events WHERE date >= date('now', '-30 days') ORDER BY date DESC LIMIT 100"
+      )
+      .all<FundingEventRow>();
+
+    const events = rows.results;
+    if (events.length === 0) {
+      return { totalRaised: "$0", count: 0 };
+    }
+
+    let totalMillions = 0;
+    let topAmount = 0;
+    let topRound: FundingSummary["topRound"] = undefined;
+
+    for (const ev of events) {
+      const parsed = parseAmount(ev.amount);
+      if (parsed > 0) {
+        totalMillions += parsed;
+        if (parsed > topAmount) {
+          topAmount = parsed;
+          topRound = {
+            company: ev.company,
+            amount: ev.amount!,
+            round: ev.round ?? undefined,
+          };
+        }
+      }
+    }
+
+    return {
+      totalRaised: formatTotalRaised(totalMillions),
+      count: events.length,
+      topRound,
+    };
+  } catch (err) {
+    await log?.error("external", "loadFundingSummary failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { totalRaised: "$0", count: 0 };
+  }
+}
+
+/** Parse "$2.1B", "$400M", "$50m" etc. into millions */
+function parseAmount(amount: string | null | undefined): number {
+  if (!amount) return 0;
+  const match = amount.match(/^\$?([\d.]+)\s*([BMKbmk])?/);
+  if (!match) return 0;
+  const num = parseFloat(match[1]);
+  if (isNaN(num)) return 0;
+  const unit = (match[2] ?? "").toUpperCase();
+  if (unit === "B") return num * 1000;
+  if (unit === "K") return num / 1000;
+  return num; // default: millions
+}
+
+function formatTotalRaised(millions: number): string {
+  if (millions >= 1000) {
+    const b = millions / 1000;
+    return `$${b % 1 === 0 ? b.toFixed(0) : b.toFixed(1)}B`;
+  }
+  if (millions > 0) {
+    return `$${Math.round(millions)}M`;
+  }
+  return "$0";
+}
+
+async function loadRecentFundingEvents(
+  db: D1Database,
+  days: number,
+  limit: number,
+  log?: Logger
+): Promise<
+  {
+    company: string;
+    amount?: string;
+    round?: string;
+    sourceUrl?: string;
+    date?: string;
+    relevance?: string;
+  }[]
+> {
+  try {
+    const cutoff = new Date(Date.now() - days * 86400000)
+      .toISOString()
+      .split("T")[0];
+    const rows = await db
+      .prepare(
+        "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events WHERE date >= ? ORDER BY date DESC LIMIT ?"
+      )
+      .bind(cutoff, limit)
+      .all<FundingEventRow>();
+
+    return rows.results.map((r) => ({
+      company: r.company,
+      amount: r.amount ?? undefined,
+      round: r.round ?? undefined,
+      sourceUrl:
+        r.source_url && /^https?:\/\//.test(r.source_url)
+          ? r.source_url
+          : undefined,
+      date: r.date ?? undefined,
+      relevance: r.relevance ?? undefined,
+    }));
+  } catch (err) {
+    await log?.error("external", "loadRecentFundingEvents failed", {
+      error: err instanceof Error ? err.message : String(err),
+      days,
+      limit,
+    });
+    return [];
+  }
 }
 
 // --- External data fetching ---
