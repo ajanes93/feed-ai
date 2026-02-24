@@ -38,7 +38,7 @@ onMounted(fetchData);
 // SVG chart dimensions
 const W = 600;
 const H = 200;
-const PAD = { top: 10, right: 10, bottom: 20, left: 40 };
+const PAD = { top: 10, right: 40, bottom: 20, left: 40 };
 const chartW = W - PAD.left - PAD.right;
 const chartH = H - PAD.top - PAD.bottom;
 
@@ -73,41 +73,59 @@ function buildPath(
     .join(" ");
 }
 
+/** Range-based padding — data fills ~80% of chart height */
+function rangeAxis(vals: number[]): { min: number; max: number } {
+  if (vals.length === 0) return { min: 0, max: 100 };
+  const lo = Math.min(...vals);
+  const hi = Math.max(...vals);
+  const range = hi - lo || 1;
+  const pad = range * 0.15;
+  return {
+    min: Math.floor((lo - pad) * 10) / 10,
+    max: Math.ceil((hi + pad) * 10) / 10,
+  };
+}
+
+const softwareYAxis = computed(() =>
+  rangeAxis(softwareSeries.value.map((d) => d.value))
+);
+
 const softwarePath = computed(() => {
   const s = softwareSeries.value;
   if (s.length < 2) return "";
   const dates = s.map((d) => d.date);
-  const vals = s.map((d) => d.value);
-  return buildPath(
-    s,
-    dates[0],
-    dates[dates.length - 1],
-    Math.min(...vals) * 0.95,
-    Math.max(...vals) * 1.05
-  );
+  const { min, max } = softwareYAxis.value;
+  return buildPath(s, dates[0], dates[dates.length - 1], min, max);
 });
 
-const softwareYAxis = computed(() => {
-  const vals = softwareSeries.value.map((d) => d.value);
-  if (vals.length === 0) return { min: 0, max: 100 };
-  return {
-    min: Math.floor(Math.min(...vals) * 0.95),
-    max: Math.ceil(Math.max(...vals) * 1.05),
-  };
-});
+// Score trend line (right Y axis)
+const scoreSeries = computed(() =>
+  scoreData.value.map((d) => ({ date: d.date, value: d.score }))
+);
 
-// Score overlay dots
-const scoreDots = computed(() => {
-  if (softwareSeries.value.length < 2) return [];
-  const s = softwareSeries.value;
+const scoreYAxis = computed(() =>
+  rangeAxis(scoreSeries.value.map((d) => d.value))
+);
+
+const scorePath = computed(() => {
+  const s = scoreSeries.value;
+  if (s.length < 2) return "";
   const dates = s.map((d) => d.date);
-  const vals = s.map((d) => d.value);
+  const { min, max } = scoreYAxis.value;
+  return buildPath(s, dates[0], dates[dates.length - 1], min, max);
+});
+
+// Score change dots positioned on the score line
+const scoreDots = computed(() => {
+  const s = scoreSeries.value;
+  if (s.length < 2) return [];
+  const dates = s.map((d) => d.date);
   const minDate = dates[0];
   const maxDate = dates[dates.length - 1];
-  const minVal = Math.min(...vals) * 0.95;
-  const maxVal = Math.max(...vals) * 1.05;
+  const { min: minVal, max: maxVal } = scoreYAxis.value;
   const dateRange =
     new Date(maxDate).getTime() - new Date(minDate).getTime() || 1;
+  const valRange = maxVal - minVal || 1;
 
   return scoreData.value
     .filter((d) => d.delta !== 0)
@@ -117,15 +135,7 @@ const scoreDots = computed(() => {
         ((new Date(d.date).getTime() - new Date(minDate).getTime()) /
           dateRange) *
           chartW;
-      // Find nearest software index for y position
-      const nearest = s.reduce((best, pt) =>
-        Math.abs(new Date(pt.date).getTime() - new Date(d.date).getTime()) <
-        Math.abs(new Date(best.date).getTime() - new Date(d.date).getTime())
-          ? pt
-          : best
-      );
-      const valRange = maxVal - minVal || 1;
-      const y = PAD.top + (1 - (nearest.value - minVal) / valRange) * chartH;
+      const y = PAD.top + (1 - (d.score - minVal) / valRange) * chartH;
       return {
         x: Math.max(PAD.left, Math.min(x, PAD.left + chartW)),
         y,
@@ -251,7 +261,37 @@ function formatShortDate(iso: string): string {
               stroke-linejoin="round"
             />
 
-            <!-- Score change markers -->
+            <!-- Score trend line (right axis) -->
+            <path
+              v-if="scorePath"
+              :d="scorePath"
+              fill="none"
+              stroke="rgb(96, 165, 250)"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-dasharray="4 3"
+            />
+
+            <!-- Right Y axis labels (score) -->
+            <text
+              :x="PAD.left + chartW + 4"
+              :y="PAD.top + 4"
+              text-anchor="start"
+              class="fill-blue-400/50 text-[8px]"
+            >
+              {{ scoreYAxis.max }}
+            </text>
+            <text
+              :x="PAD.left + chartW + 4"
+              :y="PAD.top + chartH"
+              text-anchor="start"
+              class="fill-blue-400/50 text-[8px]"
+            >
+              {{ scoreYAxis.min }}
+            </text>
+
+            <!-- Score change markers (on score line) -->
             <circle
               v-for="dot in scoreDots"
               :key="dot.date"
@@ -259,7 +299,7 @@ function formatShortDate(iso: string): string {
               :cy="dot.y"
               :r="3"
               :fill="dot.delta > 0 ? 'rgb(248, 113, 113)' : 'rgb(52, 211, 153)'"
-              class="opacity-60"
+              class="opacity-70"
             >
               <title>
                 {{ dot.date }}: score {{ dot.score }} ({{
@@ -291,13 +331,19 @@ function formatShortDate(iso: string): string {
             </div>
             <div class="flex items-center gap-1">
               <span
-                class="inline-block h-1.5 w-1.5 rounded-full bg-red-400 opacity-60"
+                class="inline-block h-0.5 w-3 rounded border-t border-dashed border-blue-400"
+              />
+              OQ score
+            </div>
+            <div class="flex items-center gap-1">
+              <span
+                class="inline-block h-1.5 w-1.5 rounded-full bg-red-400 opacity-70"
               />
               Score up
             </div>
             <div class="flex items-center gap-1">
               <span
-                class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 opacity-60"
+                class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 opacity-70"
               />
               Score down
             </div>
