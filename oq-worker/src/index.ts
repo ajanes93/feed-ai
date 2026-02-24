@@ -586,9 +586,6 @@ app.post("/api/maintenance", (c) =>
   adminHandler(c, "maintenance", async () => {
     const results = await c.env.DB.batch([
       c.env.DB.prepare(
-        "DELETE FROM oq_articles WHERE fetched_at < datetime('now', '-90 days')"
-      ),
-      c.env.DB.prepare(
         "DELETE FROM oq_fetch_errors WHERE attempted_at < datetime('now', '-30 days')"
       ),
       c.env.DB.prepare(
@@ -599,10 +596,9 @@ app.post("/api/maintenance", (c) =>
       ),
     ]);
     return {
-      deletedArticles: results[0].meta.changes,
-      deletedFetchErrors: results[1].meta.changes,
-      deletedCronRuns: results[2].meta.changes,
-      deletedLogs: results[3].meta.changes,
+      deletedFetchErrors: results[0].meta.changes,
+      deletedCronRuns: results[1].meta.changes,
+      deletedLogs: results[2].meta.changes,
     };
   })
 );
