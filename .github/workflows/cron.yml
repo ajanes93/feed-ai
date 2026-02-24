@@ -44,13 +44,14 @@ jobs:
     steps:
       - name: Determine action from schedule
         id: action
+        env:
+          INPUT_ACTION: ${{ inputs.action }}
+          CRON: ${{ github.event.schedule }}
         run: |
-          if [ -n "${{ inputs.action }}" ]; then
-            echo "action=${{ inputs.action }}" >> "$GITHUB_OUTPUT"
+          if [ -n "$INPUT_ACTION" ]; then
+            echo "action=$INPUT_ACTION" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
-          CRON="${{ github.event.schedule }}"
           case "$CRON" in
             "0 6 * * *"|"0 12 * * *"|"0 17 * * *")
               echo "action=fetch-ai" >> "$GITHUB_OUTPUT" ;;
@@ -95,13 +96,10 @@ jobs:
       - name: Summarize + Enrich
         if: steps.action.outputs.action == 'summarize'
         run: |
-          echo "--- Summarize ---"
           curl -sf -X POST "$WORKER_URL/api/summarize" \
             -H "Authorization: Bearer $ADMIN_KEY" \
             -H "Content-Type: application/json"
 
-          echo ""
-          echo "--- Enrich ---"
           curl -sf -X POST "$WORKER_URL/api/enrich-comments" \
             -H "Authorization: Bearer $ADMIN_KEY" \
             -H "Content-Type: application/json"

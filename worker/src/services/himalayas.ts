@@ -16,7 +16,6 @@ interface HimalayasJob {
   pubDate?: number;
   guid?: string;
   categories?: string[];
-  locationRestrictions?: string[];
 }
 
 interface HimalayasResponse {

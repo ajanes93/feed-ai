@@ -22,6 +22,3 @@ export function parsePublishedDate(dateStr?: string): number | undefined {
 export function parseEpochTimestamp(epoch?: number): number | undefined {
   return epoch ? epoch * 1000 : undefined;
 }
-
-export const REMOTE_KEYWORDS =
-  /\b(remote|anywhere|distributed|work from home|wfh)\b/i;

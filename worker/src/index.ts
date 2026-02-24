@@ -876,16 +876,11 @@ async function storeRawItems(
 
 // --- Shared fetch + store logic ---
 
-function filterSourcesByCategories(
-  categories?: Source["category"][]
-): Source[] {
-  if (!categories) return sources;
-  return sources.filter((s) => categories.includes(s.category));
-}
-
 async function runFetchAndStore(env: Env, categories?: Source["category"][]) {
   const today = todayDate();
-  const filtered = filterSourcesByCategories(categories);
+  const filtered = categories
+    ? sources.filter((s) => categories.includes(s.category))
+    : sources;
   const { items, health } = await fetchAllSources(filtered);
   await recordSourceHealth(env, health);
   await storeRawItems(env.DB, items, today);
