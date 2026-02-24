@@ -126,7 +126,7 @@ const isOpen = ref(false);
         <div
           class="mt-1 max-w-[140px] text-[10px] leading-tight text-muted-foreground uppercase"
         >
-          AI Funding (30d)
+          AI Funding
         </div>
         <div
           v-if="fundingCount"
@@ -152,11 +152,10 @@ const isOpen = ref(false);
       data-testid="general-index"
       class="mt-3 flex items-center justify-center gap-2 text-[10px] text-muted-foreground"
     >
-      <span>General postings:</span>
+      <span>Initial Claims (ICSA):</span>
       <span class="font-mono text-foreground/70">{{
         generalIndex.toLocaleString()
       }}</span>
-      <span class="text-muted-foreground/50">(initial claims)</span>
       <span
         v-if="generalTrend?.change4w !== undefined"
         class="font-mono"
