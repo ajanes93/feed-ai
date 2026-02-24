@@ -113,6 +113,17 @@ test.describe("Methodology page", () => {
     await expect(mockPage.getByText("CALIBRATION RULES:")).not.toBeVisible();
   });
 
+  test("navigating to unknown hash fragment does not break the page", async ({
+    mockPage,
+  }) => {
+    await mockPage.goto("/methodology#prompt-deadbeef00000000");
+    await expect(
+      mockPage.getByRole("heading", { name: "Methodology" })
+    ).toBeVisible();
+    // Should not expand anything
+    await expect(mockPage.getByText("CALIBRATION RULES:")).not.toBeVisible();
+  });
+
   test("has back-to-score link", async ({ mockPage }) => {
     await mockPage.goto("/methodology");
     const backLink = mockPage.getByText("Back to score").first();

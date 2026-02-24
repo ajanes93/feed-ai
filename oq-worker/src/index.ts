@@ -484,6 +484,9 @@ app.get("/api/prompt-history", async (c) => {
 
 app.get("/api/prompt/:hash", async (c) => {
   const hash = c.req.param("hash");
+  if (!/^[0-9a-f]{1,64}$/.test(hash)) {
+    return c.json({ error: "Invalid hash" }, 400);
+  }
   const row = await c.env.DB.prepare(
     "SELECT hash, prompt_text, first_used, last_used, change_summary, created_at FROM oq_prompt_versions WHERE hash = ?"
   )

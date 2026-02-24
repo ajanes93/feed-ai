@@ -28,7 +28,7 @@ const promptHistoryLoading = ref(false);
 // Track which hash is expanded and cache fetched prompt texts
 const expandedHash = ref<string | null>(null);
 const promptTexts = reactive<Record<string, string>>({});
-const promptTextLoading = ref(false);
+const loadingHashes = reactive(new Set<string>());
 
 async function fetchPromptHistory() {
   promptHistoryLoading.value = true;
@@ -49,7 +49,7 @@ async function togglePrompt(hash: string) {
   }
   expandedHash.value = hash;
   if (promptTexts[hash]) return;
-  promptTextLoading.value = true;
+  loadingHashes.add(hash);
   try {
     const res = await fetch(`/api/prompt/${hash}`);
     if (res.ok) {
@@ -57,7 +57,7 @@ async function togglePrompt(hash: string) {
       promptTexts[hash] = data.promptText;
     }
   } finally {
-    promptTextLoading.value = false;
+    loadingHashes.delete(hash);
   }
 }
 
@@ -81,17 +81,20 @@ function formatDateRange(first: string | null, last: string | null): string {
 }
 
 onMounted(async () => {
-  fetchMethodology();
-  await fetchPromptHistory();
+  await Promise.all([fetchMethodology(), fetchPromptHistory()]);
 
   // Auto-expand if URL has a #prompt-<hash> fragment
-  const fragment = route.hash;
-  const match = fragment.match(/^#prompt-(.+)$/);
+  const match = route.hash.match(/^#prompt-(.+)$/);
   if (match) {
     const hash = match[1];
-    await nextTick();
-    togglePrompt(hash);
-    document.getElementById(`prompt-${hash}`)?.scrollIntoView({ behavior: "smooth" });
+    const isKnown = promptHistory.value.some((v) => v.hash === hash);
+    if (isKnown) {
+      await nextTick();
+      togglePrompt(hash);
+      document
+        .getElementById(`prompt-${hash}`)
+        ?.scrollIntoView({ behavior: "smooth" });
+    }
   }
 });
 </script>
@@ -383,7 +386,10 @@ onMounted(async () => {
               <!-- Expanded prompt text -->
               <div v-if="expandedHash === version.hash" class="mt-3 ml-5">
                 <div
-                  v-if="promptTextLoading && !promptTexts[version.hash]"
+                  v-if="
+                    loadingHashes.has(version.hash) &&
+                    !promptTexts[version.hash]
+                  "
                   class="py-3 text-center"
                 >
                   <div
