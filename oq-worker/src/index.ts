@@ -650,6 +650,63 @@ app.post("/api/maintenance", (c) =>
   })
 );
 
+// Unified backfill endpoint: ?type=fred|funding|dedup-funding
+// - fred: backfill historical FRED labour data
+// - funding: insert funding events from JSON body (with dedup)
+// - dedup-funding: remove duplicate rows from oq_funding_events
+app.post("/api/admin/backfill", async (c) => {
+  const type = c.req.query("type");
+  const log = createLogger(c.env.DB);
+
+  try {
+    if (type === "fred") {
+      if (!c.env.FRED_API_KEY) {
+        return c.json({ error: "FRED_API_KEY not configured" }, 503);
+      }
+      const result = await backfillFRED(c.env.DB, c.env.FRED_API_KEY, log);
+      return c.json(result);
+    }
+
+    if (type === "funding") {
+      const body = await c.req.json<{
+        events: {
+          company: string;
+          amount?: string;
+          round?: string;
+          valuation?: string;
+          source_url?: string;
+          date?: string;
+          relevance?: string;
+        }[];
+      }>();
+      if (!Array.isArray(body.events) || body.events.length === 0) {
+        return c.json({ error: "body must contain non-empty events array" }, 400);
+      }
+      const result = await backfillFunding(c.env.DB, body.events, log);
+      return c.json(result);
+    }
+
+    if (type === "dedup-funding") {
+      const result = await dedupFundingEvents(c.env.DB, log);
+      return c.json(result);
+    }
+
+    return c.json(
+      { error: "type param required: fred | funding | dedup-funding" },
+      400
+    );
+  } catch (err) {
+    await log.error("external", `backfill-${type} failed`, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return c.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      500
+    );
+  }
+});
+
+// Keep old endpoint as alias for backwards compatibility
 app.post("/api/admin/backfill-fred", async (c) => {
   if (!c.env.FRED_API_KEY) {
     return c.json({ error: "FRED_API_KEY not configured" }, 503);
@@ -909,7 +966,19 @@ async function loadFundingSummary(
       )
       .all<FundingEventRow>();
 
-    const events = rows.results;
+    // Deduplicate by company+amount and source_url
+    const seen = new Set<string>();
+    const seenUrls = new Set<string>();
+    const events: FundingEventRow[] = [];
+    for (const r of rows.results) {
+      const key = fundingDedupeKey(r.company, r.amount);
+      const url = r.source_url?.trim().toLowerCase() ?? "";
+      if (seen.has(key)) continue;
+      if (url && seenUrls.has(url)) continue;
+      seen.add(key);
+      if (url) seenUrls.add(url);
+      events.push(r);
+    }
     if (events.length === 0) {
       return { totalRaised: "$0", count: 0 };
     }
@@ -970,6 +1039,17 @@ function formatTotalRaised(millions: number): string {
   return "$0";
 }
 
+/** Normalise a company+amount pair into a dedup key */
+function fundingDedupeKey(company: string, amount?: string | null): string {
+  const c = company.trim().toLowerCase();
+  // Normalise amount: strip "up to ", whitespace, lowercase
+  const a = (amount ?? "")
+    .replace(/^up\s+to\s+/i, "")
+    .trim()
+    .toLowerCase();
+  return `${c}|${a}`;
+}
+
 async function loadRecentFundingEvents(
   db: D1Database,
   days: number,
@@ -989,14 +1069,29 @@ async function loadRecentFundingEvents(
     const cutoff = new Date(Date.now() - days * 86400000)
       .toISOString()
       .split("T")[0];
+    // Fetch more than needed so dedup still yields enough results
     const rows = await db
       .prepare(
         "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events WHERE date >= ? ORDER BY date DESC LIMIT ?"
       )
-      .bind(cutoff, limit)
+      .bind(cutoff, limit * 3)
       .all<FundingEventRow>();
 
-    return rows.results.map((r) => ({
+    // Deduplicate by company+amount and by source_url
+    const seen = new Set<string>();
+    const seenUrls = new Set<string>();
+    const deduped: typeof rows.results = [];
+    for (const r of rows.results) {
+      const key = fundingDedupeKey(r.company, r.amount);
+      const url = r.source_url?.trim().toLowerCase() ?? "";
+      if (seen.has(key)) continue;
+      if (url && seenUrls.has(url)) continue;
+      seen.add(key);
+      if (url) seenUrls.add(url);
+      deduped.push(r);
+    }
+
+    return deduped.slice(0, limit).map((r) => ({
       company: r.company,
       amount: r.amount ?? undefined,
       round: r.round ?? undefined,
@@ -1241,6 +1336,127 @@ async function backfillFRED(
     totalDates: dates.length,
   });
   return { inserted, skipped };
+}
+
+async function backfillFunding(
+  db: D1Database,
+  events: {
+    company: string;
+    amount?: string;
+    round?: string;
+    valuation?: string;
+    source_url?: string;
+    date?: string;
+    relevance?: string;
+  }[],
+  log?: Logger
+): Promise<{ inserted: number; skipped: number }> {
+  const existing = await db
+    .prepare("SELECT company, amount, source_url FROM oq_funding_events")
+    .all<{ company: string; amount: string | null; source_url: string | null }>();
+  const existingKeys = new Set(
+    existing.results.map((r) => fundingDedupeKey(r.company, r.amount))
+  );
+  const existingUrls = new Set(
+    existing.results
+      .map((r) => r.source_url?.trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  let inserted = 0;
+  let skipped = 0;
+  const toInsert = events.filter((fe) => {
+    const key = fundingDedupeKey(fe.company, fe.amount);
+    const url = fe.source_url?.trim().toLowerCase() ?? "";
+    if (existingKeys.has(key)) {
+      skipped++;
+      return false;
+    }
+    if (url && existingUrls.has(url)) {
+      skipped++;
+      return false;
+    }
+    existingKeys.add(key);
+    if (url) existingUrls.add(url);
+    inserted++;
+    return true;
+  });
+
+  if (toInsert.length > 0) {
+    await db.batch(
+      toInsert.map((fe) =>
+        db
+          .prepare(
+            "INSERT INTO oq_funding_events (id, company, amount, round, valuation, source_url, date, relevance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+          )
+          .bind(
+            crypto.randomUUID(),
+            fe.company,
+            fe.amount ?? null,
+            fe.round ?? null,
+            fe.valuation ?? null,
+            fe.source_url ?? null,
+            fe.date ?? null,
+            fe.relevance ?? null
+          )
+      )
+    );
+  }
+
+  await log?.info("external", "Funding backfill complete", { inserted, skipped });
+  return { inserted, skipped };
+}
+
+async function dedupFundingEvents(
+  db: D1Database,
+  log?: Logger
+): Promise<{ deleted: number; remaining: number }> {
+  const rows = await db
+    .prepare(
+      "SELECT id, company, amount, source_url FROM oq_funding_events ORDER BY created_at ASC"
+    )
+    .all<{
+      id: string;
+      company: string;
+      amount: string | null;
+      source_url: string | null;
+    }>();
+
+  const seen = new Set<string>();
+  const seenUrls = new Set<string>();
+  const toDelete: string[] = [];
+
+  for (const r of rows.results) {
+    const key = fundingDedupeKey(r.company, r.amount);
+    const url = r.source_url?.trim().toLowerCase() ?? "";
+    if (seen.has(key) || (url && seenUrls.has(url))) {
+      toDelete.push(r.id);
+    } else {
+      seen.add(key);
+      if (url) seenUrls.add(url);
+    }
+  }
+
+  if (toDelete.length > 0) {
+    // D1 batch limit is 100 statements
+    for (let i = 0; i < toDelete.length; i += 100) {
+      const chunk = toDelete.slice(i, i + 100);
+      await db.batch(
+        chunk.map((id) =>
+          db.prepare("DELETE FROM oq_funding_events WHERE id = ?").bind(id)
+        )
+      );
+    }
+  }
+
+  await log?.info("external", "Funding dedup complete", {
+    deleted: toDelete.length,
+    remaining: rows.results.length - toDelete.length,
+  });
+  return {
+    deleted: toDelete.length,
+    remaining: rows.results.length - toDelete.length,
+  };
 }
 
 // --- Article fetching ---
@@ -1660,25 +1876,47 @@ async function generateDailyScore(
     },
     {
       label: "funding_events",
-      fn: () =>
-        result.fundingEvents.length > 0
-          ? env.DB.batch(
-              result.fundingEvents.map((fe) =>
-                env.DB.prepare(
-                  "INSERT INTO oq_funding_events (id, company, amount, round, valuation, source_url, date, relevance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-                ).bind(
-                  crypto.randomUUID(),
-                  fe.company,
-                  fe.amount ?? null,
-                  fe.round ?? null,
-                  fe.valuation ?? null,
-                  fe.source_url ?? null,
-                  fe.date ?? null,
-                  fe.relevance ?? null
-                )
-              )
+      fn: async () => {
+        if (result.fundingEvents.length === 0) return;
+        // Check existing events to avoid cross-run duplicates
+        const existing = await env.DB.prepare(
+          "SELECT company, amount, source_url FROM oq_funding_events"
+        ).all<{ company: string; amount: string | null; source_url: string | null }>();
+        const existingKeys = new Set(
+          existing.results.map((r) => fundingDedupeKey(r.company, r.amount))
+        );
+        const existingUrls = new Set(
+          existing.results
+            .map((r) => r.source_url?.trim().toLowerCase())
+            .filter(Boolean)
+        );
+        const toInsert = result.fundingEvents.filter((fe) => {
+          const key = fundingDedupeKey(fe.company, fe.amount);
+          const url = fe.source_url?.trim().toLowerCase() ?? "";
+          if (existingKeys.has(key)) return false;
+          if (url && existingUrls.has(url)) return false;
+          existingKeys.add(key);
+          if (url) existingUrls.add(url);
+          return true;
+        });
+        if (toInsert.length === 0) return;
+        await env.DB.batch(
+          toInsert.map((fe) =>
+            env.DB.prepare(
+              "INSERT INTO oq_funding_events (id, company, amount, round, valuation, source_url, date, relevance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            ).bind(
+              crypto.randomUUID(),
+              fe.company,
+              fe.amount ?? null,
+              fe.round ?? null,
+              fe.valuation ?? null,
+              fe.source_url ?? null,
+              fe.date ?? null,
+              fe.relevance ?? null
             )
-          : Promise.resolve(),
+          )
+        );
+      },
     },
   ];
 
