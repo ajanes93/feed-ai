@@ -183,6 +183,12 @@ function buildMethodologyResponse() {
       },
       generalIndex: 215000,
       generalDate: "2026-02-14",
+      generalTrend: {
+        current: 215000,
+        currentDate: "2026-02-14",
+        change1w: 1.2,
+        change4w: -3.0,
+      },
     },
     lastUpdated: {
       sanityHarness: "2026-02-20",
@@ -305,6 +311,25 @@ async function mockApi(page: Page) {
       body: JSON.stringify({ error: "Prompt version not found" }),
     });
   });
+
+  await page.route("**/api/economic-history*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        fredData: [
+          { date: "2026-01-01", softwareIndex: 52.1, generalIndex: 220000 },
+          { date: "2026-01-15", softwareIndex: 50.3, generalIndex: 218000 },
+          { date: "2026-02-01", softwareIndex: 48.8, generalIndex: 216000 },
+          { date: "2026-02-14", softwareIndex: 47.3, generalIndex: 215000 },
+        ],
+        scoreData: [
+          { date: "2026-01-15", score: 32, scoreEconomic: 38, delta: 0.3 },
+          { date: "2026-02-01", score: 33, scoreEconomic: 39, delta: 0.5 },
+        ],
+      }),
+    })
+  );
 
   await page.route("**/api/score/*", (route) =>
     route.fulfill({

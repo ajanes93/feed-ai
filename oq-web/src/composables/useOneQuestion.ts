@@ -146,6 +146,7 @@ export interface TodayResponse {
   capabilityGap?: string;
   sanityHarnessNote?: string;
   economicNote?: string;
+  labourNote?: string;
   externalData?: ExternalDataSnapshot;
   fundingEvents?: FundingEvent[];
   isSeed?: boolean;

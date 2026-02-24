@@ -39,6 +39,7 @@ export interface OQModelScore {
   capability_gap_note?: string;
   sanity_harness_note?: string;
   economic_note?: string;
+  labour_note?: string;
   funding_events?: OQFundingEvent[];
 }
 

@@ -128,8 +128,10 @@ test.describe("Economic Reality section", () => {
 
   test("shows 4-week trend", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(mockPage.getByText("-12.1%")).toBeVisible();
-    await expect(mockPage.getByText("4wk")).toBeVisible();
+    const trend = mockPage.getByTestId("software-trend");
+    await expect(trend).toBeVisible();
+    await expect(trend).toContainText("-12.1%");
+    await expect(trend).toContainText("4wk");
   });
 });
 
@@ -278,6 +280,32 @@ test.describe("Signal card links", () => {
   });
 });
 
+test.describe("Economic Reality general index", () => {
+  test("shows general employment index", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    const general = mockPage.locator("[data-testid='general-index']");
+    await expect(general).toBeVisible();
+    await expect(general).toContainText("General postings");
+    await expect(general).toContainText("215,000");
+  });
+
+  test("shows general 4-week trend", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    const general = mockPage.locator("[data-testid='general-index']");
+    await expect(general).toContainText("-3%");
+    await expect(general).toContainText("4wk");
+  });
+
+  test("highlights divergence when software falls faster", async ({
+    mockPage,
+  }) => {
+    await mockPage.goto("/");
+    const callout = mockPage.locator("[data-testid='divergence-callout']");
+    await expect(callout).toBeVisible();
+    await expect(callout).toContainText("software-specific decline");
+  });
+});
+
 test.describe("Economic Reality FRED delta", () => {
   test("shows FRED index delta badge", async ({ mockPage }) => {
     await mockPage.goto("/");
@@ -325,9 +353,25 @@ test.describe("Economic Reality drill-down", () => {
     await mockPage.goto("/");
     const drillDowns = mockPage.getByText("Drill down", { exact: true });
     await drillDowns.last().click();
-    await expect(mockPage.getByText("Cursor")).toBeVisible();
-    await expect(mockPage.getByText("$400M")).toBeVisible();
-    await expect(mockPage.getByText("Series C")).toBeVisible();
+    const event = mockPage.getByTestId("funding-event").first();
+    await expect(event).toContainText("Cursor");
+    await expect(event).toContainText("$400M");
+    await expect(event).toContainText("Series C");
+  });
+
+  test("drill-down shows software vs general divergence", async ({
+    mockPage,
+  }) => {
+    await mockPage.goto("/");
+    const drillDowns = mockPage.getByText("Drill down", { exact: true });
+    await drillDowns.last().click();
+    const divergence = mockPage.locator(
+      "[data-testid='drill-down-divergence']"
+    );
+    await expect(divergence).toBeVisible();
+    await expect(divergence).toContainText("Software vs General");
+    await expect(divergence).toContainText("-12.1%");
+    await expect(divergence).toContainText("-3%");
   });
 
   test("drill-down still shows CEPR study", async ({ mockPage }) => {

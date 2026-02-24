@@ -209,6 +209,10 @@ function parseModelResponse(text: string, model: string): OQModelScore {
       typeof parsed.economic_note === "string"
         ? parsed.economic_note.slice(0, 300)
         : undefined,
+    labour_note:
+      typeof parsed.labour_note === "string"
+        ? parsed.labour_note.slice(0, 300)
+        : undefined,
     funding_events: Array.isArray(parsed.funding_events)
       ? parsed.funding_events
           .filter(
@@ -387,6 +391,7 @@ export interface OQScoringResult {
   capabilityGap?: string;
   sanityHarnessNote?: string;
   economicNote?: string;
+  labourNote?: string;
   fundingEvents: OQFundingEvent[];
   promptHash: string;
   promptText: string;
@@ -622,6 +627,7 @@ export async function runScoring(
 
   const sanityHarnessNote = preferClaude("sanity_harness_note");
   const economicNote = preferClaude("economic_note");
+  const labourNote = preferClaude("labour_note");
 
   // Merge and deduplicate funding events from all models
   const fundingEvents: OQFundingEvent[] = [];
@@ -654,6 +660,7 @@ export async function runScoring(
     capabilityGap: gapNotes || undefined,
     sanityHarnessNote: sanityHarnessNote || undefined,
     economicNote: economicNote || undefined,
+    labourNote: labourNote || undefined,
     fundingEvents,
     promptHash,
     promptText: prompt,

@@ -293,7 +293,7 @@ app.get("/api/score/:date", async (c) => {
 
   // Load model responses for this score
   const modelRows = await c.env.DB.prepare(
-    "SELECT model, provider, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, sanity_harness_note, economic_note, input_tokens, output_tokens, latency_ms FROM oq_model_responses WHERE score_id = ? ORDER BY model"
+    "SELECT model, provider, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, sanity_harness_note, economic_note, labour_note, input_tokens, output_tokens, latency_ms FROM oq_model_responses WHERE score_id = ? ORDER BY model"
   )
     .bind(row.id)
     .all();
@@ -325,6 +325,7 @@ app.get("/api/score/:date", async (c) => {
       capabilityGapNote: m.capability_gap_note,
       sanityHarnessNote: m.sanity_harness_note,
       economicNote: m.economic_note,
+      labourNote: m.labour_note,
       inputTokens: m.input_tokens,
       outputTokens: m.output_tokens,
       latencyMs: m.latency_ms,
@@ -486,6 +487,46 @@ app.get("/api/prompt-history", async (c) => {
       createdAt: r.created_at,
     }))
   );
+});
+
+app.get("/api/economic-history", async (c) => {
+  const days = Math.min(parseInt(c.req.query("d") ?? "90", 10) || 90, 365);
+  const cutoff = new Date(Date.now() - days * 86400000)
+    .toISOString()
+    .split("T")[0];
+
+  const [fredRows, scoreRows] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      "SELECT value, fetched_at FROM oq_external_data_history WHERE key = 'fred_labour' AND fetched_at >= ? ORDER BY fetched_at ASC"
+    ).bind(cutoff),
+    c.env.DB.prepare(
+      "SELECT date, score, score_economic, delta FROM oq_scores WHERE date >= ? ORDER BY date ASC"
+    ).bind(cutoff),
+  ]);
+
+  const fredData = fredRows.results
+    .map((r) => {
+      try {
+        const val = JSON.parse(r.value as string);
+        return {
+          date: (r.fetched_at as string).split("T")[0],
+          softwareIndex: val.softwareIndex ?? null,
+          generalIndex: val.generalIndex ?? null,
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  const scoreData = scoreRows.results.map((r) => ({
+    date: r.date,
+    score: r.score,
+    scoreEconomic: r.score_economic,
+    delta: r.delta,
+  }));
+
+  return c.json({ fredData, scoreData });
 });
 
 app.get("/api/prompt/:hash", async (c) => {
@@ -1386,6 +1427,7 @@ async function generateDailyScore(
     capabilityGap: result.capabilityGap,
     sanityHarnessNote: result.sanityHarnessNote,
     economicNote: result.economicNote,
+    labourNote: result.labourNote,
     promptHash: result.promptHash,
     externalData: JSON.stringify(externalData),
     dataQualityFlags:
@@ -1443,7 +1485,7 @@ async function generateDailyScore(
           ? env.DB.batch(
               result.modelResponses.map((mr) =>
                 env.DB.prepare(
-                  "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, sanity_harness_note, economic_note, input_tokens, output_tokens, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                  "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, sanity_harness_note, economic_note, labour_note, input_tokens, output_tokens, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 ).bind(
                   crypto.randomUUID(),
                   scoreId,
@@ -1459,6 +1501,7 @@ async function generateDailyScore(
                   mr.parsed.capability_gap_note ?? null,
                   mr.parsed.sanity_harness_note ?? null,
                   mr.parsed.economic_note ?? null,
+                  mr.parsed.labour_note ?? null,
                   mr.inputTokens ?? null,
                   mr.outputTokens ?? null,
                   mr.latencyMs ?? null
@@ -1540,6 +1583,7 @@ interface ScoreInsert {
   capabilityGap?: string;
   sanityHarnessNote?: string;
   economicNote?: string;
+  labourNote?: string;
   promptHash: string;
   externalData?: string;
   isDecay?: boolean;
@@ -1550,7 +1594,7 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<string> {
   const id = crypto.randomUUID();
   await db
     .prepare(
-      "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, delta_explanation, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, capability_gap, sanity_harness_note, economic_note, prompt_hash, external_data, is_decay, data_quality_flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, delta_explanation, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, capability_gap, sanity_harness_note, economic_note, labour_note, prompt_hash, external_data, is_decay, data_quality_flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(
       id,
@@ -1569,6 +1613,7 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<string> {
       data.capabilityGap ?? null,
       data.sanityHarnessNote ?? null,
       data.economicNote ?? null,
+      data.labourNote ?? null,
       data.promptHash,
       data.externalData ?? null,
       data.isDecay ? 1 : 0,
@@ -1604,6 +1649,7 @@ function mapScoreRow(row: Record<string, unknown>) {
     capabilityGap: row.capability_gap,
     sanityHarnessNote: row.sanity_harness_note,
     economicNote: row.economic_note,
+    labourNote: row.labour_note,
     externalData: row.external_data
       ? safeJsonParse(row.external_data, null)
       : null,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -8,12 +8,15 @@ import {
 import { ExternalLink, ChevronDown } from "lucide-vue-next";
 import OQExplainer from "./OQExplainer.vue";
 
-defineProps<{
+const props = defineProps<{
   softwareIndex?: number;
   softwareDate?: string;
   softwareTrend?: { change1w?: number; change4w?: number };
   softwareIndexDelta?: number;
+  generalIndex?: number;
+  generalTrend?: { change1w?: number; change4w?: number };
   note?: string;
+  labourNote?: string;
   totalRaised?: string;
   fundingCount?: number;
   topRound?: { company: string; amount: string; round?: string };
@@ -37,6 +40,15 @@ function deltaColor(delta: number | undefined): string {
   if (delta === undefined || delta === 0) return "";
   return delta > 0 ? "text-emerald-400" : "text-red-400";
 }
+
+/** Software falling faster than general = meaningful divergence signal */
+const hasDivergence = computed(() => {
+  const sw = props.softwareTrend?.change4w;
+  const gen = props.generalTrend?.change4w;
+  if (sw === undefined || gen === undefined) return false;
+  // Software declining more than general (both negative, software more negative)
+  return sw < gen && sw < 0;
+});
 
 const isOpen = ref(false);
 </script>
@@ -134,6 +146,41 @@ const isOpen = ref(false);
       </div>
     </div>
 
+    <!-- General employment sub-row -->
+    <div
+      v-if="generalIndex !== undefined"
+      data-testid="general-index"
+      class="mt-3 flex items-center justify-center gap-2 text-[10px] text-muted-foreground"
+    >
+      <span>General postings:</span>
+      <span class="font-mono text-foreground/70">{{
+        generalIndex.toLocaleString()
+      }}</span>
+      <span class="text-muted-foreground/50">(initial claims)</span>
+      <span
+        v-if="generalTrend?.change4w !== undefined"
+        class="font-mono"
+        :class="
+          (generalTrend?.change4w ?? 0) < 0
+            ? 'text-emerald-400'
+            : 'text-red-400'
+        "
+      >
+        {{ (generalTrend?.change4w ?? 0) > 0 ? "+" : ""
+        }}{{ generalTrend?.change4w }}% 4wk
+      </span>
+    </div>
+
+    <!-- Divergence callout -->
+    <div
+      v-if="hasDivergence"
+      data-testid="divergence-callout"
+      class="mt-2 rounded-lg bg-red-500/5 px-3 py-1.5 text-center text-[10px] font-medium text-red-400/80"
+    >
+      Software postings {{ softwareTrend?.change4w }}% vs general
+      {{ generalTrend?.change4w }}% — software-specific decline
+    </div>
+
     <!-- Dynamic note from scorer -->
     <p
       v-if="note"
@@ -141,6 +188,15 @@ const isOpen = ref(false);
       class="mt-4 rounded-lg bg-orange-500/5 px-3 py-2 text-center text-xs leading-relaxed text-orange-400/80"
     >
       {{ note }}
+    </p>
+
+    <!-- Labour note from scorer -->
+    <p
+      v-if="labourNote"
+      data-testid="labour-note"
+      class="mt-2 rounded-lg bg-orange-500/5 px-3 py-2 text-center text-xs leading-relaxed text-orange-400/80"
+    >
+      {{ labourNote }}
     </p>
 
     <!-- Drill-down -->
@@ -158,8 +214,56 @@ const isOpen = ref(false);
         <div
           class="mt-3 space-y-4 rounded-xl border border-border bg-secondary/30 p-4 text-xs leading-relaxed text-muted-foreground"
         >
+          <!-- Software vs General divergence -->
+          <div
+            v-if="
+              softwareTrend?.change4w !== undefined &&
+              generalTrend?.change4w !== undefined
+            "
+            data-testid="drill-down-divergence"
+          >
+            <p
+              class="mb-1 text-[10px] tracking-widest text-muted-foreground/60 uppercase"
+            >
+              Software vs General
+            </p>
+            <p>
+              Software postings
+              <span
+                class="font-mono"
+                :class="
+                  (softwareTrend?.change4w ?? 0) < 0
+                    ? 'text-red-400'
+                    : 'text-emerald-400'
+                "
+                >{{ (softwareTrend?.change4w ?? 0) > 0 ? "+" : ""
+                }}{{ softwareTrend?.change4w }}%</span
+              >
+              vs general
+              <span
+                class="font-mono"
+                :class="
+                  (generalTrend?.change4w ?? 0) < 0
+                    ? 'text-emerald-400'
+                    : 'text-red-400'
+                "
+                >{{ (generalTrend?.change4w ?? 0) > 0 ? "+" : ""
+                }}{{ generalTrend?.change4w }}%</span
+              >
+              (4-week change). When software falls faster than general, it
+              signals AI-specific displacement rather than broad economic
+              conditions.
+            </p>
+          </div>
+
           <!-- Funding events -->
-          <div>
+          <div
+            :class="{
+              'border-t border-border pt-3':
+                softwareTrend?.change4w !== undefined &&
+                generalTrend?.change4w !== undefined,
+            }"
+          >
             <p
               class="mb-1 text-[10px] tracking-widest text-muted-foreground/60 uppercase"
             >
