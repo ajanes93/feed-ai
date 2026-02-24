@@ -15,7 +15,6 @@ interface HimalayasJob {
   applicationLink?: string;
   pubDate?: number;
   guid?: string;
-  remote?: boolean;
   categories?: string[];
 }
 
@@ -26,7 +25,6 @@ interface HimalayasResponse {
 const VUE_KEYWORDS = /\b(vue|vuejs|vue\.js|nuxt)\b/i;
 
 function isRelevant(job: HimalayasJob): boolean {
-  if (job.remote !== true) return false;
   const text = `${job.title} ${job.excerpt || ""} ${(job.categories || []).join(" ")}`;
   return VUE_KEYWORDS.test(text);
 }

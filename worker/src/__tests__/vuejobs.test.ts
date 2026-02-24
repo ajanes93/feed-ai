@@ -7,7 +7,7 @@ const VUEJOBS_SOURCE = sourceFactory.build({
   id: "vuejobs",
   name: "VueJobs",
   type: "rss",
-  url: "https://vuejobs.com/feed",
+  url: "https://app.vuejobs.com/feed/posts",
   category: "jobs",
 });
 
@@ -46,10 +46,10 @@ afterEach(() => {
 });
 
 describe("fetchVueJobs", () => {
-  it("fetches and maps remote job listings", async () => {
+  it("fetches and maps job listings", async () => {
     fetchMock
-      .get("https://vuejobs.com")
-      .intercept({ method: "GET", path: "/feed" })
+      .get("https://app.vuejobs.com")
+      .intercept({ method: "GET", path: "/feed/posts" })
       .reply(
         200,
         vuejobsRss([
@@ -72,10 +72,10 @@ describe("fetchVueJobs", () => {
     expect(items[0].content).toBe("A remote Vue.js role with TypeScript");
   });
 
-  it("filters out non-remote jobs", async () => {
+  it("includes all jobs without remote filtering", async () => {
     fetchMock
-      .get("https://vuejobs.com")
-      .intercept({ method: "GET", path: "/feed" })
+      .get("https://app.vuejobs.com")
+      .intercept({ method: "GET", path: "/feed/posts" })
       .reply(
         200,
         vuejobsRss([
@@ -100,35 +100,13 @@ describe("fetchVueJobs", () => {
 
     const items = await fetchVueJobs(VUEJOBS_SOURCE);
 
-    expect(items).toHaveLength(1);
-    expect(items[0].title).toContain("Remote");
-  });
-
-  it("detects remote keyword in content:encoded", async () => {
-    fetchMock
-      .get("https://vuejobs.com")
-      .intercept({ method: "GET", path: "/feed" })
-      .reply(
-        200,
-        vuejobsRss([
-          {
-            title: "Senior Vue.js Engineer",
-            link: "https://vuejobs.com/jobs/1",
-            "content:encoded": "<p>This is a fully <b>remote</b> position.</p>",
-          },
-        ]),
-        { headers: { "content-type": "application/xml" } }
-      );
-
-    const items = await fetchVueJobs(VUEJOBS_SOURCE);
-
-    expect(items).toHaveLength(1);
+    expect(items).toHaveLength(3);
   });
 
   it("returns empty array on HTTP error", async () => {
     fetchMock
-      .get("https://vuejobs.com")
-      .intercept({ method: "GET", path: "/feed" })
+      .get("https://app.vuejobs.com")
+      .intercept({ method: "GET", path: "/feed/posts" })
       .reply(500, "Server error");
 
     const items = await fetchVueJobs(VUEJOBS_SOURCE);
@@ -138,8 +116,8 @@ describe("fetchVueJobs", () => {
 
   it("returns empty array when feed has no items", async () => {
     fetchMock
-      .get("https://vuejobs.com")
-      .intercept({ method: "GET", path: "/feed" })
+      .get("https://app.vuejobs.com")
+      .intercept({ method: "GET", path: "/feed/posts" })
       .reply(
         200,
         `<?xml version="1.0"?><rss version="2.0"><channel><title>VueJobs</title></channel></rss>`,
@@ -153,15 +131,15 @@ describe("fetchVueJobs", () => {
 
   it("handles single item feed (non-array)", async () => {
     fetchMock
-      .get("https://vuejobs.com")
-      .intercept({ method: "GET", path: "/feed" })
+      .get("https://app.vuejobs.com")
+      .intercept({ method: "GET", path: "/feed/posts" })
       .reply(
         200,
         vuejobsRss([
           {
-            title: "Remote Vue Dev",
+            title: "Vue Dev",
             link: "https://vuejobs.com/jobs/1",
-            description: "Remote role",
+            description: "A Vue role",
           },
         ]),
         { headers: { "content-type": "application/xml" } }
@@ -170,21 +148,21 @@ describe("fetchVueJobs", () => {
     const items = await fetchVueJobs(VUEJOBS_SOURCE);
 
     expect(items).toHaveLength(1);
-    expect(items[0].title).toBe("Remote Vue Dev");
+    expect(items[0].title).toBe("Vue Dev");
   });
 
   it("strips HTML from content", async () => {
     fetchMock
-      .get("https://vuejobs.com")
-      .intercept({ method: "GET", path: "/feed" })
+      .get("https://app.vuejobs.com")
+      .intercept({ method: "GET", path: "/feed/posts" })
       .reply(
         200,
         vuejobsRss([
           {
-            title: "Remote Vue Engineer",
+            title: "Vue Engineer",
             link: "https://vuejobs.com/jobs/1",
             "content:encoded":
-              "<p>Build <strong>remote</strong> Vue.js apps &amp; more</p>",
+              "<p>Build <strong>awesome</strong> Vue.js apps &amp; more</p>",
           },
         ]),
         { headers: { "content-type": "application/xml" } }
@@ -192,7 +170,7 @@ describe("fetchVueJobs", () => {
 
     const items = await fetchVueJobs(VUEJOBS_SOURCE);
 
-    expect(items[0].content).toBe("Build remote Vue.js apps & more");
+    expect(items[0].content).toBe("Build awesome Vue.js apps & more");
     expect(items[0].content).not.toContain("<");
   });
 });

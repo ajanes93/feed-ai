@@ -1,0 +1,112 @@
+name: Digest Cron
+
+on:
+  schedule:
+    # Cycle 1: 6:00–7:00 UTC
+    - cron: "0 6 * * *"   # fetch ai
+    - cron: "5 6 * * *"   # fetch dev
+    - cron: "10 6 * * *"  # fetch jobs+sport
+    - cron: "0 7 * * *"   # summarize + enrich
+
+    # Cycle 2: 12:00–13:00 UTC
+    - cron: "0 12 * * *"
+    - cron: "5 12 * * *"
+    - cron: "10 12 * * *"
+    - cron: "0 13 * * *"
+
+    # Cycle 3: 17:00–18:00 UTC
+    - cron: "0 17 * * *"
+    - cron: "5 17 * * *"
+    - cron: "10 17 * * *"
+    - cron: "0 18 * * *"
+
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action to run"
+        required: true
+        type: choice
+        options:
+          - fetch-all
+          - fetch-ai
+          - fetch-dev
+          - fetch-jobs-sport
+          - summarize
+          - enrich
+
+env:
+  WORKER_URL: ${{ secrets.WORKER_URL }}
+  ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine action from schedule
+        id: action
+        env:
+          INPUT_ACTION: ${{ inputs.action }}
+          CRON: ${{ github.event.schedule }}
+        run: |
+          if [ -n "$INPUT_ACTION" ]; then
+            echo "action=$INPUT_ACTION" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "$CRON" in
+            "0 6 * * *"|"0 12 * * *"|"0 17 * * *")
+              echo "action=fetch-ai" >> "$GITHUB_OUTPUT" ;;
+            "5 6 * * *"|"5 12 * * *"|"5 17 * * *")
+              echo "action=fetch-dev" >> "$GITHUB_OUTPUT" ;;
+            "10 6 * * *"|"10 12 * * *"|"10 17 * * *")
+              echo "action=fetch-jobs-sport" >> "$GITHUB_OUTPUT" ;;
+            "0 7 * * *"|"0 13 * * *"|"0 18 * * *")
+              echo "action=summarize" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "action=fetch-all" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Fetch AI sources
+        if: steps.action.outputs.action == 'fetch-ai'
+        run: |
+          curl -sf -X POST "$WORKER_URL/api/fetch?categories=ai" \
+            -H "Authorization: Bearer $ADMIN_KEY" \
+            -H "Content-Type: application/json"
+
+      - name: Fetch Dev sources
+        if: steps.action.outputs.action == 'fetch-dev'
+        run: |
+          curl -sf -X POST "$WORKER_URL/api/fetch?categories=dev" \
+            -H "Authorization: Bearer $ADMIN_KEY" \
+            -H "Content-Type: application/json"
+
+      - name: Fetch Jobs + Sport sources
+        if: steps.action.outputs.action == 'fetch-jobs-sport'
+        run: |
+          curl -sf -X POST "$WORKER_URL/api/fetch?categories=jobs,sport" \
+            -H "Authorization: Bearer $ADMIN_KEY" \
+            -H "Content-Type: application/json"
+
+      - name: Fetch all sources
+        if: steps.action.outputs.action == 'fetch-all'
+        run: |
+          curl -sf -X POST "$WORKER_URL/api/fetch" \
+            -H "Authorization: Bearer $ADMIN_KEY" \
+            -H "Content-Type: application/json"
+
+      - name: Summarize + Enrich
+        if: steps.action.outputs.action == 'summarize'
+        run: |
+          curl -sf -X POST "$WORKER_URL/api/summarize" \
+            -H "Authorization: Bearer $ADMIN_KEY" \
+            -H "Content-Type: application/json"
+
+          curl -sf -X POST "$WORKER_URL/api/enrich-comments" \
+            -H "Authorization: Bearer $ADMIN_KEY" \
+            -H "Content-Type: application/json"
+
+      - name: Enrich only
+        if: steps.action.outputs.action == 'enrich'
+        run: |
+          curl -sf -X POST "$WORKER_URL/api/enrich-comments" \
+            -H "Authorization: Bearer $ADMIN_KEY" \
+            -H "Content-Type: application/json"

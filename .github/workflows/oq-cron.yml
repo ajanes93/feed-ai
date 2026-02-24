@@ -1,0 +1,114 @@
+name: OQ Digest Cron
+
+on:
+  schedule:
+    # Daily: fetch external data, articles, and generate score
+    - cron: "30 5 * * *"
+    # Weekly maintenance (Sundays): clean up old data
+    - cron: "0 4 * * 0"
+
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action to run"
+        required: true
+        type: choice
+        options:
+          - full-run
+          - fetch
+          - score
+          - rescore
+          - fetch-external
+          - maintenance
+
+env:
+  OQ_WORKER_URL: ${{ secrets.OQ_WORKER_URL }}
+  OQ_ADMIN_KEY: ${{ secrets.OQ_ADMIN_KEY }}
+
+jobs:
+  daily:
+    if: github.event.schedule == '30 5 * * *' || (github.event_name == 'workflow_dispatch' && inputs.action == 'full-run')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch external data (SanityHarness, SWE-bench, FRED)
+        run: |
+          echo "--- SanityHarness ---"
+          curl -sf -X POST "$OQ_WORKER_URL/api/fetch-sanity" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+          echo ""
+
+          echo "--- SWE-bench ---"
+          curl -sf -X POST "$OQ_WORKER_URL/api/fetch-swebench" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+          echo ""
+
+          echo "--- FRED ---"
+          curl -s -o /dev/null -w "%{http_code}" -X POST "$OQ_WORKER_URL/api/fetch-fred" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY" || true
+
+      - name: Fetch articles
+        run: |
+          curl -sf -X POST "$OQ_WORKER_URL/api/fetch" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+
+      - name: Generate daily score
+        run: |
+          curl -sf -X POST "$OQ_WORKER_URL/api/score" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+
+  maintenance:
+    if: github.event.schedule == '0 4 * * 0' || (github.event_name == 'workflow_dispatch' && inputs.action == 'maintenance')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run weekly maintenance cleanup
+        run: |
+          curl -sf -X POST "$OQ_WORKER_URL/api/maintenance" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+
+  # Individual actions for workflow_dispatch
+  fetch-only:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'fetch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch articles
+        run: |
+          curl -sf -X POST "$OQ_WORKER_URL/api/fetch" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+
+  score-only:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'score'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate daily score
+        run: |
+          curl -sf -X POST "$OQ_WORKER_URL/api/score" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+
+  rescore:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'rescore'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete and regenerate today's score
+        run: |
+          curl -sf -X POST "$OQ_WORKER_URL/api/rescore" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+
+  fetch-external:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'fetch-external'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch external data sources
+        run: |
+          echo "--- SanityHarness ---"
+          curl -sf -X POST "$OQ_WORKER_URL/api/fetch-sanity" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+          echo ""
+
+          echo "--- SWE-bench ---"
+          curl -sf -X POST "$OQ_WORKER_URL/api/fetch-swebench" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+          echo ""
+
+          echo "--- FRED ---"
+          curl -s -o /dev/null -w "%{http_code}" -X POST "$OQ_WORKER_URL/api/fetch-fred" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY" || true
