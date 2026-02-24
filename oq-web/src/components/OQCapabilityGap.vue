@@ -18,7 +18,22 @@ const props = defineProps<{
   proPrivateSource?: string;
   note?: string;
   lastUpdated?: string;
+  verifiedDelta?: number;
+  proDelta?: number;
+  proPrivateDelta?: number;
+  previousDate?: string;
 }>();
+
+function formatDelta(delta: number | undefined): string {
+  if (delta === undefined || delta === 0) return "";
+  const sign = delta > 0 ? "+" : "";
+  return `${sign}${delta}%`;
+}
+
+function deltaColor(delta: number | undefined): string {
+  if (delta === undefined || delta === 0) return "";
+  return delta > 0 ? "text-emerald-400" : "text-red-400";
+}
 
 function formatUpdatedDate(iso: string | undefined): string {
   if (!iso) return "";
@@ -65,6 +80,13 @@ const gapText = computed(() => {
             class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
           >
             {{ verified }}
+            <span
+              v-if="verifiedDelta !== undefined && verifiedDelta !== 0"
+              class="ml-1 text-sm font-normal"
+              :class="deltaColor(verifiedDelta)"
+            >
+              {{ formatDelta(verifiedDelta) }}
+            </span>
           </div>
           <div
             class="mt-1 flex max-w-[120px] items-center justify-center gap-1 text-[10px] leading-tight tracking-widest text-muted-foreground uppercase"
@@ -112,6 +134,13 @@ const gapText = computed(() => {
             class="text-3xl font-semibold tracking-tight text-orange-500 sm:text-4xl"
           >
             {{ pro }}
+            <span
+              v-if="proDelta !== undefined && proDelta !== 0"
+              class="ml-1 text-sm font-normal"
+              :class="deltaColor(proDelta)"
+            >
+              {{ formatDelta(proDelta) }}
+            </span>
           </div>
           <div
             class="mt-1 flex max-w-[120px] items-center justify-center gap-1 text-[10px] leading-tight tracking-widest text-muted-foreground uppercase"
@@ -168,6 +197,11 @@ const gapText = computed(() => {
               On truly private code (startup codebases AI can never have seen):
               top score drops to
               <span class="font-semibold text-orange-400">{{ proPrivate }}</span
+              ><span
+                v-if="proPrivateDelta !== undefined && proPrivateDelta !== 0"
+                class="ml-1 text-[11px] font-medium"
+                :class="deltaColor(proPrivateDelta)"
+                >{{ formatDelta(proPrivateDelta) }}</span
               >.
               <a
                 v-if="proPrivateSource"

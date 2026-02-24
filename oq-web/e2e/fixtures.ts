@@ -249,6 +249,30 @@ async function mockApi(page: Page) {
     })
   );
 
+  await page.route("**/api/prompt/*", (route) => {
+    const url = route.request().url();
+    if (url.endsWith("/abc123def456")) {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          hash: "abc123def456",
+          promptText:
+            'You are an analyst tracking whether AI will fully replace the median\nprofessional software engineer within the next 10 years.\n\n"Replace" means: AI can independently handle the full role.\n\nCurrent score: 33/100\nScore history (last 14 days): 33, 32, 32\n\nCALIBRATION RULES:\n- Most days the score should move 0-2 points.\n- CEO hype carries less weight than actual headcount data.',
+          firstUsed: "2026-02-10",
+          lastUsed: "2026-02-22",
+          changeSummary: "Added funding extraction and dynamic notes",
+          createdAt: "2026-02-10T06:30:00Z",
+        }),
+      });
+    }
+    return route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Prompt version not found" }),
+    });
+  });
+
   await page.route("**/api/score/*", (route) =>
     route.fulfill({
       status: 200,

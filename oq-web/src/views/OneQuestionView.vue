@@ -271,6 +271,10 @@ onMounted(async () => {
             :pro-private-source="methodology?.capabilityGap?.proPrivateSource"
             :note="today.capabilityGap"
             :last-updated="methodology?.lastUpdated?.sweBench"
+            :verified-delta="methodology?.deltas?.sweBench?.verifiedDelta"
+            :pro-delta="methodology?.deltas?.sweBench?.proDelta"
+            :pro-private-delta="methodology?.deltas?.sweBench?.proPrivateDelta"
+            :previous-date="methodology?.deltas?.sweBench?.previousDate"
           />
         </motion.section>
 
@@ -296,6 +300,13 @@ onMounted(async () => {
             :language-breakdown="methodology.sanityHarness.languageBreakdown"
             :note="today.sanityHarnessNote"
             :last-updated="methodology?.lastUpdated?.sanityHarness"
+            :top-pass-rate-delta="
+              methodology?.deltas?.sanityHarness?.topPassRateDelta
+            "
+            :median-pass-rate-delta="
+              methodology?.deltas?.sanityHarness?.medianPassRateDelta
+            "
+            :previous-date="methodology?.deltas?.sanityHarness?.previousDate"
           />
         </motion.section>
 

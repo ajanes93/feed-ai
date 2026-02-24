@@ -31,6 +31,21 @@ interface FREDDataResponse {
   generalTrend?: FREDTrend;
 }
 
+interface ExternalDeltas {
+  sweBench?: {
+    verifiedDelta: number;
+    bashOnlyDelta: number;
+    proDelta?: number;
+    proPrivateDelta?: number;
+    previousDate?: string;
+  };
+  sanityHarness?: {
+    topPassRateDelta: number;
+    medianPassRateDelta: number;
+    previousDate?: string;
+  };
+}
+
 export interface MethodologyResponse {
   whatWouldChange: {
     to50: string[];
@@ -64,6 +79,7 @@ export interface MethodologyResponse {
     sweBench?: string;
     fred?: string;
   };
+  deltas?: ExternalDeltas;
 }
 
 interface ExternalDataSnapshot {

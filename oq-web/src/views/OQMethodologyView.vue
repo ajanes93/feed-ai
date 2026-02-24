@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { nextTick, onMounted, ref, reactive } from "vue";
 import { useHead } from "@unhead/vue";
+import { useRoute } from "vue-router";
 import { useOneQuestion } from "../composables/useOneQuestion";
 import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
 import { Badge } from "@feed-ai/shared/components/ui/badge";
 import { Separator } from "@feed-ai/shared/components/ui/separator";
+import { ChevronRight } from "lucide-vue-next";
 import OQExplainer from "../components/OQExplainer.vue";
 
+const route = useRoute();
 const { methodology, fetchMethodology } = useOneQuestion();
 
 useHead({ title: "Methodology — One Question" });
@@ -22,6 +25,11 @@ interface PromptVersion {
 const promptHistory = ref<PromptVersion[]>([]);
 const promptHistoryLoading = ref(false);
 
+// Track which hash is expanded and cache fetched prompt texts
+const expandedHash = ref<string | null>(null);
+const promptTexts = reactive<Record<string, string>>({});
+const loadingHashes = reactive(new Set<string>());
+
 async function fetchPromptHistory() {
   promptHistoryLoading.value = true;
   try {
@@ -32,6 +40,29 @@ async function fetchPromptHistory() {
   } finally {
     promptHistoryLoading.value = false;
   }
+}
+
+async function togglePrompt(hash: string) {
+  if (expandedHash.value === hash) {
+    expandedHash.value = null;
+    return;
+  }
+  expandedHash.value = hash;
+  if (promptTexts[hash]) return;
+  loadingHashes.add(hash);
+  try {
+    const res = await fetch(`/api/prompt/${hash}`);
+    if (res.ok) {
+      const data = await res.json();
+      promptTexts[hash] = data.promptText;
+    }
+  } finally {
+    loadingHashes.delete(hash);
+  }
+}
+
+function isCurrent(hash: string): boolean {
+  return methodology.value?.currentPromptHash === hash;
 }
 
 function formatDate(iso: string | null): string {
@@ -49,9 +80,22 @@ function formatDateRange(first: string | null, last: string | null): string {
     : `${formatDate(first)} — ${formatDate(last)}`;
 }
 
-onMounted(() => {
-  fetchMethodology();
-  fetchPromptHistory();
+onMounted(async () => {
+  await Promise.all([fetchMethodology(), fetchPromptHistory()]);
+
+  // Auto-expand if URL has a #prompt-<hash> fragment
+  const match = route.hash.match(/^#prompt-(.+)$/);
+  if (match) {
+    const hash = match[1];
+    const isKnown = promptHistory.value.some((v) => v.hash === hash);
+    if (isKnown) {
+      await nextTick();
+      togglePrompt(hash);
+      document
+        .getElementById(`prompt-${hash}`)
+        ?.scrollIntoView({ behavior: "smooth" });
+    }
+  }
 });
 </script>
 
@@ -278,17 +322,9 @@ onMounted(() => {
           </h2>
           <p class="mb-4 text-xs text-muted-foreground">
             Every prompt version is hashed and stored. If the scoring
-            methodology changes, the hash changes — full auditability.
+            methodology changes, the hash changes — click any version to view
+            the full prompt.
           </p>
-
-          <div class="mb-4">
-            <div class="text-[10px] text-muted-foreground">
-              Current Prompt Hash
-            </div>
-            <div class="mt-0.5 font-mono text-xs text-foreground/80">
-              {{ methodology.currentPromptHash }}
-            </div>
-          </div>
 
           <!-- Version history timeline -->
           <div v-if="promptHistoryLoading" class="py-4 text-center">
@@ -301,7 +337,7 @@ onMounted(() => {
             class="space-y-0 border-l border-border pl-4"
           >
             <div
-              v-for="(version, i) in promptHistory"
+              v-for="version in promptHistory"
               :id="`prompt-${version.hash}`"
               :key="version.hash"
               class="relative pb-4"
@@ -309,29 +345,66 @@ onMounted(() => {
               <!-- Timeline dot -->
               <div
                 class="absolute -left-[calc(1rem+3px)] top-1 h-1.5 w-1.5 rounded-full"
-                :class="i === 0 ? 'bg-orange-500' : 'bg-border'"
+                :class="isCurrent(version.hash) ? 'bg-orange-500' : 'bg-border'"
               />
-              <div class="flex items-baseline gap-2">
-                <code class="text-xs text-foreground/80">{{
-                  version.hash
-                }}</code>
+              <!-- Clickable hash row -->
+              <button
+                class="flex cursor-pointer items-baseline gap-2 text-left"
+                @click="togglePrompt(version.hash)"
+              >
+                <ChevronRight
+                  class="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground/50 transition-transform duration-150"
+                  :class="{ 'rotate-90': expandedHash === version.hash }"
+                />
+                <code
+                  class="text-xs transition-colors"
+                  :class="
+                    expandedHash === version.hash
+                      ? 'text-orange-500'
+                      : 'text-foreground/80 hover:text-orange-500/80'
+                  "
+                >
+                  {{ version.hash }}
+                </code>
                 <Badge
-                  v-if="i === 0"
+                  v-if="isCurrent(version.hash)"
                   variant="outline"
                   class="border-orange-500/30 text-[9px] text-orange-500"
                 >
                   current
                 </Badge>
-              </div>
-              <div class="mt-0.5 text-[10px] text-muted-foreground/60">
+              </button>
+              <div class="mt-0.5 pl-5 text-[10px] text-muted-foreground/60">
                 {{ formatDateRange(version.firstUsed, version.lastUsed) }}
               </div>
               <p
                 v-if="version.changeSummary"
-                class="mt-1 text-xs text-muted-foreground"
+                class="mt-1 pl-5 text-xs text-muted-foreground"
               >
                 {{ version.changeSummary }}
               </p>
+              <!-- Expanded prompt text -->
+              <div v-if="expandedHash === version.hash" class="mt-3 ml-5">
+                <div
+                  v-if="
+                    loadingHashes.has(version.hash) &&
+                    !promptTexts[version.hash]
+                  "
+                  class="py-3 text-center"
+                >
+                  <div
+                    class="inline-block h-3 w-3 animate-spin rounded-full border border-border border-t-orange-500"
+                  />
+                </div>
+                <pre
+                  v-else-if="promptTexts[version.hash]"
+                  class="max-h-96 overflow-auto rounded-lg border border-border bg-secondary/30 p-4 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground"
+                  >{{ promptTexts[version.hash] }}</pre
+                >
+                <p v-else class="text-xs text-muted-foreground/50">
+                  Prompt text not available.
+                </p>
+              </div>
             </div>
           </div>
           <p v-else class="text-xs text-muted-foreground/50">
