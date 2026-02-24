@@ -191,7 +191,7 @@ app.get("/api/digest/:date", async (c) => {
   }
 
   const items = await c.env.DB.prepare(
-    "SELECT * FROM items WHERE digest_id = ? ORDER BY position"
+    "SELECT * FROM items WHERE digest_id = ? ORDER BY position DESC"
   )
     .bind(digest.id)
     .all();
@@ -375,9 +375,14 @@ app.use("/api/summarize", authMiddleware);
 app.use("/api/enrich-comments", authMiddleware);
 
 app.post("/api/fetch", async (c) => {
+  const categoryParam = c.req.query("categories");
+  const categories = categoryParam
+    ? (categoryParam.split(",") as Source["category"][])
+    : undefined;
+
   let result;
   try {
-    result = await runFetchAndStore(c.env);
+    result = await runFetchAndStore(c.env, categories);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return c.json({ error: `Failed to fetch sources: ${message}` }, 500);
@@ -1342,47 +1347,8 @@ async function recordSourceHealth(env: Env, results: SourceFetchResult[]) {
   }
 }
 
+// Crons moved to GitHub Actions (.github/workflows/cron.yml).
+// The worker exposes HTTP endpoints that the workflow calls directly.
 export default {
   fetch: app.fetch,
-
-  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    // Three fetch→summarize→enrich cycles per day:
-    //   6/12/17 :00/:05/:10 fetch (by category) | 7/13/18 summarize + enrich
-    // Fetch split by category to stay under subrequest limits.
-    // Summarize + enrich merged into one cron (free plan limit = 5).
-    const time = new Date(event.scheduledTime);
-    const hour = time.getUTCHours();
-    const minute = time.getUTCMinutes();
-
-    ctx.waitUntil(
-      (async () => {
-        if (minute === 0 && (hour === 7 || hour === 13 || hour === 18)) {
-          await logEvent(env.DB, {
-            level: "info",
-            category: "digest",
-            message: `Cron triggered at ${hour}:00 UTC — summarize + enrich`,
-          });
-          await summarizeNewItems(env);
-          await runAllEnrichment(env);
-        } else if (hour === 6 || hour === 12 || hour === 17) {
-          // Fetch split by category: :00 AI, :05 Dev, :10 Jobs+Sport
-          const fetchCategories: Record<number, Source["category"][]> = {
-            0: ["ai"],
-            5: ["dev"],
-            10: ["jobs", "sport"],
-          };
-          const categories = fetchCategories[minute];
-          if (!categories) return;
-
-          const label = categories.join("+");
-          await logEvent(env.DB, {
-            level: "info",
-            category: "fetch",
-            message: `Cron triggered at ${hour}:${String(minute).padStart(2, "0")} UTC — fetch ${label}`,
-          });
-          await fetchAndStoreArticles(env, categories);
-        }
-      })()
-    );
-  },
 };

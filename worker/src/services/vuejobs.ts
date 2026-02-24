@@ -4,7 +4,6 @@ import { RawItem } from "../types";
 import {
   ITEM_LIMIT,
   USER_AGENT,
-  REMOTE_KEYWORDS,
   stripHtml,
   parsePublishedDate,
 } from "./constants";
@@ -20,12 +19,6 @@ interface VueJobItem {
   description?: string;
   "content:encoded"?: string;
   pubDate?: string;
-}
-
-function isRemote(item: VueJobItem): boolean {
-  const title = String(item.title || "");
-  const content = String(item["content:encoded"] || item.description || "");
-  return REMOTE_KEYWORDS.test(title) || REMOTE_KEYWORDS.test(content);
 }
 
 export async function fetchVueJobs(source: Source): Promise<RawItem[]> {
@@ -48,17 +41,15 @@ export async function fetchVueJobs(source: Source): Promise<RawItem[]> {
   if (!rawItems) return [];
   const items: VueJobItem[] = Array.isArray(rawItems) ? rawItems : [rawItems];
 
-  return items
-    .filter(isRemote)
-    .slice(0, ITEM_LIMIT)
-    .map((item) => ({
-      id: crypto.randomUUID(),
-      sourceId: source.id,
-      title: stripHtml(String(item.title || "Untitled")),
-      link: typeof item.link === "string" ? item.link : "",
-      content: stripHtml(
-        String(item["content:encoded"] || item.description || "")
-      ),
-      publishedAt: parsePublishedDate(item.pubDate),
-    }));
+  // VueJobs is already a Vue-specific source — no additional keyword filtering needed
+  return items.slice(0, ITEM_LIMIT).map((item) => ({
+    id: crypto.randomUUID(),
+    sourceId: source.id,
+    title: stripHtml(String(item.title || "Untitled")),
+    link: typeof item.link === "string" ? item.link : "",
+    content: stripHtml(
+      String(item["content:encoded"] || item.description || "")
+    ),
+    publishedAt: parsePublishedDate(item.pubDate),
+  }));
 }

@@ -26,7 +26,7 @@ function isRelevant(job: RemoteOKJob): boolean {
 
 export async function fetchRemoteOK(source: Source): Promise<RawItem[]> {
   const response = await fetch(source.url, {
-    headers: { "User-Agent": USER_AGENT },
+    headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
   });
 
   if (!response.ok) {

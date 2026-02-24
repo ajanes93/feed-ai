@@ -254,7 +254,7 @@ export const sources: Source[] = [
     id: "vuejobs",
     name: "VueJobs",
     type: "rss",
-    url: "https://vuejobs.com/feed",
+    url: "https://app.vuejobs.com/feed/posts",
     category: "jobs",
   },
   {
@@ -266,9 +266,9 @@ export const sources: Source[] = [
   },
   {
     id: "jobicy-vue-uk",
-    name: "Jobicy Vue UK/Remote",
+    name: "Jobicy Vue Remote",
     type: "api",
-    url: "https://jobicy.com/api/v2/remote-jobs?tag=vue&geo=uk",
+    url: "https://jobicy.com/api/v2/remote-jobs?tag=vue",
     category: "jobs",
   },
   {

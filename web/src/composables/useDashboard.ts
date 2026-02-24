@@ -146,7 +146,7 @@ export function useDashboard() {
         throw new Error("Enrichment failed");
       }
 
-      enrichResult.value = `Enriched: ${body.enriched}, Skipped: ${body.skipped}, Remaining: ${body.remaining}`;
+      enrichResult.value = `Enriched: ${body.totalEnriched}, Skipped: ${body.totalSkipped}, Rounds: ${body.rounds}`;
       enrichSuccess.value = true;
     } catch (err) {
       enrichResult.value =

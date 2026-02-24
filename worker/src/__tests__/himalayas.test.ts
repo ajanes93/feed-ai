@@ -19,7 +19,6 @@ function himalayasResponse(
     description?: string;
     applicationLink?: string;
     pubDate?: number;
-    remote?: boolean;
     categories?: string[];
   }>
 ) {
@@ -49,7 +48,6 @@ describe("fetchHimalayas", () => {
             description: "<p>Remote Vue.js role with <b>TypeScript</b></p>",
             applicationLink: "https://acme.com/apply",
             pubDate: 1738300800,
-            remote: true,
           },
           {
             title: "Vue.js Developer",
@@ -57,7 +55,6 @@ describe("fetchHimalayas", () => {
             excerpt: "Remote Vue position",
             applicationLink: "https://startupx.com/jobs/1",
             pubDate: 1738214400,
-            remote: true,
           },
         ]),
         { headers: { "content-type": "application/json" } }
@@ -74,6 +71,33 @@ describe("fetchHimalayas", () => {
     expect(items[1].title).toBe("Vue.js Developer — StartupX");
   });
 
+  it("filters out non-Vue jobs by keyword", async () => {
+    fetchMock
+      .get("https://himalayas.app")
+      .intercept({ method: "GET", path: /\/jobs\/api/ })
+      .reply(
+        200,
+        himalayasResponse([
+          {
+            title: "Vue.js Developer",
+            companyName: "Co",
+            applicationLink: "https://co.com",
+          },
+          {
+            title: "React Developer",
+            companyName: "Other",
+            applicationLink: "https://other.com",
+          },
+        ]),
+        { headers: { "content-type": "application/json" } }
+      );
+
+    const items = await fetchHimalayas(HIMALAYAS_SOURCE);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toContain("Vue.js");
+  });
+
   it("converts unix timestamp to milliseconds", async () => {
     fetchMock
       .get("https://himalayas.app")
@@ -86,7 +110,6 @@ describe("fetchHimalayas", () => {
             companyName: "Co",
             applicationLink: "https://co.com",
             pubDate: 1738300800,
-            remote: true,
           },
         ]),
         { headers: { "content-type": "application/json" } }
@@ -108,7 +131,6 @@ describe("fetchHimalayas", () => {
             title: "Vue Dev",
             companyName: "Co",
             applicationLink: "https://co.com",
-            remote: true,
           },
         ]),
         { headers: { "content-type": "application/json" } }
@@ -149,7 +171,6 @@ describe("fetchHimalayas", () => {
       companyName: `Company ${i}`,
       applicationLink: `https://example.com/${i}`,
       pubDate: 1738300800 + i,
-      remote: true,
     }));
 
     fetchMock
@@ -176,7 +197,6 @@ describe("fetchHimalayas", () => {
             companyName: "Co",
             excerpt: "A great remote Vue.js opportunity",
             applicationLink: "https://co.com",
-            remote: true,
           },
         ]),
         { headers: { "content-type": "application/json" } }

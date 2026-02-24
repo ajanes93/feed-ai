@@ -65,9 +65,9 @@ describe("API routes", () => {
     };
     expect(body.id).toBe("digest-2025-01-28");
     expect(body.items).toHaveLength(2);
-    expect(body.items[0].title).toBe("AI News");
-    expect(body.items[1].title).toBe("Vue 4");
-    expect(body.items[1].whyItMatters).toBe("Vue dev");
+    expect(body.items[0].title).toBe("Vue 4");
+    expect(body.items[0].whyItMatters).toBe("Vue dev");
+    expect(body.items[1].title).toBe("AI News");
   });
 
   it("GET /api/digests returns list of dates", async () => {
