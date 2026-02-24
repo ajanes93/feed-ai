@@ -262,6 +262,29 @@ onMounted(async () => {
           </Card>
         </section>
 
+        <!-- Economic Trends link -->
+        <section class="mt-10">
+          <h2
+            class="mb-4 text-[10px] tracking-widest text-muted-foreground uppercase"
+          >
+            Economic Trends
+          </h2>
+          <Card class="border-border bg-card py-0">
+            <CardContent class="p-5">
+              <p class="text-sm leading-relaxed text-muted-foreground">
+                View historical Indeed Software Dev Postings Index data overlaid
+                with daily score changes.
+              </p>
+              <router-link
+                to="/economic"
+                class="mt-2 inline-block text-xs text-orange-500 hover:text-orange-400"
+              >
+                View economic trends →
+              </router-link>
+            </CardContent>
+          </Card>
+        </section>
+
         <!-- What Would Change -->
         <section class="mt-10">
           <h2

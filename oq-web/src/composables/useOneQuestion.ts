@@ -44,6 +44,26 @@ interface ExternalDeltas {
     medianPassRateDelta: number;
     previousDate?: string;
   };
+  fred?: {
+    softwareIndexDelta: number;
+    generalIndexDelta?: number;
+    previousDate?: string;
+  };
+}
+
+interface FundingSummary {
+  totalRaised: string;
+  count: number;
+  topRound?: { company: string; amount: string; round?: string };
+}
+
+interface FundingEvent {
+  company: string;
+  amount?: string;
+  round?: string;
+  sourceUrl?: string;
+  date?: string;
+  relevance?: string;
 }
 
 export interface MethodologyResponse {
@@ -80,6 +100,7 @@ export interface MethodologyResponse {
     fred?: string;
   };
   deltas?: ExternalDeltas;
+  fundingSummary?: FundingSummary;
 }
 
 interface ExternalDataSnapshot {
@@ -125,7 +146,9 @@ export interface TodayResponse {
   capabilityGap?: string;
   sanityHarnessNote?: string;
   economicNote?: string;
+  labourNote?: string;
   externalData?: ExternalDataSnapshot;
+  fundingEvents?: FundingEvent[];
   isSeed?: boolean;
 }
 

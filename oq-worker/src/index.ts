@@ -236,10 +236,13 @@ app.get("/api/today", async (c) => {
       capabilityGap:
         "SWE-bench Verified: ~79% | Bash Only: ~77% — curated benchmarks; real engineering is harder.",
       isSeed: true,
+      fundingEvents: [],
     });
   }
 
-  return c.json(mapScoreRow(row));
+  const log = createLogger(c.env.DB);
+  const fundingEvents = await loadRecentFundingEvents(c.env.DB, 7, 5, log);
+  return c.json({ ...mapScoreRow(row), fundingEvents });
 });
 
 app.get("/api/history", async (c) => {
@@ -290,7 +293,7 @@ app.get("/api/score/:date", async (c) => {
 
   // Load model responses for this score
   const modelRows = await c.env.DB.prepare(
-    "SELECT model, provider, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, sanity_harness_note, economic_note, input_tokens, output_tokens, latency_ms FROM oq_model_responses WHERE score_id = ? ORDER BY model"
+    "SELECT model, provider, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, sanity_harness_note, economic_note, labour_note, input_tokens, output_tokens, latency_ms FROM oq_model_responses WHERE score_id = ? ORDER BY model"
   )
     .bind(row.id)
     .all();
@@ -322,6 +325,7 @@ app.get("/api/score/:date", async (c) => {
       capabilityGapNote: m.capability_gap_note,
       sanityHarnessNote: m.sanity_harness_note,
       economicNote: m.economic_note,
+      labourNote: m.labour_note,
       inputTokens: m.input_tokens,
       outputTokens: m.output_tokens,
       latencyMs: m.latency_ms,
@@ -358,9 +362,11 @@ app.post("/api/subscribe", async (c) => {
 });
 
 app.get("/api/methodology", async (c) => {
-  const [externalData, deltas] = await Promise.all([
-    loadExternalData(c.env.DB),
-    loadExternalDeltas(c.env.DB),
+  const log = createLogger(c.env.DB);
+  const [externalData, deltas, fundingSummary] = await Promise.all([
+    loadExternalData(c.env.DB, log),
+    loadExternalDeltas(c.env.DB, log),
+    loadFundingSummary(c.env.DB, log),
   ]);
   const prompt = buildScoringPrompt({
     currentScore: 0,
@@ -442,6 +448,7 @@ app.get("/api/methodology", async (c) => {
     },
     lastUpdated: externalData.lastUpdated ?? {},
     deltas,
+    fundingSummary,
     whatWouldChange: {
       to50: [
         "SWE-bench Verified consistently above 90% with diverse agents",
@@ -480,6 +487,46 @@ app.get("/api/prompt-history", async (c) => {
       createdAt: r.created_at,
     }))
   );
+});
+
+app.get("/api/economic-history", async (c) => {
+  const days = Math.min(parseInt(c.req.query("d") ?? "90", 10) || 90, 365);
+  const cutoff = new Date(Date.now() - days * 86400000)
+    .toISOString()
+    .split("T")[0];
+
+  const [fredRows, scoreRows] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      "SELECT value, fetched_at FROM oq_external_data_history WHERE key = 'fred_labour' AND fetched_at >= ? ORDER BY fetched_at ASC"
+    ).bind(cutoff),
+    c.env.DB.prepare(
+      "SELECT date, score, score_economic, delta FROM oq_scores WHERE date >= ? ORDER BY date ASC"
+    ).bind(cutoff),
+  ]);
+
+  const fredData = fredRows.results
+    .map((r) => {
+      try {
+        const val = JSON.parse(r.value as string);
+        return {
+          date: (r.fetched_at as string).split("T")[0],
+          softwareIndex: val.softwareIndex ?? null,
+          generalIndex: val.generalIndex ?? null,
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  const scoreData = scoreRows.results.map((r) => ({
+    date: r.date,
+    score: r.score,
+    scoreEconomic: r.score_economic,
+    delta: r.delta,
+  }));
+
+  return c.json({ fredData, scoreData });
 });
 
 app.get("/api/prompt/:hash", async (c) => {
@@ -640,14 +687,23 @@ interface ExternalDeltas {
     medianPassRateDelta: number;
     previousDate?: string;
   };
+  fred?: {
+    softwareIndexDelta: number;
+    generalIndexDelta?: number;
+    previousDate?: string;
+  };
 }
 
-async function loadExternalDeltas(db: D1Database): Promise<ExternalDeltas> {
+async function loadExternalDeltas(
+  db: D1Database,
+  log?: Logger
+): Promise<ExternalDeltas> {
   const result: ExternalDeltas = {};
   try {
-    const [sweRows, sanityRows] = await db.batch([
+    const [sweRows, sanityRows, fredRows] = await db.batch([
       db.prepare(LATEST_TWO_EXTERNAL_SQL).bind("swe_bench"),
       db.prepare(LATEST_TWO_EXTERNAL_SQL).bind("sanity_harness"),
+      db.prepare(LATEST_TWO_EXTERNAL_SQL).bind("fred_labour"),
     ]);
 
     if (sweRows.results.length === 2) {
@@ -669,8 +725,10 @@ async function loadExternalDeltas(db: D1Database): Promise<ExternalDeltas> {
               : undefined,
           previousDate: sweRows.results[1].fetched_at as string,
         };
-      } catch {
-        // Corrupt data — skip deltas
+      } catch (err) {
+        await log?.warn("external", "Corrupt swe_bench delta data", {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -685,12 +743,43 @@ async function loadExternalDeltas(db: D1Database): Promise<ExternalDeltas> {
           ),
           previousDate: sanityRows.results[1].fetched_at as string,
         };
-      } catch {
-        // Corrupt data — skip deltas
+      } catch (err) {
+        await log?.warn("external", "Corrupt sanity_harness delta data", {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
-  } catch {
-    // Non-critical — deltas are optional
+
+    if (fredRows.results.length === 2) {
+      try {
+        const current = JSON.parse(fredRows.results[0].value as string);
+        const previous = JSON.parse(fredRows.results[1].value as string);
+        if (
+          typeof current.softwareIndex === "number" &&
+          typeof previous.softwareIndex === "number"
+        ) {
+          result.fred = {
+            softwareIndexDelta: round1(
+              current.softwareIndex - previous.softwareIndex
+            ),
+            generalIndexDelta:
+              typeof current.generalIndex === "number" &&
+              typeof previous.generalIndex === "number"
+                ? round1(current.generalIndex - previous.generalIndex)
+                : undefined,
+            previousDate: fredRows.results[1].fetched_at as string,
+          };
+        }
+      } catch (err) {
+        await log?.warn("external", "Corrupt fred_labour delta data", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  } catch (err) {
+    await log?.error("external", "loadExternalDeltas failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
   return result;
 }
@@ -749,6 +838,142 @@ async function loadExternalData(
   }
   result.lastUpdated = lastUpdated;
   return result;
+}
+
+// --- Funding data loading ---
+
+interface FundingSummary {
+  totalRaised: string;
+  count: number;
+  topRound?: { company: string; amount: string; round?: string };
+}
+
+interface FundingEventRow {
+  company: string;
+  amount: string | null;
+  round: string | null;
+  source_url: string | null;
+  date: string | null;
+  relevance: string | null;
+}
+
+async function loadFundingSummary(
+  db: D1Database,
+  log?: Logger
+): Promise<FundingSummary> {
+  try {
+    const rows = await db
+      .prepare(
+        "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events WHERE date >= date('now', '-30 days') ORDER BY date DESC LIMIT 100"
+      )
+      .all<FundingEventRow>();
+
+    const events = rows.results;
+    if (events.length === 0) {
+      return { totalRaised: "$0", count: 0 };
+    }
+
+    let totalMillions = 0;
+    let topAmount = 0;
+    let topRound: FundingSummary["topRound"] = undefined;
+
+    for (const ev of events) {
+      const parsed = parseAmount(ev.amount);
+      if (parsed > 0) {
+        totalMillions += parsed;
+        if (parsed > topAmount) {
+          topAmount = parsed;
+          topRound = {
+            company: ev.company,
+            amount: ev.amount!,
+            round: ev.round ?? undefined,
+          };
+        }
+      }
+    }
+
+    return {
+      totalRaised: formatTotalRaised(totalMillions),
+      count: events.length,
+      topRound,
+    };
+  } catch (err) {
+    await log?.error("external", "loadFundingSummary failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { totalRaised: "$0", count: 0 };
+  }
+}
+
+/** Parse "$2.1B", "$400M", "$50m" etc. into millions */
+function parseAmount(amount: string | null | undefined): number {
+  if (!amount) return 0;
+  const match = amount.match(/^\$?([\d.]+)\s*([BMKbmk])?/);
+  if (!match) return 0;
+  const num = parseFloat(match[1]);
+  if (isNaN(num)) return 0;
+  const unit = (match[2] ?? "").toUpperCase();
+  if (unit === "B") return num * 1000;
+  if (unit === "K") return num / 1000;
+  return num; // default: millions
+}
+
+function formatTotalRaised(millions: number): string {
+  if (millions >= 1000) {
+    const b = millions / 1000;
+    return `$${b % 1 === 0 ? b.toFixed(0) : b.toFixed(1)}B`;
+  }
+  if (millions > 0) {
+    return `$${Math.round(millions)}M`;
+  }
+  return "$0";
+}
+
+async function loadRecentFundingEvents(
+  db: D1Database,
+  days: number,
+  limit: number,
+  log?: Logger
+): Promise<
+  {
+    company: string;
+    amount?: string;
+    round?: string;
+    sourceUrl?: string;
+    date?: string;
+    relevance?: string;
+  }[]
+> {
+  try {
+    const cutoff = new Date(Date.now() - days * 86400000)
+      .toISOString()
+      .split("T")[0];
+    const rows = await db
+      .prepare(
+        "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events WHERE date >= ? ORDER BY date DESC LIMIT ?"
+      )
+      .bind(cutoff, limit)
+      .all<FundingEventRow>();
+
+    return rows.results.map((r) => ({
+      company: r.company,
+      amount: r.amount ?? undefined,
+      round: r.round ?? undefined,
+      sourceUrl:
+        r.source_url && /^https?:\/\//.test(r.source_url)
+          ? r.source_url
+          : undefined,
+      date: r.date ?? undefined,
+      relevance: r.relevance ?? undefined,
+    }));
+  } catch (err) {
+    await log?.error("external", "loadRecentFundingEvents failed", {
+      error: err instanceof Error ? err.message : String(err),
+      days,
+      limit,
+    });
+    return [];
+  }
 }
 
 // --- External data fetching ---
@@ -1202,6 +1427,7 @@ async function generateDailyScore(
     capabilityGap: result.capabilityGap,
     sanityHarnessNote: result.sanityHarnessNote,
     economicNote: result.economicNote,
+    labourNote: result.labourNote,
     promptHash: result.promptHash,
     externalData: JSON.stringify(externalData),
     dataQualityFlags:
@@ -1259,7 +1485,7 @@ async function generateDailyScore(
           ? env.DB.batch(
               result.modelResponses.map((mr) =>
                 env.DB.prepare(
-                  "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, sanity_harness_note, economic_note, input_tokens, output_tokens, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                  "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals, capability_gap_note, sanity_harness_note, economic_note, labour_note, input_tokens, output_tokens, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 ).bind(
                   crypto.randomUUID(),
                   scoreId,
@@ -1275,6 +1501,7 @@ async function generateDailyScore(
                   mr.parsed.capability_gap_note ?? null,
                   mr.parsed.sanity_harness_note ?? null,
                   mr.parsed.economic_note ?? null,
+                  mr.parsed.labour_note ?? null,
                   mr.inputTokens ?? null,
                   mr.outputTokens ?? null,
                   mr.latencyMs ?? null
@@ -1356,6 +1583,7 @@ interface ScoreInsert {
   capabilityGap?: string;
   sanityHarnessNote?: string;
   economicNote?: string;
+  labourNote?: string;
   promptHash: string;
   externalData?: string;
   isDecay?: boolean;
@@ -1366,7 +1594,7 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<string> {
   const id = crypto.randomUUID();
   await db
     .prepare(
-      "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, delta_explanation, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, capability_gap, sanity_harness_note, economic_note, prompt_hash, external_data, is_decay, data_quality_flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, delta_explanation, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, capability_gap, sanity_harness_note, economic_note, labour_note, prompt_hash, external_data, is_decay, data_quality_flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(
       id,
@@ -1385,6 +1613,7 @@ async function saveScore(db: D1Database, data: ScoreInsert): Promise<string> {
       data.capabilityGap ?? null,
       data.sanityHarnessNote ?? null,
       data.economicNote ?? null,
+      data.labourNote ?? null,
       data.promptHash,
       data.externalData ?? null,
       data.isDecay ? 1 : 0,
@@ -1420,6 +1649,7 @@ function mapScoreRow(row: Record<string, unknown>) {
     capabilityGap: row.capability_gap,
     sanityHarnessNote: row.sanity_harness_note,
     economicNote: row.economic_note,
+    labourNote: row.labour_note,
     externalData: row.external_data
       ? safeJsonParse(row.external_data, null)
       : null,

@@ -333,7 +333,17 @@ onMounted(async () => {
             :software-index="methodology?.fredData?.softwareIndex"
             :software-date="methodology?.fredData?.softwareDate"
             :software-trend="methodology?.fredData?.softwareTrend"
+            :software-index-delta="
+              methodology?.deltas?.fred?.softwareIndexDelta
+            "
+            :general-index="methodology?.fredData?.generalIndex"
+            :general-trend="methodology?.fredData?.generalTrend"
             :note="today.economicNote"
+            :labour-note="today.labourNote"
+            :total-raised="methodology?.fundingSummary?.totalRaised"
+            :funding-count="methodology?.fundingSummary?.count"
+            :top-round="methodology?.fundingSummary?.topRound"
+            :funding-events="today.fundingEvents"
           />
         </motion.section>
 
