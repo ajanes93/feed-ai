@@ -285,7 +285,7 @@ test.describe("Economic Reality general index", () => {
     await mockPage.goto("/");
     const general = mockPage.locator("[data-testid='general-index']");
     await expect(general).toBeVisible();
-    await expect(general).toContainText("General postings");
+    await expect(general).toContainText("Initial Claims (ICSA)");
     await expect(general).toContainText("215,000");
   });
 

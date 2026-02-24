@@ -650,6 +650,25 @@ app.post("/api/maintenance", (c) =>
   })
 );
 
+app.post("/api/admin/backfill-fred", async (c) => {
+  if (!c.env.FRED_API_KEY) {
+    return c.json({ error: "FRED_API_KEY not configured" }, 503);
+  }
+  const log = createLogger(c.env.DB);
+  try {
+    const result = await backfillFRED(c.env.DB, c.env.FRED_API_KEY, log);
+    return c.json(result);
+  } catch (err) {
+    await log.error("external", "backfill-fred failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return c.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      500
+    );
+  }
+});
+
 // --- External data loading ---
 
 interface ExternalData {
@@ -886,7 +905,7 @@ async function loadFundingSummary(
   try {
     const rows = await db
       .prepare(
-        "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events WHERE date >= date('now', '-30 days') ORDER BY date DESC LIMIT 100"
+        "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events ORDER BY date DESC LIMIT 200"
       )
       .all<FundingEventRow>();
 
@@ -1130,6 +1149,98 @@ async function fetchAndStoreFRED(
     softwareIndex: data.softwareIndex,
     generalIndex: data.generalIndex,
   };
+}
+
+async function backfillFRED(
+  db: D1Database,
+  apiKey: string,
+  log?: Logger
+): Promise<{ inserted: number; skipped: number }> {
+  // Fetch ~1 year of weekly observations for both series
+  const limit = 52;
+  const fetchSeries = async (seriesId: string) => {
+    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=${limit}`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "FeedAI-OQ/1.0" },
+    });
+    if (!res.ok)
+      throw new Error(`FRED backfill ${seriesId}: HTTP ${res.status}`);
+    const data = (await res.json()) as {
+      observations?: { date: string; value: string }[];
+    };
+    return (data.observations ?? []).filter((o) => o.value !== ".");
+  };
+
+  const [softwareObs, generalObs] = await Promise.all([
+    fetchSeries("IHLIDXUSTPSOFTDEVE"),
+    fetchSeries("ICSA"),
+  ]);
+
+  // Build a map of date -> { softwareIndex, generalIndex }
+  const byDate = new Map<
+    string,
+    { softwareIndex?: number; generalIndex?: number }
+  >();
+  for (const o of softwareObs) {
+    const val = parseFloat(o.value);
+    if (!isNaN(val)) {
+      byDate.set(o.date, { ...byDate.get(o.date), softwareIndex: val });
+    }
+  }
+  for (const o of generalObs) {
+    const val = parseFloat(o.value);
+    if (!isNaN(val)) {
+      byDate.set(o.date, { ...byDate.get(o.date), generalIndex: val });
+    }
+  }
+
+  // Check which dates already have data
+  const existingRows = await db
+    .prepare(
+      "SELECT fetched_at FROM oq_external_data_history WHERE key = 'fred_labour'"
+    )
+    .all<{ fetched_at: string }>();
+  const existingDates = new Set(
+    existingRows.results.map((r) => (r.fetched_at as string).split("T")[0])
+  );
+
+  let inserted = 0;
+  let skipped = 0;
+
+  // Sort dates ascending so chart renders chronologically
+  const dates = [...byDate.keys()].sort();
+  for (const date of dates) {
+    if (existingDates.has(date)) {
+      skipped++;
+      continue;
+    }
+    const entry = byDate.get(date)!;
+    await db
+      .prepare(
+        "INSERT INTO oq_external_data_history (id, key, value, fetched_at) VALUES (?, ?, ?, ?)"
+      )
+      .bind(
+        crypto.randomUUID(),
+        "fred_labour",
+        JSON.stringify({
+          softwareIndex: entry.softwareIndex,
+          softwareDate: date,
+          generalIndex: entry.generalIndex,
+          generalDate: date,
+          fetchedAt: `${date}T12:00:00Z`,
+        }),
+        `${date}T12:00:00Z`
+      )
+      .run();
+    inserted++;
+  }
+
+  await log?.info("external", "FRED backfill complete", {
+    inserted,
+    skipped,
+    totalDates: dates.length,
+  });
+  return { inserted, skipped };
 }
 
 // --- Article fetching ---
