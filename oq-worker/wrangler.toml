@@ -3,9 +3,9 @@ main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
-[triggers]
-# OQ: 05:30 fetch articles + generate daily score (single cron — free plan limit)
-crons = ["30 5 * * *"]
+# Crons moved to GitHub Actions (.github/workflows/oq-cron.yml) to avoid
+# Cloudflare free-plan subrequest limits. The worker exposes HTTP endpoints
+# (/api/fetch, /api/score, /api/fetch-sanity, etc.) that the workflow calls.
 
 [[d1_databases]]
 binding = "DB"

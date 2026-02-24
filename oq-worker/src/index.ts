@@ -70,6 +70,7 @@ async function adminAuth(
 app.use("/api/fetch", adminAuth);
 app.use("/api/score", adminAuth);
 app.use("/api/rescore", adminAuth);
+app.use("/api/maintenance", adminAuth);
 app.use("/api/admin/*", adminAuth);
 app.use("/api/fetch-sanity", adminAuth);
 app.use("/api/fetch-swebench", adminAuth);
@@ -580,6 +581,31 @@ app.post("/api/fetch-fred", (c) => {
     fetchAndStoreFRED(c.env.DB, c.env.FRED_API_KEY!, log)
   );
 });
+
+app.post("/api/maintenance", (c) =>
+  adminHandler(c, "maintenance", async () => {
+    const results = await c.env.DB.batch([
+      c.env.DB.prepare(
+        "DELETE FROM oq_articles WHERE fetched_at < datetime('now', '-90 days')"
+      ),
+      c.env.DB.prepare(
+        "DELETE FROM oq_fetch_errors WHERE attempted_at < datetime('now', '-30 days')"
+      ),
+      c.env.DB.prepare(
+        "DELETE FROM oq_cron_runs WHERE started_at < datetime('now', '-90 days')"
+      ),
+      c.env.DB.prepare(
+        "DELETE FROM oq_logs WHERE created_at < datetime('now', '-30 days')"
+      ),
+    ]);
+    return {
+      deletedArticles: results[0].meta.changes,
+      deletedFetchErrors: results[1].meta.changes,
+      deletedCronRuns: results[2].meta.changes,
+      deletedLogs: results[3].meta.changes,
+    };
+  })
+);
 
 // --- External data loading ---
 
@@ -1430,50 +1456,6 @@ function mapScoreRow(row: Record<string, unknown>) {
 
 // --- Exports ---
 
-async function logCronRun(
-  db: D1Database,
-  run: {
-    id: string;
-    startedAt: string;
-    completedAt?: string;
-    fetchStatus: string;
-    fetchArticles?: number;
-    fetchErrors?: FetchError[];
-    scoreStatus: string;
-    scoreResult?: unknown;
-    externalFetchStatus?: Record<string, string>;
-    error?: string;
-  },
-  log?: Logger
-): Promise<void> {
-  try {
-    await db
-      .prepare(
-        "INSERT OR REPLACE INTO oq_cron_runs (id, started_at, completed_at, fetch_status, fetch_articles, fetch_errors, score_status, score_result, external_fetch_status, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      )
-      .bind(
-        run.id,
-        run.startedAt,
-        run.completedAt ?? null,
-        run.fetchStatus,
-        run.fetchArticles ?? 0,
-        run.fetchErrors?.length ? JSON.stringify(run.fetchErrors) : null,
-        run.scoreStatus,
-        run.scoreResult ? JSON.stringify(run.scoreResult) : null,
-        run.externalFetchStatus
-          ? JSON.stringify(run.externalFetchStatus)
-          : null,
-        run.error ?? null
-      )
-      .run();
-  } catch (err) {
-    await log?.error("system", "logCronRun DB write failed", {
-      error: err instanceof Error ? err.message : String(err),
-      runId: run.id,
-    });
-  }
-}
-
 export async function findCompletedCronRun(
   db: D1Database,
   date: string
@@ -1486,167 +1468,10 @@ export async function findCompletedCronRun(
     .first();
 }
 
-async function persistFetchErrors(
-  db: D1Database,
-  errors: FetchError[],
-  log?: Logger
-): Promise<void> {
-  if (errors.length === 0) return;
-  try {
-    await db.batch(
-      errors.map((err) =>
-        db
-          .prepare(
-            "INSERT INTO oq_fetch_errors (id, source_id, error_type, error_message, http_status) VALUES (?, ?, ?, ?, ?)"
-          )
-          .bind(
-            crypto.randomUUID(),
-            err.sourceId,
-            err.errorType,
-            err.message,
-            err.httpStatus ?? null
-          )
-      )
-    );
-  } catch (err) {
-    await log?.error("fetch", "persistFetchErrors DB write failed", {
-      error: err instanceof Error ? err.message : String(err),
-      errorCount: errors.length,
-    });
-  }
-}
-
 export { fetchOQArticles, generateDailyScore, extractFeedItems, stripHtml };
 
+// Crons moved to GitHub Actions (.github/workflows/oq-cron.yml).
+// The worker exposes HTTP endpoints that the workflow calls directly.
 export default {
   fetch: app.fetch,
-
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(
-      (async () => {
-        const log = createLogger(env.DB);
-
-        // Idempotency: skip if a successful cron already ran today
-        const today = new Date().toISOString().split("T")[0];
-        const existingRun = await findCompletedCronRun(env.DB, today);
-        if (existingRun) {
-          await log.info("cron", "Skipping duplicate run", { date: today });
-          return;
-        }
-
-        const runId = crypto.randomUUID();
-        const cronLog = log.child({ cronRunId: runId });
-        const startedAt = new Date().toISOString();
-        let fetchStatus = "pending";
-        let fetchArticles = 0;
-        let fetchErrors: FetchError[] = [];
-        let scoreStatus = "pending";
-        let scoreResult: unknown = null;
-        const externalStatus: Record<string, string> = {};
-        let cronError: string | undefined;
-
-        try {
-          // Daily external data fetches (same-day dedup handled by storeExternalData)
-          const externalResults = await Promise.allSettled([
-            fetchAndStoreSanityHarness(env.DB),
-            fetchAndStoreSWEBench(env.DB),
-            ...(env.FRED_API_KEY
-              ? [fetchAndStoreFRED(env.DB, env.FRED_API_KEY, cronLog)]
-              : []),
-          ]);
-
-          const externalLabels = [
-            "sanity_harness",
-            "swe_bench",
-            ...(env.FRED_API_KEY ? ["fred"] : []),
-          ];
-          externalResults.forEach((r, i) => {
-            externalStatus[externalLabels[i]] =
-              r.status === "fulfilled" ? "success" : `failed: ${r.reason}`;
-          });
-
-          for (const [source, status] of Object.entries(externalStatus)) {
-            if (status !== "success") {
-              await cronLog.warn("external", `Fetch failed: ${source}`, {
-                source,
-                status,
-              });
-            }
-          }
-
-          // Weekly data retention cleanup (Sundays)
-          const dayOfWeek = new Date().getUTCDay();
-          if (dayOfWeek === 0) {
-            await env.DB.batch([
-              env.DB.prepare(
-                "DELETE FROM oq_articles WHERE fetched_at < datetime('now', '-90 days')"
-              ),
-              env.DB.prepare(
-                "DELETE FROM oq_fetch_errors WHERE attempted_at < datetime('now', '-30 days')"
-              ),
-              env.DB.prepare(
-                "DELETE FROM oq_cron_runs WHERE started_at < datetime('now', '-90 days')"
-              ),
-              env.DB.prepare(
-                "DELETE FROM oq_logs WHERE created_at < datetime('now', '-30 days')"
-              ),
-            ]);
-          }
-
-          const fetchResult = await fetchOQArticles(env.DB);
-          fetchStatus = "success";
-          fetchArticles = fetchResult.fetched;
-          fetchErrors = fetchResult.errors;
-
-          if (fetchErrors.length > 0) {
-            for (const fe of fetchErrors) {
-              await cronLog.warn(
-                "fetch",
-                `Source ${fe.sourceId}: ${fe.message}`,
-                {
-                  sourceId: fe.sourceId,
-                  errorType: fe.errorType,
-                  httpStatus: fe.httpStatus,
-                }
-              );
-            }
-            await persistFetchErrors(env.DB, fetchErrors, cronLog);
-          }
-
-          scoreResult = await generateDailyScore(env, cronLog);
-          scoreStatus = "success";
-        } catch (err) {
-          const phase = fetchStatus === "pending" ? "fetch" : "score";
-          if (phase === "fetch") fetchStatus = "failed";
-          else scoreStatus = "failed";
-
-          cronError = err instanceof Error ? err.message : String(err);
-          await cronLog.error("cron", `Failed in ${phase} phase`, {
-            phase,
-            error: cronError,
-          });
-        } finally {
-          await logCronRun(
-            env.DB,
-            {
-              id: runId,
-              startedAt,
-              completedAt: new Date().toISOString(),
-              fetchStatus,
-              fetchArticles,
-              fetchErrors,
-              scoreStatus,
-              scoreResult,
-              externalFetchStatus:
-                Object.keys(externalStatus).length > 0
-                  ? externalStatus
-                  : undefined,
-              error: cronError,
-            },
-            cronLog
-          );
-        }
-      })()
-    );
-  },
 };
