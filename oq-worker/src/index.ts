@@ -650,6 +650,25 @@ app.post("/api/maintenance", (c) =>
   })
 );
 
+// Purge scores and linkage — allows a fresh start without losing articles
+app.post("/api/admin/purge-scores", async (c) => {
+  const log = createLogger(c.env.DB);
+  const results = await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM oq_score_articles"),
+    c.env.DB.prepare("DELETE FROM oq_model_responses"),
+    c.env.DB.prepare("DELETE FROM oq_funding_events"),
+    c.env.DB.prepare("DELETE FROM oq_scores"),
+  ]);
+  const deleted = {
+    scoreArticles: results[0].meta.changes,
+    modelResponses: results[1].meta.changes,
+    fundingEvents: results[2].meta.changes,
+    scores: results[3].meta.changes,
+  };
+  await log.info("admin", "Purged scores", deleted);
+  return c.json(deleted);
+});
+
 // Unified backfill endpoint: ?type=fred|funding|dedup-funding
 // - fred: backfill historical FRED labour data
 // - funding: insert funding events from JSON body (with dedup)
@@ -1640,15 +1659,11 @@ async function generateDailyScore(
     .map((r) => `${r.date}: ${r.score} (${r.delta > 0 ? "+" : ""}${r.delta})`)
     .join(", ");
 
-  // Only send recent articles to models — 2-day window keeps token usage low on
-  // subsequent runs while still catching anything published since the last score.
-  const TWO_DAYS_MS = 2 * 86400000;
-  const articleCutoff = new Date(Date.now() - TWO_DAYS_MS).toISOString();
+  // Score all articles not yet linked to a score — no time window.
+  // First run scores everything; subsequent runs only pick up new articles.
   const articles = await env.DB.prepare(
-    "SELECT a.id, a.title, a.url, a.source, a.pillar, a.summary FROM oq_articles a LEFT JOIN oq_score_articles sa ON a.id = sa.article_id WHERE a.published_at >= ? AND sa.article_id IS NULL ORDER BY a.published_at DESC"
-  )
-    .bind(articleCutoff)
-    .all();
+    "SELECT a.id, a.title, a.url, a.source, a.pillar, a.summary FROM oq_articles a LEFT JOIN oq_score_articles sa ON a.id = sa.article_id WHERE sa.article_id IS NULL ORDER BY a.published_at DESC"
+  ).all();
 
   const pillars: OQPillar[] = [
     "capability",
