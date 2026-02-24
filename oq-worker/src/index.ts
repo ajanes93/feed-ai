@@ -651,23 +651,24 @@ app.post("/api/maintenance", (c) =>
 );
 
 // Purge scores and linkage — allows a fresh start without losing articles
-app.post("/api/admin/purge-scores", async (c) => {
-  const log = createLogger(c.env.DB);
-  const results = await c.env.DB.batch([
-    c.env.DB.prepare("DELETE FROM oq_score_articles"),
-    c.env.DB.prepare("DELETE FROM oq_model_responses"),
-    c.env.DB.prepare("DELETE FROM oq_funding_events"),
-    c.env.DB.prepare("DELETE FROM oq_scores"),
-  ]);
-  const deleted = {
-    scoreArticles: results[0].meta.changes,
-    modelResponses: results[1].meta.changes,
-    fundingEvents: results[2].meta.changes,
-    scores: results[3].meta.changes,
-  };
-  await log.info("admin", "Purged scores", deleted);
-  return c.json(deleted);
-});
+app.post("/api/admin/purge-scores", (c) =>
+  adminHandler(c, "purge-scores", async () => {
+    const results = await c.env.DB.batch([
+      c.env.DB.prepare("DELETE FROM oq_score_articles"),
+      c.env.DB.prepare("DELETE FROM oq_model_responses"),
+      c.env.DB.prepare("DELETE FROM oq_funding_events"),
+      c.env.DB.prepare("DELETE FROM oq_ai_usage"),
+      c.env.DB.prepare("DELETE FROM oq_scores"),
+    ]);
+    return {
+      scoreArticles: results[0].meta.changes,
+      modelResponses: results[1].meta.changes,
+      fundingEvents: results[2].meta.changes,
+      aiUsage: results[3].meta.changes,
+      scores: results[4].meta.changes,
+    };
+  })
+);
 
 // Unified backfill endpoint: ?type=fred|funding|dedup-funding
 // - fred: backfill historical FRED labour data
@@ -699,7 +700,10 @@ app.post("/api/admin/backfill", async (c) => {
         }[];
       }>();
       if (!Array.isArray(body.events) || body.events.length === 0) {
-        return c.json({ error: "body must contain non-empty events array" }, 400);
+        return c.json(
+          { error: "body must contain non-empty events array" },
+          400
+        );
       }
       const result = await backfillFunding(c.env.DB, body.events, log);
       return c.json(result);
@@ -715,13 +719,9 @@ app.post("/api/admin/backfill", async (c) => {
       400
     );
   } catch (err) {
-    await log.error("external", `backfill-${type} failed`, {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return c.json(
-      { error: err instanceof Error ? err.message : String(err) },
-      500
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    await log.error("external", `backfill-${type} failed`, { error: message });
+    return c.json({ error: message }, 500);
   }
 });
 
@@ -732,16 +732,11 @@ app.post("/api/admin/backfill-fred", async (c) => {
   }
   const log = createLogger(c.env.DB);
   try {
-    const result = await backfillFRED(c.env.DB, c.env.FRED_API_KEY, log);
-    return c.json(result);
+    return c.json(await backfillFRED(c.env.DB, c.env.FRED_API_KEY, log));
   } catch (err) {
-    await log.error("external", "backfill-fred failed", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return c.json(
-      { error: err instanceof Error ? err.message : String(err) },
-      500
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    await log.error("external", "backfill-fred failed", { error: message });
+    return c.json({ error: message }, 500);
   }
 });
 
@@ -985,19 +980,7 @@ async function loadFundingSummary(
       )
       .all<FundingEventRow>();
 
-    // Deduplicate by company+amount and source_url
-    const seen = new Set<string>();
-    const seenUrls = new Set<string>();
-    const events: FundingEventRow[] = [];
-    for (const r of rows.results) {
-      const key = fundingDedupeKey(r.company, r.amount);
-      const url = r.source_url?.trim().toLowerCase() ?? "";
-      if (seen.has(key)) continue;
-      if (url && seenUrls.has(url)) continue;
-      seen.add(key);
-      if (url) seenUrls.add(url);
-      events.push(r);
-    }
+    const events = dedupFundingRows(rows.results);
     if (events.length === 0) {
       return { totalRaised: "$0", count: 0 };
     }
@@ -1069,6 +1052,26 @@ function fundingDedupeKey(company: string, amount?: string | null): string {
   return `${c}|${a}`;
 }
 
+/** Deduplicate funding rows by company+amount and source_url */
+function dedupFundingRows<
+  T extends {
+    company: string;
+    amount?: string | null;
+    source_url?: string | null;
+  },
+>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const seenUrls = new Set<string>();
+  return rows.filter((r) => {
+    const key = fundingDedupeKey(r.company, r.amount);
+    const url = r.source_url?.trim().toLowerCase() ?? "";
+    if (seen.has(key) || (url && seenUrls.has(url))) return false;
+    seen.add(key);
+    if (url) seenUrls.add(url);
+    return true;
+  });
+}
+
 async function loadRecentFundingEvents(
   db: D1Database,
   days: number,
@@ -1096,31 +1099,19 @@ async function loadRecentFundingEvents(
       .bind(cutoff, limit * 3)
       .all<FundingEventRow>();
 
-    // Deduplicate by company+amount and by source_url
-    const seen = new Set<string>();
-    const seenUrls = new Set<string>();
-    const deduped: typeof rows.results = [];
-    for (const r of rows.results) {
-      const key = fundingDedupeKey(r.company, r.amount);
-      const url = r.source_url?.trim().toLowerCase() ?? "";
-      if (seen.has(key)) continue;
-      if (url && seenUrls.has(url)) continue;
-      seen.add(key);
-      if (url) seenUrls.add(url);
-      deduped.push(r);
-    }
-
-    return deduped.slice(0, limit).map((r) => ({
-      company: r.company,
-      amount: r.amount ?? undefined,
-      round: r.round ?? undefined,
-      sourceUrl:
-        r.source_url && /^https?:\/\//.test(r.source_url)
-          ? r.source_url
-          : undefined,
-      date: r.date ?? undefined,
-      relevance: r.relevance ?? undefined,
-    }));
+    return dedupFundingRows(rows.results)
+      .slice(0, limit)
+      .map((r) => ({
+        company: r.company,
+        amount: r.amount ?? undefined,
+        round: r.round ?? undefined,
+        sourceUrl:
+          r.source_url && /^https?:\/\//.test(r.source_url)
+            ? r.source_url
+            : undefined,
+        date: r.date ?? undefined,
+        relevance: r.relevance ?? undefined,
+      }));
   } catch (err) {
     await log?.error("external", "loadRecentFundingEvents failed", {
       error: err instanceof Error ? err.message : String(err),
@@ -1318,41 +1309,43 @@ async function backfillFRED(
     existingRows.results.map((r) => (r.fetched_at as string).split("T")[0])
   );
 
-  let inserted = 0;
-  let skipped = 0;
-
   // Sort dates ascending so chart renders chronologically
-  const dates = [...byDate.keys()].sort();
-  for (const date of dates) {
-    if (existingDates.has(date)) {
-      skipped++;
-      continue;
-    }
-    const entry = byDate.get(date)!;
-    await db
-      .prepare(
-        "INSERT INTO oq_external_data_history (id, key, value, fetched_at) VALUES (?, ?, ?, ?)"
-      )
-      .bind(
-        crypto.randomUUID(),
-        "fred_labour",
-        JSON.stringify({
-          softwareIndex: entry.softwareIndex,
-          softwareDate: date,
-          generalIndex: entry.generalIndex,
-          generalDate: date,
-          fetchedAt: `${date}T12:00:00Z`,
-        }),
-        `${date}T12:00:00Z`
-      )
-      .run();
-    inserted++;
+  const toInsert = [...byDate.keys()]
+    .sort()
+    .filter((date) => !existingDates.has(date));
+
+  // Batch in chunks of 100 (D1 batch limit)
+  for (let i = 0; i < toInsert.length; i += 100) {
+    const chunk = toInsert.slice(i, i + 100);
+    await db.batch(
+      chunk.map((date) => {
+        const entry = byDate.get(date)!;
+        return db
+          .prepare(
+            "INSERT INTO oq_external_data_history (id, key, value, fetched_at) VALUES (?, ?, ?, ?)"
+          )
+          .bind(
+            crypto.randomUUID(),
+            "fred_labour",
+            JSON.stringify({
+              softwareIndex: entry.softwareIndex,
+              softwareDate: date,
+              generalIndex: entry.generalIndex,
+              generalDate: date,
+              fetchedAt: `${date}T12:00:00Z`,
+            }),
+            `${date}T12:00:00Z`
+          );
+      })
+    );
   }
 
+  const inserted = toInsert.length;
+  const skipped = byDate.size - inserted;
   await log?.info("external", "FRED backfill complete", {
     inserted,
     skipped,
-    totalDates: dates.length,
+    totalDates: byDate.size,
   });
   return { inserted, skipped };
 }
@@ -1372,7 +1365,11 @@ async function backfillFunding(
 ): Promise<{ inserted: number; skipped: number }> {
   const existing = await db
     .prepare("SELECT company, amount, source_url FROM oq_funding_events")
-    .all<{ company: string; amount: string | null; source_url: string | null }>();
+    .all<{
+      company: string;
+      amount: string | null;
+      source_url: string | null;
+    }>();
   const existingKeys = new Set(
     existing.results.map((r) => fundingDedupeKey(r.company, r.amount))
   );
@@ -1382,22 +1379,12 @@ async function backfillFunding(
       .filter(Boolean)
   );
 
-  let inserted = 0;
-  let skipped = 0;
   const toInsert = events.filter((fe) => {
     const key = fundingDedupeKey(fe.company, fe.amount);
     const url = fe.source_url?.trim().toLowerCase() ?? "";
-    if (existingKeys.has(key)) {
-      skipped++;
-      return false;
-    }
-    if (url && existingUrls.has(url)) {
-      skipped++;
-      return false;
-    }
+    if (existingKeys.has(key) || (url && existingUrls.has(url))) return false;
     existingKeys.add(key);
     if (url) existingUrls.add(url);
-    inserted++;
     return true;
   });
 
@@ -1422,7 +1409,12 @@ async function backfillFunding(
     );
   }
 
-  await log?.info("external", "Funding backfill complete", { inserted, skipped });
+  const inserted = toInsert.length;
+  const skipped = events.length - inserted;
+  await log?.info("external", "Funding backfill complete", {
+    inserted,
+    skipped,
+  });
   return { inserted, skipped };
 }
 
@@ -1441,23 +1433,12 @@ async function dedupFundingEvents(
       source_url: string | null;
     }>();
 
-  const seen = new Set<string>();
-  const seenUrls = new Set<string>();
-  const toDelete: string[] = [];
-
-  for (const r of rows.results) {
-    const key = fundingDedupeKey(r.company, r.amount);
-    const url = r.source_url?.trim().toLowerCase() ?? "";
-    if (seen.has(key) || (url && seenUrls.has(url))) {
-      toDelete.push(r.id);
-    } else {
-      seen.add(key);
-      if (url) seenUrls.add(url);
-    }
-  }
+  const keepIds = new Set(dedupFundingRows(rows.results).map((r) => r.id));
+  const toDelete = rows.results
+    .filter((r) => !keepIds.has(r.id))
+    .map((r) => r.id);
 
   if (toDelete.length > 0) {
-    // D1 batch limit is 100 statements
     for (let i = 0; i < toDelete.length; i += 100) {
       const chunk = toDelete.slice(i, i + 100);
       await db.batch(
@@ -1470,12 +1451,9 @@ async function dedupFundingEvents(
 
   await log?.info("external", "Funding dedup complete", {
     deleted: toDelete.length,
-    remaining: rows.results.length - toDelete.length,
+    remaining: keepIds.size,
   });
-  return {
-    deleted: toDelete.length,
-    remaining: rows.results.length - toDelete.length,
-  };
+  return { deleted: toDelete.length, remaining: keepIds.size };
 }
 
 // --- Article fetching ---
@@ -1896,22 +1874,20 @@ async function generateDailyScore(
         // Check existing events to avoid cross-run duplicates
         const existing = await env.DB.prepare(
           "SELECT company, amount, source_url FROM oq_funding_events"
-        ).all<{ company: string; amount: string | null; source_url: string | null }>();
+        ).all<{
+          company: string;
+          amount: string | null;
+          source_url: string | null;
+        }>();
         const existingKeys = new Set(
-          existing.results.map((r) => fundingDedupeKey(r.company, r.amount))
-        );
-        const existingUrls = new Set(
-          existing.results
-            .map((r) => r.source_url?.trim().toLowerCase())
-            .filter(Boolean)
+          dedupFundingRows(existing.results).map((r) =>
+            fundingDedupeKey(r.company, r.amount)
+          )
         );
         const toInsert = result.fundingEvents.filter((fe) => {
           const key = fundingDedupeKey(fe.company, fe.amount);
-          const url = fe.source_url?.trim().toLowerCase() ?? "";
           if (existingKeys.has(key)) return false;
-          if (url && existingUrls.has(url)) return false;
           existingKeys.add(key);
-          if (url) existingUrls.add(url);
           return true;
         });
         if (toInsert.length === 0) return;

@@ -602,7 +602,6 @@ export async function runScoring(
   const techDelta = dampen(avg((s) => s.technical_delta));
   const econDelta = dampen(avg((s) => s.economic_delta));
 
-  // Store as float — round only for display in the UI
   const clampScore = (prev: number, delta: number) =>
     Math.round(Math.max(5, Math.min(95, prev + delta)) * 10) / 10;
 
