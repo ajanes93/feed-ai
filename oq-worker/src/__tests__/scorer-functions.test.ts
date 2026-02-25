@@ -360,6 +360,26 @@ describe("synthesizeAnalysis", () => {
     expect(result).toContain("GPT-5.3 Codex");
     expect(result).toContain("46%");
   });
+
+  it("does not truncate at e.g. or i.e. abbreviations when disagreeing", () => {
+    const scores = [
+      oqModelScoreFactory.build({
+        model: "claude-sonnet",
+        suggested_delta: 1,
+        analysis:
+          "Some tools (e.g. Claude) are showing strong adoption across enterprises.",
+      }),
+      oqModelScoreFactory.build({
+        model: "gpt-4o",
+        suggested_delta: -1,
+        analysis:
+          "The U.S. market shows caution despite high benchmark scores.",
+      }),
+    ];
+    const result = synthesizeAnalysis(scores, "disagree");
+    expect(result).toContain("e.g. Claude");
+    expect(result).toContain("U.S. market");
+  });
 });
 
 describe("calculateConsensusDelta", () => {

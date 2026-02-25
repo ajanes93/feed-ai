@@ -7,6 +7,7 @@ import {
 } from "@feed-ai/shared/components/ui/collapsible";
 import { ExternalLink, ChevronDown } from "lucide-vue-next";
 import OQExplainer from "./OQExplainer.vue";
+import OQFundingList from "./OQFundingList.vue";
 
 const props = defineProps<{
   softwareIndex?: number;
@@ -51,15 +52,6 @@ const hasDivergence = computed(() => {
 });
 
 const isOpen = ref(false);
-const showAllFunding = ref(false);
-
-const visibleFunding = computed(() => {
-  if (!props.fundingEvents) return [];
-  if (showAllFunding.value) return props.fundingEvents;
-  return props.fundingEvents.slice(0, 3);
-});
-
-const hasMoreFunding = computed(() => (props.fundingEvents?.length ?? 0) > 3);
 </script>
 
 <template>
@@ -277,54 +269,10 @@ const hasMoreFunding = computed(() => (props.fundingEvents?.length ?? 0) > 3);
             >
               Recent AI Funding
             </p>
-            <div
+            <OQFundingList
               v-if="fundingEvents && fundingEvents.length > 0"
-              class="space-y-2"
-            >
-              <div
-                v-for="(event, i) in visibleFunding"
-                :key="i"
-                class="flex flex-wrap items-center gap-1.5"
-                data-testid="funding-event"
-              >
-                <span class="font-medium text-foreground/80">{{
-                  event.company
-                }}</span>
-                <span
-                  v-if="event.amount"
-                  class="rounded-md bg-orange-500/10 px-1.5 py-0.5 font-mono text-[10px] text-orange-400"
-                  >{{ event.amount }}</span
-                >
-                <span v-if="event.round" class="text-muted-foreground/60">{{
-                  event.round
-                }}</span>
-                <span
-                  v-if="event.relevance"
-                  class="rounded-full bg-secondary px-1.5 py-0.5 text-[9px] text-muted-foreground/50"
-                  >{{ event.relevance }}</span
-                >
-                <a
-                  v-if="event.sourceUrl"
-                  :href="event.sourceUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="inline-flex items-center text-muted-foreground/40 transition-colors hover:text-orange-500/60"
-                >
-                  <ExternalLink class="h-2.5 w-2.5" />
-                </a>
-              </div>
-              <button
-                v-if="hasMoreFunding"
-                class="mt-1 cursor-pointer text-[10px] text-muted-foreground/50 transition-colors hover:text-orange-500/60"
-                @click="showAllFunding = !showAllFunding"
-              >
-                {{
-                  showAllFunding
-                    ? "Show less"
-                    : `Show all ${fundingEvents!.length} events`
-                }}
-              </button>
-            </div>
+              :events="fundingEvents"
+            />
             <p v-else class="text-muted-foreground/50">
               No recent funding events tracked.
             </p>

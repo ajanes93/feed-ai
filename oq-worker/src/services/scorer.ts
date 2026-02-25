@@ -308,9 +308,9 @@ function deltaVerb(delta: number): string {
 
 function firstSentence(text: string): string {
   // Match sentence-ending punctuation, but skip decimal numbers (e.g. GPT-5.3, 46.2%)
-  // and common abbreviations (e.g. vs., etc., Dr.)
+  // and common abbreviations (vs., etc., Dr., e.g., i.e., U.S., No., Fig.)
   const match = text.match(
-    /^.+?(?<!\d)(?<!\bvs)(?<!\betc)(?<!\bDr)[.!?](?:\s|$)/
+    /^.+?(?<!\d)(?<!\bvs)(?<!\betc)(?<!\bDr)(?<!\be\.g)(?<!\bi\.e)(?<!\bU\.S)(?<!\bNo)(?<!\bFig)[.!?](?:\s|$)/
   );
   if (match) return match[0].trim();
   return text.length > 200 ? text.slice(0, 200) + "..." : text;
