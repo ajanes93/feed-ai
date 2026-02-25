@@ -7,6 +7,8 @@ import {
 } from "@feed-ai/shared/components/ui/collapsible";
 import { ExternalLink, ChevronDown } from "lucide-vue-next";
 import OQExplainer from "./OQExplainer.vue";
+import OQFundingList from "./OQFundingList.vue";
+import type { OQFundingEvent } from "@feed-ai/shared/oq-types";
 
 const props = defineProps<{
   softwareIndex?: number;
@@ -20,14 +22,7 @@ const props = defineProps<{
   totalRaised?: string;
   fundingCount?: number;
   topRound?: { company: string; amount: string; round?: string };
-  fundingEvents?: {
-    company: string;
-    amount?: string;
-    round?: string;
-    sourceUrl?: string;
-    date?: string;
-    relevance?: string;
-  }[];
+  fundingEvents?: OQFundingEvent[];
 }>();
 
 function formatDelta(delta: number | undefined): string {
@@ -268,43 +263,10 @@ const isOpen = ref(false);
             >
               Recent AI Funding
             </p>
-            <div
+            <OQFundingList
               v-if="fundingEvents && fundingEvents.length > 0"
-              class="space-y-2"
-            >
-              <div
-                v-for="(event, i) in fundingEvents"
-                :key="i"
-                class="flex flex-wrap items-center gap-1.5"
-                data-testid="funding-event"
-              >
-                <span class="font-medium text-foreground/80">{{
-                  event.company
-                }}</span>
-                <span
-                  v-if="event.amount"
-                  class="rounded-md bg-orange-500/10 px-1.5 py-0.5 font-mono text-[10px] text-orange-400"
-                  >{{ event.amount }}</span
-                >
-                <span v-if="event.round" class="text-muted-foreground/60">{{
-                  event.round
-                }}</span>
-                <span
-                  v-if="event.relevance"
-                  class="rounded-full bg-secondary px-1.5 py-0.5 text-[9px] text-muted-foreground/50"
-                  >{{ event.relevance }}</span
-                >
-                <a
-                  v-if="event.sourceUrl"
-                  :href="event.sourceUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="inline-flex items-center text-muted-foreground/40 transition-colors hover:text-orange-500/60"
-                >
-                  <ExternalLink class="h-2.5 w-2.5" />
-                </a>
-              </div>
-            </div>
+              :events="fundingEvents"
+            />
             <p v-else class="text-muted-foreground/50">
               No recent funding events tracked.
             </p>

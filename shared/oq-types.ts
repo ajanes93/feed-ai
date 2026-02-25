@@ -42,6 +42,15 @@ export interface OQModelScore {
   labour_note?: string;
 }
 
+export interface OQFundingEvent {
+  company: string;
+  amount?: string;
+  round?: string;
+  sourceUrl?: string;
+  date?: string;
+  relevance?: string;
+}
+
 export interface OQHistoryEntry {
   date: string;
   score: number;

@@ -303,19 +303,26 @@ describe("synthesizeAnalysis", () => {
     expect(synthesizeAnalysis(scores, "agree")).toBe("Solo analysis");
   });
 
-  it("joins analyses with model labels when models disagree", () => {
+  it("includes full analyses with model labels when models disagree", () => {
     const scores = [
       oqModelScoreFactory.build({
         model: "claude-sonnet",
-        analysis: "Claude thinks X",
+        suggested_delta: 1,
+        analysis:
+          "Claude thinks X. This is a longer take with multiple sentences.",
       }),
-      oqModelScoreFactory.build({ model: "gpt-4o", analysis: "GPT thinks Y" }),
+      oqModelScoreFactory.build({
+        model: "gpt-4o",
+        suggested_delta: -1,
+        analysis: "GPT thinks Y. It also has more detail here.",
+      }),
     ];
     const result = synthesizeAnalysis(scores, "disagree");
-    expect(result).toContain("Claude");
-    expect(result).toContain("GPT-4");
-    expect(result).toContain("held steady");
-    expect(result).toContain("citing:");
+    expect(result).toContain("Claude (+1):");
+    expect(result).toContain("GPT-4 (-1):");
+    // Full analyses are included, not truncated to first sentence
+    expect(result).toContain("multiple sentences");
+    expect(result).toContain("more detail here");
   });
 
   it("uses Claude analysis when models agree", () => {

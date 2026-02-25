@@ -246,7 +246,7 @@ app.get("/api/today", async (c) => {
   }
 
   const log = createLogger(c.env.DB);
-  const fundingEvents = await loadRecentFundingEvents(c.env.DB, 7, 5, log);
+  const fundingEvents = await loadRecentFundingEvents(c.env.DB, 30, 20, log);
   return c.json({ ...mapScoreRow(row), fundingEvents });
 });
 
@@ -303,12 +303,16 @@ app.get("/api/score/:date", async (c) => {
     .bind(row.id)
     .all();
 
-  // Strip internal fields before returning
+  // Strip internal ID; externalData is intentionally public for the data snapshot UI
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { id: _id, externalData: _ext, ...publicScore } = scoreData;
+  const { id: _id, ...publicScore } = scoreData;
+
+  const log = createLogger(c.env.DB);
+  const fundingEvents = await loadRecentFundingEvents(c.env.DB, 365, 100, log);
 
   return c.json({
     ...publicScore,
+    fundingEvents,
     articles: articleRows.results
       .filter((a) => /^https?:\/\//.test(String(a.url ?? "")))
       .map((a) => ({
@@ -2068,7 +2072,10 @@ Return ONLY bullet points, one per line, starting with "- ".`;
   }
 
   // Load external data for prompt context
-  const externalData = await loadExternalData(env.DB, log);
+  const [externalData, fundingSummary] = await Promise.all([
+    loadExternalData(env.DB, log),
+    loadFundingSummary(env.DB, log),
+  ]);
 
   // Track data quality — flag missing external data sources
   const qualityFlags: string[] = [];
@@ -2109,6 +2116,7 @@ Return ONLY bullet points, one per line, starting with "- ".`;
     generalIndex: externalData.generalIndex,
     generalDate: externalData.generalDate,
     generalTrend: externalData.generalTrend,
+    fundingSummary,
     log,
   });
 

@@ -300,18 +300,6 @@ function formatModelName(model: string): string {
   return model.split("-")[0];
 }
 
-function deltaVerb(delta: number): string {
-  if (delta > 0.5) return "upgraded the score";
-  if (delta < -0.5) return "downgraded the score";
-  return "held steady";
-}
-
-function firstSentence(text: string): string {
-  const match = text.match(/^[^.!?]+[.!?]/);
-  if (match) return match[0].trim();
-  return text.length > 120 ? text.slice(0, 120) + "..." : text;
-}
-
 function synthesizeAnalysis(
   scores: OQModelScore[],
   agreement: OQModelAgreement
@@ -322,9 +310,9 @@ function synthesizeAnalysis(
     return scores
       .map((s) => {
         const sign = s.suggested_delta > 0 ? "+" : "";
-        return `${formatModelName(s.model)} ${deltaVerb(s.suggested_delta)} (${sign}${s.suggested_delta}), citing: ${firstSentence(s.analysis)}`;
+        return `${formatModelName(s.model)} (${sign}${s.suggested_delta}): ${s.analysis}`;
       })
-      .join(" ");
+      .join("\n\n");
   }
 
   const claude = scores.find((s) => s.model.includes("claude"));
@@ -421,6 +409,11 @@ interface ScoringInput {
   generalIndex?: number;
   generalDate?: string;
   generalTrend?: FREDSeriesTrend;
+  fundingSummary?: {
+    totalRaised: string;
+    count: number;
+    topRound?: { company: string; amount: string; round?: string };
+  };
   log?: ScorerLogger;
 }
 
@@ -498,6 +491,7 @@ export async function runScoring(
     generalIndex: input.generalIndex,
     generalDate: input.generalDate,
     generalTrend: input.generalTrend,
+    fundingSummary: input.fundingSummary,
   });
 
   const promptHash = await hashPrompt(prompt);

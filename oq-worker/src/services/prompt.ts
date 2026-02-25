@@ -20,6 +20,12 @@ interface SWEBenchContext {
   topProPrivateModel?: string;
 }
 
+interface FundingContext {
+  totalRaised: string;
+  count: number;
+  topRound?: { company: string; amount: string; round?: string };
+}
+
 interface PromptContext {
   currentScore: number;
   technicalScore: number;
@@ -34,6 +40,7 @@ interface PromptContext {
   generalIndex?: number;
   generalDate?: string;
   generalTrend?: FREDSeriesTrend;
+  fundingSummary?: FundingContext;
 }
 
 function formatTrend(trend: FREDSeriesTrend): string {
@@ -100,6 +107,12 @@ ${ctx.articlesByPillar.sentiment || "No articles today."}
 
 ## Industry & Economic Signals (weight: 20%)
 Note: Weight actual headcount data and measurable outcomes higher than CEO hype and VC announcements.
+${
+  ctx.fundingSummary && ctx.fundingSummary.totalRaised !== "$0"
+    ? `Recent AI Funding: ${ctx.fundingSummary.totalRaised} across ${ctx.fundingSummary.count} round(s)${ctx.fundingSummary.topRound ? ` (top: ${ctx.fundingSummary.topRound.company} ${ctx.fundingSummary.topRound.amount})` : ""}.
+`
+    : ""
+}Peer-reviewed research (CEPR/BIS/EIB, Feb 2026): Study of 12,000+ European firms found AI adoption led to +4% productivity, zero job losses, and 5.9x training ROI. AI increased output without reducing headcount — evidence of augmentation, not displacement. Source: https://cepr.org/publications/dp19956
 ${ctx.articlesByPillar.industry || "No articles today."}
 
 ## Structural Barriers (weight: 10%)
