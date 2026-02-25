@@ -5,7 +5,6 @@ import type {
   OQPillarScores,
   OQSignal,
   OQModelAgreement,
-  OQFundingEvent,
 } from "@feed-ai/shared/oq-types";
 import { buildScoringPrompt, hashPrompt } from "./prompt";
 import type { AIUsageEntry } from "@feed-ai/shared/types";
@@ -213,28 +212,6 @@ function parseModelResponse(text: string, model: string): OQModelScore {
       typeof parsed.labour_note === "string"
         ? parsed.labour_note.slice(0, 300)
         : undefined,
-    funding_events: Array.isArray(parsed.funding_events)
-      ? parsed.funding_events
-          .filter(
-            (e: Record<string, unknown>) =>
-              typeof e.company === "string" && e.company.length > 0
-          )
-          .map((e: Record<string, unknown>) => ({
-            company: e.company as string,
-            amount: typeof e.amount === "string" ? e.amount : undefined,
-            round: typeof e.round === "string" ? e.round : undefined,
-            valuation:
-              typeof e.valuation === "string" ? e.valuation : undefined,
-            source_url:
-              typeof e.source_url === "string" &&
-              /^https?:\/\//.test(e.source_url)
-                ? e.source_url
-                : undefined,
-            date: typeof e.date === "string" ? e.date : undefined,
-            relevance:
-              typeof e.relevance === "string" ? e.relevance : undefined,
-          }))
-      : undefined,
   };
 }
 
@@ -392,7 +369,6 @@ export interface OQScoringResult {
   sanityHarnessNote?: string;
   economicNote?: string;
   labourNote?: string;
-  fundingEvents: OQFundingEvent[];
   promptHash: string;
   promptText: string;
   aiUsages: AIUsageEntry[];
@@ -629,19 +605,6 @@ export async function runScoring(
   const economicNote = preferClaude("economic_note");
   const labourNote = preferClaude("labour_note");
 
-  // Merge and deduplicate funding events from all models
-  const fundingEvents: OQFundingEvent[] = [];
-  const seenCompanies = new Set<string>();
-  for (const s of scores) {
-    for (const fe of s.funding_events ?? []) {
-      const key = `${fe.company}-${fe.amount ?? ""}`.toLowerCase();
-      if (!seenCompanies.has(key)) {
-        seenCompanies.add(key);
-        fundingEvents.push(fe);
-      }
-    }
-  }
-
   const deltaExplanation = preferClaude("delta_explanation");
 
   return {
@@ -661,7 +624,6 @@ export async function runScoring(
     sanityHarnessNote: sanityHarnessNote || undefined,
     economicNote: economicNote || undefined,
     labourNote: labourNote || undefined,
-    fundingEvents,
     promptHash,
     promptText: prompt,
     aiUsages,

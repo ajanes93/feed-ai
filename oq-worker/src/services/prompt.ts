@@ -131,18 +131,7 @@ Provide your assessment as JSON:
   "capability_gap_note": "<optional: note if SWE-bench Verified, Bash Only, or Pro changed today>",
   "sanity_harness_note": "<optional: one-sentence interpretation of today's SanityHarness agent benchmark data — language spread, top agent performance, what it means for replacement>",
   "economic_note": "<optional: one-sentence interpretation of today's economic signals — Indeed index trend, funding activity, hiring/layoff patterns>",
-  "labour_note": "<optional: one sentence about software vs. general job posting divergence — only include if the data shows meaningful divergence>",
-  "funding_events": [
-    {
-      "company": "<company name>",
-      "amount": "<e.g. $30B>",
-      "round": "<e.g. Series G>",
-      "valuation": "<if mentioned>",
-      "source_url": "<article URL>",
-      "date": "<YYYY-MM-DD if available>",
-      "relevance": "<AI lab funding | AI code tool | AI infrastructure>"
-    }
-  ]
+  "labour_note": "<optional: one sentence about software vs. general job posting divergence — only include if the data shows meaningful divergence>"
 }
 
 IMPORTANT: Return 3-5 top_signals. Fewer than 3 looks broken. Include a mix of up/down/neutral directions.

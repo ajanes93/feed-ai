@@ -148,6 +148,11 @@ describe("buildScoringPrompt", () => {
     expect(prompt).toContain("at least 2 specific articles");
   });
 
+  it("does not include funding_events in JSON schema (extracted separately)", () => {
+    const prompt = buildScoringPrompt(defaultContext);
+    expect(prompt).not.toContain("funding_events");
+  });
+
   it("includes SanityHarness data when provided", () => {
     const prompt = buildScoringPrompt({
       ...defaultContext,

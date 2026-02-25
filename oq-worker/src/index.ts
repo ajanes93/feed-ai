@@ -26,6 +26,10 @@ const DECAY_TARGET = 40;
 const DECAY_THRESHOLD_DAYS = 7;
 const DECAY_RATE = 0.1;
 
+const SCANNED_SENTINEL = "__scanned__";
+const DIRECT_CAP = 20; // Max articles per pillar before triggering pre-digest
+const PRE_DIGEST_BATCH = 150; // Articles per Gemini pre-digest call
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.use("/*", cors());
@@ -450,6 +454,23 @@ app.get("/api/methodology", async (c) => {
     lastUpdated: externalData.lastUpdated ?? {},
     deltas,
     fundingSummary,
+    dataProcessing: {
+      preDigest: {
+        description:
+          "When more than 20 articles exist per pillar, a map-reduce pre-digest runs before scoring. Gemini Flash summarizes articles in batches of 150 into 8-12 bullet points per batch, then the condensed summaries are fed into the multi-model scoring prompt. This ensures all articles contribute to the score, not just the most recent 20.",
+        trigger: "More than 20 unscored articles in any pillar",
+        model: FUNDING_MODEL_PRIMARY,
+        batchSize: PRE_DIGEST_BATCH,
+        directCap: DIRECT_CAP,
+      },
+      fundingExtraction: {
+        description:
+          "Funding events are extracted from articles by a separate AI process (not the scoring prompt). All articles are scanned in batches, and extracted events are deduplicated by company+amount. This runs independently of scoring to ensure complete funding data regardless of when articles were fetched.",
+        model: `${FUNDING_MODEL_PRIMARY} (primary), ${FUNDING_MODEL_FALLBACK} (fallback)`,
+        batchSize: FUNDING_EXTRACT_BATCH_SIZE,
+        deduplication: "company+amount key",
+      },
+    },
     whatWouldChange: {
       to50: [
         "SWE-bench Verified consistently above 90% with diverse agents",
@@ -650,7 +671,8 @@ app.post("/api/maintenance", (c) =>
   })
 );
 
-// Purge scores and linkage — allows a fresh start without losing articles
+// Purge scores, linkage, and funding data — allows a fresh start without losing articles
+// Also clears funding sentinels so extract-funding can re-scan all articles
 app.post("/api/admin/purge-scores", (c) =>
   adminHandler(c, "purge-scores", async () => {
     const results = await c.env.DB.batch([
@@ -670,9 +692,8 @@ app.post("/api/admin/purge-scores", (c) =>
   })
 );
 
-// Unified backfill endpoint: ?type=fred|funding|dedup-funding
+// Unified backfill endpoint: ?type=fred|dedup-funding
 // - fred: backfill historical FRED labour data
-// - funding: insert funding events from JSON body (with dedup)
 // - dedup-funding: remove duplicate rows from oq_funding_events
 app.post("/api/admin/backfill", async (c) => {
   const type = c.req.query("type");
@@ -687,43 +708,25 @@ app.post("/api/admin/backfill", async (c) => {
       return c.json(result);
     }
 
-    if (type === "funding") {
-      const body = await c.req.json<{
-        events: {
-          company: string;
-          amount?: string;
-          round?: string;
-          valuation?: string;
-          source_url?: string;
-          date?: string;
-          relevance?: string;
-        }[];
-      }>();
-      if (!Array.isArray(body.events) || body.events.length === 0) {
-        return c.json(
-          { error: "body must contain non-empty events array" },
-          400
-        );
-      }
-      const result = await backfillFunding(c.env.DB, body.events, log);
-      return c.json(result);
-    }
-
     if (type === "dedup-funding") {
       const result = await dedupFundingEvents(c.env.DB, log);
       return c.json(result);
     }
 
-    return c.json(
-      { error: "type param required: fred | funding | dedup-funding" },
-      400
-    );
+    return c.json({ error: "type param required: fred | dedup-funding" }, 400);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await log.error("external", `backfill-${type} failed`, { error: message });
     return c.json({ error: message }, 500);
   }
 });
+
+// Extract funding events from all articles using AI (Gemini primary, OpenAI fallback)
+app.post("/api/admin/extract-funding", (c) =>
+  adminHandler(c, "extract-funding", (log) =>
+    extractFundingFromArticles(c.env, log)
+  )
+);
 
 // Keep old endpoint as alias for backwards compatibility
 app.post("/api/admin/backfill-fred", async (c) => {
@@ -976,8 +979,9 @@ async function loadFundingSummary(
   try {
     const rows = await db
       .prepare(
-        "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events ORDER BY date DESC LIMIT 200"
+        "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events WHERE company != ? ORDER BY date DESC"
       )
+      .bind(SCANNED_SENTINEL)
       .all<FundingEventRow>();
 
     const events = dedupFundingRows(rows.results);
@@ -1017,17 +1021,21 @@ async function loadFundingSummary(
   }
 }
 
-/** Parse "$2.1B", "$400M", "$50m" etc. into millions */
-function parseAmount(amount: string | null | undefined): number {
+/** Parse "$2.1B", "$500M" etc. into millions (USD only).
+ *  Bare numbers >1000 without a unit are treated as raw dollars (e.g. "$500,000" → 0.5M). */
+export function parseAmount(amount: string | null | undefined): number {
   if (!amount) return 0;
-  const match = amount.match(/^\$?([\d.]+)\s*([BMKbmk])?/);
+  const match = amount.replace(/,/g, "").match(/^\$?\s*([\d.]+)\s*([BMKbmk])?/);
   if (!match) return 0;
   const num = parseFloat(match[1]);
   if (isNaN(num)) return 0;
   const unit = (match[2] ?? "").toUpperCase();
   if (unit === "B") return num * 1000;
+  if (unit === "M") return num;
   if (unit === "K") return num / 1000;
-  return num; // default: millions
+  // No unit: if num > 1000, assume raw dollars (e.g. "$500,000" → 0.5M)
+  if (num > 1000) return num / 1_000_000;
+  return num; // small numbers without unit assumed to be millions
 }
 
 function formatTotalRaised(millions: number): string {
@@ -1042,7 +1050,10 @@ function formatTotalRaised(millions: number): string {
 }
 
 /** Normalise a company+amount pair into a dedup key */
-function fundingDedupeKey(company: string, amount?: string | null): string {
+export function fundingDedupeKey(
+  company: string,
+  amount?: string | null
+): string {
   const c = company.trim().toLowerCase();
   // Normalise amount: strip "up to ", whitespace, lowercase
   const a = (amount ?? "")
@@ -1052,7 +1063,10 @@ function fundingDedupeKey(company: string, amount?: string | null): string {
   return `${c}|${a}`;
 }
 
-/** Deduplicate funding rows by company+amount and source_url */
+/** Deduplicate funding rows by company+amount key. URL is only used as a
+ *  secondary check within the same key (same article covering one round
+ *  reported by multiple sources). Different companies from the same article
+ *  are preserved. */
 function dedupFundingRows<
   T extends {
     company: string;
@@ -1061,13 +1075,10 @@ function dedupFundingRows<
   },
 >(rows: T[]): T[] {
   const seen = new Set<string>();
-  const seenUrls = new Set<string>();
   return rows.filter((r) => {
     const key = fundingDedupeKey(r.company, r.amount);
-    const url = r.source_url?.trim().toLowerCase() ?? "";
-    if (seen.has(key) || (url && seenUrls.has(url))) return false;
+    if (seen.has(key)) return false;
     seen.add(key);
-    if (url) seenUrls.add(url);
     return true;
   });
 }
@@ -1094,9 +1105,9 @@ async function loadRecentFundingEvents(
     // Fetch more than needed so dedup still yields enough results
     const rows = await db
       .prepare(
-        "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events WHERE date >= ? ORDER BY date DESC LIMIT ?"
+        "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events WHERE company != ? AND date >= ? ORDER BY date DESC LIMIT ?"
       )
-      .bind(cutoff, limit * 3)
+      .bind(SCANNED_SENTINEL, cutoff, limit * 3)
       .all<FundingEventRow>();
 
     return dedupFundingRows(rows.results)
@@ -1350,21 +1361,128 @@ async function backfillFRED(
   return { inserted, skipped };
 }
 
-async function backfillFunding(
-  db: D1Database,
-  events: {
-    company: string;
-    amount?: string;
-    round?: string;
-    valuation?: string;
-    source_url?: string;
-    date?: string;
-    relevance?: string;
-  }[],
-  log?: Logger
-): Promise<{ inserted: number; skipped: number }> {
-  const existing = await db
-    .prepare("SELECT company, amount, source_url FROM oq_funding_events")
+// --- AI-powered funding extraction from articles ---
+
+const FUNDING_EXTRACT_BATCH_SIZE = 80;
+const FUNDING_MODEL_PRIMARY = "gemini-2.0-flash";
+const FUNDING_MODEL_FALLBACK = "gpt-4o";
+
+function buildFundingPrompt(articles: string): string {
+  return `Extract ALL AI-related funding/investment events from these articles. Only include events with a specific company name and dollar amount.
+
+Return JSON: { "events": [{ "company": "Name", "amount": "$XB", "round": "Series X", "valuation": "$XB", "source_url": "https://...", "date": "YYYY-MM-DD", "relevance": "AI lab funding | AI code tool | AI infrastructure" }] }
+
+If no funding events found, return { "events": [] }. Return ONLY the JSON object.
+
+Articles:
+${articles}`;
+}
+
+async function callGeminiText(
+  prompt: string,
+  apiKey: string,
+  opts?: { json?: boolean; maxTokens?: number }
+): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
+  const genConfig: Record<string, unknown> = {
+    temperature: 0.1,
+    maxOutputTokens: opts?.maxTokens ?? 4096,
+  };
+  if (opts?.json) genConfig.responseMimeType = "application/json";
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${FUNDING_MODEL_PRIMARY}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: genConfig,
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Gemini error: ${body.slice(0, 200)}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "{}";
+  return {
+    text,
+    inputTokens: data?.usageMetadata?.promptTokenCount,
+    outputTokens: data?.usageMetadata?.candidatesTokenCount,
+  };
+}
+
+async function callOpenAIFunding(
+  articles: string,
+  apiKey: string
+): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: FUNDING_MODEL_FALLBACK,
+      temperature: 0.1,
+      max_tokens: 4096,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: buildFundingPrompt(articles) }],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`OpenAI error: ${body.slice(0, 200)}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any = await res.json();
+  const text = data?.choices?.[0]?.message?.content?.trim() ?? "{}";
+  return {
+    text,
+    inputTokens: data?.usage?.prompt_tokens,
+    outputTokens: data?.usage?.completion_tokens,
+  };
+}
+
+async function extractFundingFromArticles(
+  env: Env,
+  log: Logger
+): Promise<{
+  extracted: number;
+  articlesScanned: number;
+  batches: number;
+  skippedDupes: number;
+}> {
+  // Find articles not yet scanned for funding (no row in oq_funding_events with their ID)
+  // Limit to 800 per call (10 batches of 80) — call repeatedly to process all articles
+  const EXTRACT_LIMIT = FUNDING_EXTRACT_BATCH_SIZE * 10;
+  const articles = await env.DB.prepare(
+    `SELECT a.id, a.title, a.url, a.source, a.summary, a.published_at
+     FROM oq_articles a
+     LEFT JOIN oq_funding_events fe
+       ON fe.extracted_from_article_id = a.id
+     WHERE fe.id IS NULL
+     ORDER BY a.published_at DESC
+     LIMIT ?`
+  )
+    .bind(EXTRACT_LIMIT)
+    .all();
+
+  if (articles.results.length === 0) {
+    return { extracted: 0, articlesScanned: 0, batches: 0, skippedDupes: 0 };
+  }
+
+  // Load existing funding keys for dedup
+  const existing = await env.DB.prepare(
+    "SELECT company, amount, source_url FROM oq_funding_events WHERE company != ?"
+  )
+    .bind(SCANNED_SENTINEL)
     .all<{
       company: string;
       amount: string | null;
@@ -1373,49 +1491,167 @@ async function backfillFunding(
   const existingKeys = new Set(
     existing.results.map((r) => fundingDedupeKey(r.company, r.amount))
   );
-  const existingUrls = new Set(
-    existing.results
-      .map((r) => r.source_url?.trim().toLowerCase())
-      .filter(Boolean)
+
+  let totalExtracted = 0;
+  let totalSkipped = 0;
+  const totalBatches = Math.ceil(
+    articles.results.length / FUNDING_EXTRACT_BATCH_SIZE
   );
 
-  const toInsert = events.filter((fe) => {
-    const key = fundingDedupeKey(fe.company, fe.amount);
-    const url = fe.source_url?.trim().toLowerCase() ?? "";
-    if (existingKeys.has(key) || (url && existingUrls.has(url))) return false;
-    existingKeys.add(key);
-    if (url) existingUrls.add(url);
-    return true;
-  });
+  // Process in batches
+  for (
+    let i = 0;
+    i < articles.results.length;
+    i += FUNDING_EXTRACT_BATCH_SIZE
+  ) {
+    const batchNum = i / FUNDING_EXTRACT_BATCH_SIZE + 1;
+    const batch = articles.results.slice(i, i + FUNDING_EXTRACT_BATCH_SIZE);
 
-  if (toInsert.length > 0) {
-    await db.batch(
-      toInsert.map((fe) =>
-        db
-          .prepare(
-            "INSERT INTO oq_funding_events (id, company, amount, round, valuation, source_url, date, relevance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-          )
-          .bind(
-            crypto.randomUUID(),
-            fe.company,
-            fe.amount ?? null,
-            fe.round ?? null,
-            fe.valuation ?? null,
-            fe.source_url ?? null,
-            fe.date ?? null,
-            fe.relevance ?? null
-          )
-      )
+    const articleText = batch.map(formatArticleLine).join("\n");
+
+    // Call Gemini, fall back to OpenAI
+    let responseText: string;
+    let inputTokens: number | undefined;
+    let outputTokens: number | undefined;
+    let provider = "gemini";
+    let model = FUNDING_MODEL_PRIMARY;
+    let wasFallback = false;
+
+    try {
+      if (!env.GEMINI_API_KEY) throw new Error("No GEMINI_API_KEY");
+      const r = await callGeminiText(
+        buildFundingPrompt(articleText),
+        env.GEMINI_API_KEY,
+        { json: true }
+      );
+      responseText = r.text;
+      inputTokens = r.inputTokens;
+      outputTokens = r.outputTokens;
+    } catch (geminiErr) {
+      await log.warn("extract-funding", `Gemini failed batch ${batchNum}`, {
+        error:
+          geminiErr instanceof Error ? geminiErr.message : String(geminiErr),
+      });
+      if (!env.OPENAI_API_KEY) throw geminiErr;
+      wasFallback = true;
+      provider = "openai";
+      model = FUNDING_MODEL_FALLBACK;
+      const r = await callOpenAIFunding(articleText, env.OPENAI_API_KEY);
+      responseText = r.text;
+      inputTokens = r.inputTokens;
+      outputTokens = r.outputTokens;
+    }
+
+    // AI usage tracked in the batch below (atomic with sentinel writes)
+    const aiUsageStmt = env.DB.prepare(
+      "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(
+      crypto.randomUUID(),
+      model,
+      provider,
+      inputTokens ?? null,
+      outputTokens ?? null,
+      (inputTokens ?? 0) + (outputTokens ?? 0) || null,
+      null,
+      wasFallback ? 1 : 0,
+      null,
+      "success"
     );
+
+    // Parse response
+    const cleaned = responseText
+      .replace(/```(?:json)?\s*/g, "")
+      .replace(/```\s*$/g, "")
+      .trim();
+    let events: {
+      company: string;
+      amount?: string;
+      round?: string;
+      valuation?: string;
+      source_url?: string;
+      date?: string;
+      relevance?: string;
+    }[] = [];
+    try {
+      const parsed = JSON.parse(cleaned);
+      events = Array.isArray(parsed.events) ? parsed.events : [];
+    } catch {
+      await log.warn("extract-funding", `Parse failed batch ${batchNum}`, {
+        raw: cleaned.slice(0, 200),
+      });
+    }
+
+    // Dedup and insert
+    const toInsert = events.filter((fe) => {
+      if (typeof fe.company !== "string" || !fe.company) return false;
+      const key = fundingDedupeKey(fe.company, fe.amount);
+      if (existingKeys.has(key)) return false;
+      existingKeys.add(key);
+      return true;
+    });
+
+    // Find article IDs to mark as scanned — use a sentinel row per article
+    const batchIds = batch.map((a) => a.id as string);
+
+    // Build all inserts: AI usage + funding events + sentinel rows (atomic batch)
+    const stmts: D1PreparedStatement[] = [aiUsageStmt];
+
+    for (const fe of toInsert) {
+      // Find the article this event came from by matching source_url
+      const matchedArticle = batch.find(
+        (a) =>
+          fe.source_url &&
+          (a.url as string).toLowerCase() === fe.source_url.toLowerCase()
+      );
+      stmts.push(
+        env.DB.prepare(
+          "INSERT INTO oq_funding_events (id, company, amount, round, valuation, source_url, date, relevance, extracted_from_article_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(
+          crypto.randomUUID(),
+          fe.company,
+          fe.amount ?? null,
+          fe.round ?? null,
+          fe.valuation ?? null,
+          fe.source_url ?? null,
+          fe.date ?? null,
+          fe.relevance ?? null,
+          (matchedArticle?.id as string) ?? null
+        )
+      );
+    }
+
+    // Mark all batch articles as scanned using a sentinel row
+    // (company=SCANNED_SENTINEL is never shown — filtered by dedup and queries)
+    for (const articleId of batchIds) {
+      stmts.push(
+        env.DB.prepare(
+          "INSERT INTO oq_funding_events (id, company, amount, extracted_from_article_id) VALUES (?, ?, NULL, ?)"
+        ).bind(crypto.randomUUID(), SCANNED_SENTINEL, articleId)
+      );
+    }
+
+    // D1 batch limit is 100 — chunk
+    for (let j = 0; j < stmts.length; j += 100) {
+      await env.DB.batch(stmts.slice(j, j + 100));
+    }
+
+    totalExtracted += toInsert.length;
+    totalSkipped += events.length - toInsert.length;
+
+    await log.info("extract-funding", `Batch ${batchNum} complete`, {
+      articles: batch.length,
+      eventsFound: events.length,
+      inserted: toInsert.length,
+      skippedDupes: events.length - toInsert.length,
+    });
   }
 
-  const inserted = toInsert.length;
-  const skipped = events.length - inserted;
-  await log?.info("external", "Funding backfill complete", {
-    inserted,
-    skipped,
-  });
-  return { inserted, skipped };
+  return {
+    extracted: totalExtracted,
+    articlesScanned: articles.results.length,
+    batches: totalBatches,
+    skippedDupes: totalSkipped,
+  };
 }
 
 async function dedupFundingEvents(
@@ -1424,8 +1660,9 @@ async function dedupFundingEvents(
 ): Promise<{ deleted: number; remaining: number }> {
   const rows = await db
     .prepare(
-      "SELECT id, company, amount, source_url FROM oq_funding_events ORDER BY created_at ASC"
+      "SELECT id, company, amount, source_url FROM oq_funding_events WHERE company != ? ORDER BY created_at ASC"
     )
+    .bind(SCANNED_SENTINEL)
     .all<{
       id: string;
       company: string;
@@ -1593,6 +1830,19 @@ function stripHtml(text: string): string {
     .trim();
 }
 
+function formatArticleLine(a: {
+  title: unknown;
+  summary?: unknown;
+  source: unknown;
+  url: unknown;
+}): string {
+  const title = String(a.title).toWellFormed();
+  const summary = a.summary
+    ? ` — ${String(a.summary).slice(0, 200).toWellFormed()}`
+    : "";
+  return `- ${title}${summary} (${a.source}) [${a.url}]`;
+}
+
 // --- Daily score generation ---
 
 async function generateDailyScore(
@@ -1650,19 +1900,127 @@ async function generateDailyScore(
     "industry",
     "barriers",
   ];
-  const articlesByPillar = Object.fromEntries(
+
+  // Check if any pillar has more articles than the direct cap
+  const pillarArticles = Object.fromEntries(
     pillars.map((pillar) => [
       pillar,
-      articles.results
-        .filter((a) => a.pillar === pillar)
-        .slice(0, 20)
-        .map(
-          (a) =>
-            `- ${String(a.title).toWellFormed()}${a.summary ? ` — ${(a.summary as string).slice(0, 200).toWellFormed()}` : ""} (${a.source}) [${a.url}]\n`
-        )
-        .join(""),
+      articles.results.filter((a) => a.pillar === pillar),
     ])
-  ) as Record<OQPillar, string>;
+  ) as Record<OQPillar, typeof articles.results>;
+
+  const needsPreDigest = pillars.some(
+    (p) => pillarArticles[p].length > DIRECT_CAP
+  );
+
+  let articlesByPillar: Record<OQPillar, string>;
+  let preDigestPartial = false;
+
+  // Collect pre-digest AI usage to link to scoreId later
+  const preDigestUsages: {
+    model: string;
+    provider: string;
+    inputTokens?: number;
+    outputTokens?: number;
+  }[] = [];
+
+  if (needsPreDigest && env.GEMINI_API_KEY) {
+    // Map-reduce: pre-digest large article sets into summaries via Gemini Flash
+    await log?.info("score", "Pre-digest triggered", {
+      articleCounts: Object.fromEntries(
+        pillars.map((p) => [p, pillarArticles[p].length])
+      ),
+    });
+
+    const digestedPillars: Partial<Record<OQPillar, string>> = {};
+
+    for (const pillar of pillars) {
+      const pillarArts = pillarArticles[pillar];
+      if (pillarArts.length <= DIRECT_CAP) {
+        // Small enough — pass directly
+        digestedPillars[pillar] = pillarArts.map(formatArticleLine).join("\n");
+        continue;
+      }
+
+      // Pre-digest in batches, then merge summaries
+      const batchSummaries: string[] = [];
+
+      for (let i = 0; i < pillarArts.length; i += PRE_DIGEST_BATCH) {
+        const batch = pillarArts.slice(i, i + PRE_DIGEST_BATCH);
+        const batchText = batch.map(formatArticleLine).join("\n");
+        const batchFallback = batch
+          .slice(0, DIRECT_CAP)
+          .map(formatArticleLine)
+          .join("\n");
+
+        const preDigestPrompt = `You are summarizing articles for the "${pillar}" pillar of an AI replacement tracker.
+Distill these ${batch.length} articles into 8-12 bullet points capturing the most significant signals.
+Each bullet should reference specific data points, companies, or metrics where possible.
+Include the source URL [url] for the most important signals.
+Focus on what matters for assessing whether AI will replace software engineers.
+
+Articles:
+${batchText}
+
+Return ONLY bullet points, one per line, starting with "- ".`;
+
+        try {
+          const r = await callGeminiText(preDigestPrompt, env.GEMINI_API_KEY!, {
+            maxTokens: 2048,
+          });
+          if (r.text) batchSummaries.push(r.text);
+
+          preDigestUsages.push({
+            model: FUNDING_MODEL_PRIMARY,
+            provider: "gemini",
+            inputTokens: r.inputTokens,
+            outputTokens: r.outputTokens,
+          });
+        } catch (err) {
+          await log?.warn("score", `Pre-digest error for ${pillar}`, {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          preDigestPartial = true;
+          batchSummaries.push(batchFallback);
+        }
+      }
+
+      digestedPillars[pillar] =
+        `[Pre-digested from ${pillarArts.length} articles]\n` +
+        batchSummaries.join("\n");
+    }
+
+    articlesByPillar = digestedPillars as Record<OQPillar, string>;
+  } else if (needsPreDigest) {
+    await log?.warn(
+      "score",
+      "Pre-digest skipped: GEMINI_API_KEY not set, capping at DIRECT_CAP",
+      {
+        articleCounts: Object.fromEntries(
+          pillars.map((p) => [p, pillarArticles[p].length])
+        ),
+      }
+    );
+    preDigestPartial = true;
+    // Fallback: cap at DIRECT_CAP per pillar
+    articlesByPillar = Object.fromEntries(
+      pillars.map((pillar) => [
+        pillar,
+        pillarArticles[pillar]
+          .slice(0, DIRECT_CAP)
+          .map(formatArticleLine)
+          .join("\n"),
+      ])
+    ) as Record<OQPillar, string>;
+  } else {
+    // Normal path: all pillars already <= DIRECT_CAP, pass directly
+    articlesByPillar = Object.fromEntries(
+      pillars.map((pillar) => [
+        pillar,
+        pillarArticles[pillar].map(formatArticleLine).join("\n"),
+      ])
+    ) as Record<OQPillar, string>;
+  }
 
   const totalArticles = articles.results.length;
   if (totalArticles === 0) {
@@ -1730,6 +2088,7 @@ async function generateDailyScore(
     );
   if (totalArticles < 5)
     qualityFlags.push(`low_article_count:${totalArticles}`);
+  if (preDigestPartial) qualityFlags.push("pre_digest_partial");
 
   const result = await runScoring({
     previousScore: prevScore,
@@ -1784,41 +2143,75 @@ async function generateDailyScore(
   const secondaryWrites: { label: string; fn: () => Promise<unknown> }[] = [
     {
       label: "ai_usage",
-      fn: () =>
-        result.aiUsages.length > 0
-          ? env.DB.batch(
-              result.aiUsages.map((usage) =>
-                env.DB.prepare(
-                  "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, score_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                ).bind(
-                  crypto.randomUUID(),
-                  usage.model,
-                  usage.provider,
-                  usage.inputTokens ?? null,
-                  usage.outputTokens ?? null,
-                  usage.totalTokens ?? null,
-                  usage.latencyMs ?? null,
-                  usage.wasFallback ? 1 : 0,
-                  usage.error ?? null,
-                  usage.status,
-                  scoreId
-                )
-              )
+      fn: async () => {
+        // Combine scoring AI usage + pre-digest AI usage
+        const allUsageStmts: D1PreparedStatement[] = [];
+
+        for (const usage of result.aiUsages) {
+          allUsageStmts.push(
+            env.DB.prepare(
+              "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, score_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            ).bind(
+              crypto.randomUUID(),
+              usage.model,
+              usage.provider,
+              usage.inputTokens ?? null,
+              usage.outputTokens ?? null,
+              usage.totalTokens ?? null,
+              usage.latencyMs ?? null,
+              usage.wasFallback ? 1 : 0,
+              usage.error ?? null,
+              usage.status,
+              scoreId
             )
-          : Promise.resolve(),
+          );
+        }
+
+        for (const usage of preDigestUsages) {
+          const inTok = usage.inputTokens ?? 0;
+          const outTok = usage.outputTokens ?? 0;
+          allUsageStmts.push(
+            env.DB.prepare(
+              "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, score_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            ).bind(
+              crypto.randomUUID(),
+              usage.model,
+              usage.provider,
+              usage.inputTokens ?? null,
+              usage.outputTokens ?? null,
+              inTok + outTok || null,
+              null,
+              0,
+              null,
+              "success",
+              scoreId
+            )
+          );
+        }
+
+        if (allUsageStmts.length === 0) return;
+        // D1 batch limit is 100 — chunk
+        for (let i = 0; i < allUsageStmts.length; i += 100) {
+          await env.DB.batch(allUsageStmts.slice(i, i + 100));
+        }
+      },
     },
     {
       label: "article_linkage",
-      fn: () =>
-        articleIds.length > 0
-          ? env.DB.batch(
-              articleIds.map((articleId) =>
-                env.DB.prepare(
-                  "INSERT INTO oq_score_articles (score_id, article_id) VALUES (?, ?)"
-                ).bind(scoreId, articleId)
-              )
+      fn: async () => {
+        if (articleIds.length === 0) return;
+        // D1 batch limit is 100 — chunk inserts
+        for (let i = 0; i < articleIds.length; i += 100) {
+          const chunk = articleIds.slice(i, i + 100);
+          await env.DB.batch(
+            chunk.map((articleId) =>
+              env.DB.prepare(
+                "INSERT INTO oq_score_articles (score_id, article_id) VALUES (?, ?)"
+              ).bind(scoreId, articleId)
             )
-          : Promise.resolve(),
+          );
+        }
+      },
     },
     {
       label: "model_responses",
@@ -1866,48 +2259,6 @@ async function generateDailyScore(
             today
           )
           .run(),
-    },
-    {
-      label: "funding_events",
-      fn: async () => {
-        if (result.fundingEvents.length === 0) return;
-        // Check existing events to avoid cross-run duplicates
-        const existing = await env.DB.prepare(
-          "SELECT company, amount, source_url FROM oq_funding_events"
-        ).all<{
-          company: string;
-          amount: string | null;
-          source_url: string | null;
-        }>();
-        const existingKeys = new Set(
-          dedupFundingRows(existing.results).map((r) =>
-            fundingDedupeKey(r.company, r.amount)
-          )
-        );
-        const toInsert = result.fundingEvents.filter((fe) => {
-          const key = fundingDedupeKey(fe.company, fe.amount);
-          if (existingKeys.has(key)) return false;
-          existingKeys.add(key);
-          return true;
-        });
-        if (toInsert.length === 0) return;
-        await env.DB.batch(
-          toInsert.map((fe) =>
-            env.DB.prepare(
-              "INSERT INTO oq_funding_events (id, company, amount, round, valuation, source_url, date, relevance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-            ).bind(
-              crypto.randomUUID(),
-              fe.company,
-              fe.amount ?? null,
-              fe.round ?? null,
-              fe.valuation ?? null,
-              fe.source_url ?? null,
-              fe.date ?? null,
-              fe.relevance ?? null
-            )
-          )
-        );
-      },
     },
   ];
 

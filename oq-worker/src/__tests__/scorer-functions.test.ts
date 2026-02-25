@@ -505,10 +505,8 @@ describe("parseModelResponse — sanity_harness_note and economic_note", () => {
     expect(result.sanity_harness_note).toBeUndefined();
     expect(result.economic_note).toBeUndefined();
   });
-});
 
-describe("parseModelResponse — funding_events", () => {
-  it("parses valid funding events", () => {
+  it("ignores funding_events in response (extracted separately)", () => {
     const json = JSON.stringify({
       pillar_scores: {
         capability: 0,
@@ -520,56 +518,12 @@ describe("parseModelResponse — funding_events", () => {
       suggested_delta: 0,
       analysis: "Test",
       funding_events: [
-        {
-          company: "Cursor",
-          amount: "$400M",
-          round: "Series C",
-          relevance: "AI code tool funding",
-        },
+        { company: "Cursor", amount: "$400M", round: "Series C" },
       ],
     });
     const result = parseModelResponse(json, "test-model");
-    expect(result.funding_events).toHaveLength(1);
-    expect(result.funding_events![0].company).toBe("Cursor");
-    expect(result.funding_events![0].amount).toBe("$400M");
-  });
-
-  it("filters out funding events without company name", () => {
-    const json = JSON.stringify({
-      pillar_scores: {
-        capability: 0,
-        labour_market: 0,
-        sentiment: 0,
-        industry: 0,
-        barriers: 0,
-      },
-      suggested_delta: 0,
-      analysis: "Test",
-      funding_events: [
-        { company: "Valid Co", amount: "$10M" },
-        { company: "", amount: "$5M" },
-        { amount: "$1M" },
-      ],
-    });
-    const result = parseModelResponse(json, "test-model");
-    expect(result.funding_events).toHaveLength(1);
-    expect(result.funding_events![0].company).toBe("Valid Co");
-  });
-
-  it("defaults to undefined when funding_events not provided", () => {
-    const json = JSON.stringify({
-      pillar_scores: {
-        capability: 0,
-        labour_market: 0,
-        sentiment: 0,
-        industry: 0,
-        barriers: 0,
-      },
-      suggested_delta: 0,
-      analysis: "Test",
-    });
-    const result = parseModelResponse(json, "test-model");
-    expect(result.funding_events).toBeUndefined();
+    // funding_events is no longer part of OQModelScore — field should not exist
+    expect("funding_events" in result).toBe(false);
   });
 });
 
@@ -631,47 +585,6 @@ describe("section notes merge logic", () => {
       scores.find((s) => s.model.includes("claude"))?.sanity_harness_note ??
       scores.find((s) => s.sanity_harness_note)?.sanity_harness_note;
     expect(note).toBeUndefined();
-  });
-});
-
-describe("funding events deduplication", () => {
-  it("deduplicates funding events by company-amount key", () => {
-    const scores = [
-      oqModelScoreFactory.build({
-        model: "claude-sonnet",
-        funding_events: [
-          { company: "Cursor", amount: "$400M" },
-          { company: "Anysphere", amount: "$100M" },
-        ],
-      }),
-      oqModelScoreFactory.build({
-        model: "gpt-4o",
-        funding_events: [
-          { company: "Cursor", amount: "$400M" }, // duplicate
-          { company: "Poolside", amount: "$500M" },
-        ],
-      }),
-    ];
-
-    // Replicate merge logic
-    const fundingEvents: { company: string; amount?: string }[] = [];
-    const seenCompanies = new Set<string>();
-    for (const s of scores) {
-      for (const fe of s.funding_events ?? []) {
-        const key = `${fe.company}-${fe.amount ?? ""}`.toLowerCase();
-        if (!seenCompanies.has(key)) {
-          seenCompanies.add(key);
-          fundingEvents.push(fe);
-        }
-      }
-    }
-
-    expect(fundingEvents).toHaveLength(3);
-    expect(fundingEvents.map((f) => f.company)).toEqual([
-      "Cursor",
-      "Anysphere",
-      "Poolside",
-    ]);
   });
 });
 
