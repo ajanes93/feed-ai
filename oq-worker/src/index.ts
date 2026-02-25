@@ -1374,10 +1374,7 @@ const TEXT_MODEL_OPENAI = "gpt-4o-mini";
 const TEXT_MODEL_CLAUDE = "claude-haiku-4-5-20251001";
 
 function stripJsonFences(text: string): string {
-  return text
-    .replace(/```(?:json)?\s*/g, "")
-    .replace(/```\s*$/g, "")
-    .trim();
+  return text.replace(/```(?:json)?\s*/g, "").trim();
 }
 
 function buildFundingPrompt(articles: string): string {
@@ -1720,15 +1717,14 @@ async function extractFundingFromArticles(
         const verifiedIndices = new Set<number>(
           Array.isArray(verifyParsed.verified) ? verifyParsed.verified : []
         );
-        const before = dedupedCandidates.length;
         toInsert = dedupedCandidates.filter((_, idx) =>
           verifiedIndices.has(idx + 1)
         );
-        if (before !== toInsert.length) {
+        if (toInsert.length !== dedupedCandidates.length) {
           await log.info(
             "extract-funding",
             `Verification filtered batch ${batchNum}`,
-            { before, after: toInsert.length }
+            { before: dedupedCandidates.length, after: toInsert.length }
           );
         }
       } catch (verifyErr) {
