@@ -1021,19 +1021,21 @@ async function loadFundingSummary(
   }
 }
 
-/** Parse "$2.1B", "$500M" etc. into millions (USD only) */
+/** Parse "$2.1B", "$500M" etc. into millions (USD only).
+ *  Bare numbers >1000 without a unit are treated as raw dollars (e.g. "$500,000" → 0.5M). */
 export function parseAmount(amount: string | null | undefined): number {
   if (!amount) return 0;
-  const match = amount
-    .replace(/,/g, "")
-    .match(/^\$?\s*([\d.]+)\s*([BMKbmk])?/);
+  const match = amount.replace(/,/g, "").match(/^\$?\s*([\d.]+)\s*([BMKbmk])?/);
   if (!match) return 0;
   const num = parseFloat(match[1]);
   if (isNaN(num)) return 0;
   const unit = (match[2] ?? "").toUpperCase();
   if (unit === "B") return num * 1000;
+  if (unit === "M") return num;
   if (unit === "K") return num / 1000;
-  return num; // default: millions
+  // No unit: if num > 1000, assume raw dollars (e.g. "$500,000" → 0.5M)
+  if (num > 1000) return num / 1_000_000;
+  return num; // small numbers without unit assumed to be millions
 }
 
 function formatTotalRaised(millions: number): string {
@@ -1048,7 +1050,10 @@ function formatTotalRaised(millions: number): string {
 }
 
 /** Normalise a company+amount pair into a dedup key */
-export function fundingDedupeKey(company: string, amount?: string | null): string {
+export function fundingDedupeKey(
+  company: string,
+  amount?: string | null
+): string {
   const c = company.trim().toLowerCase();
   // Normalise amount: strip "up to ", whitespace, lowercase
   const a = (amount ?? "")
@@ -1403,8 +1408,7 @@ async function callGeminiText(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = await res.json();
-  const text =
-    data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "{}";
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "{}";
   return {
     text,
     inputTokens: data?.usageMetadata?.promptTokenCount,
@@ -1961,11 +1965,9 @@ ${batchText}
 Return ONLY bullet points, one per line, starting with "- ".`;
 
         try {
-          const r = await callGeminiText(
-            preDigestPrompt,
-            env.GEMINI_API_KEY!,
-            { maxTokens: 2048 }
-          );
+          const r = await callGeminiText(preDigestPrompt, env.GEMINI_API_KEY!, {
+            maxTokens: 2048,
+          });
           if (r.text) batchSummaries.push(r.text);
 
           preDigestUsages.push({

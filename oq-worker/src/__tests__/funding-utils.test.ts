@@ -27,14 +27,21 @@ describe("parseAmount", () => {
     expect(parseAmount("2.1B")).toBe(2100);
   });
 
-  it("handles plain numbers as millions", () => {
+  it("handles small plain numbers as millions", () => {
     expect(parseAmount("500")).toBe(500);
     expect(parseAmount("$100")).toBe(100);
   });
 
-  it("strips commas", () => {
+  it("treats large bare numbers as raw dollars", () => {
+    // "$500,000" → comma-stripped "500000" → 0.5M
+    expect(parseAmount("$500,000")).toBeCloseTo(0.5);
+    expect(parseAmount("$2,000,000")).toBe(2);
+    expect(parseAmount("50000000")).toBe(50);
+  });
+
+  it("strips commas with explicit units", () => {
     expect(parseAmount("$1,500M")).toBe(1500);
-    expect(parseAmount("$2,100")).toBe(2100);
+    expect(parseAmount("$2,100M")).toBe(2100);
   });
 
   it("returns 0 for null/undefined/empty", () => {
