@@ -41,6 +41,7 @@ env:
 jobs:
   digest:
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Determine action from schedule
         id: action
