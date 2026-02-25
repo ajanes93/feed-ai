@@ -54,18 +54,14 @@ describe("buildFundingVerificationPrompt", () => {
   });
 
   it("requests JSON response format", () => {
-    const events: FundingCandidate[] = [
-      { company: "TestCo", amount: "$100M" },
-    ];
+    const events: FundingCandidate[] = [{ company: "TestCo", amount: "$100M" }];
     const prompt = buildFundingVerificationPrompt(events);
     expect(prompt).toContain('{ "verified": [');
     expect(prompt).toContain("Return ONLY the JSON object");
   });
 
   it("includes rejection criteria", () => {
-    const events: FundingCandidate[] = [
-      { company: "TestCo", amount: "$100M" },
-    ];
+    const events: FundingCandidate[] = [{ company: "TestCo", amount: "$100M" }];
     const prompt = buildFundingVerificationPrompt(events);
     expect(prompt).toContain("Corporate capital expenditure");
     expect(prompt).toContain("VC firms raising their own funds");
