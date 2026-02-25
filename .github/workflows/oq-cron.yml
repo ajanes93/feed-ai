@@ -29,6 +29,7 @@ jobs:
   daily:
     if: github.event.schedule == '30 5 * * *' || (github.event_name == 'workflow_dispatch' && inputs.action == 'full-run')
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Fetch external data (SanityHarness, SWE-bench, FRED)
         run: |
@@ -59,6 +60,7 @@ jobs:
   maintenance:
     if: github.event.schedule == '0 4 * * 0' || (github.event_name == 'workflow_dispatch' && inputs.action == 'maintenance')
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Run weekly maintenance cleanup
         run: |
@@ -69,6 +71,7 @@ jobs:
   fetch-only:
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'fetch'
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Fetch articles
         run: |
@@ -78,6 +81,7 @@ jobs:
   score-only:
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'score'
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Generate daily score
         run: |
@@ -87,6 +91,7 @@ jobs:
   rescore:
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'rescore'
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Delete and regenerate today's score
         run: |
@@ -96,6 +101,7 @@ jobs:
   fetch-external:
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'fetch-external'
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Fetch external data sources
         run: |
