@@ -1022,7 +1022,7 @@ async function loadFundingSummary(
 }
 
 /** Parse "$2.1B", "$500M" etc. into millions (USD only) */
-function parseAmount(amount: string | null | undefined): number {
+export function parseAmount(amount: string | null | undefined): number {
   if (!amount) return 0;
   const match = amount
     .replace(/,/g, "")
@@ -1048,7 +1048,7 @@ function formatTotalRaised(millions: number): string {
 }
 
 /** Normalise a company+amount pair into a dedup key */
-function fundingDedupeKey(company: string, amount?: string | null): string {
+export function fundingDedupeKey(company: string, amount?: string | null): string {
   const c = company.trim().toLowerCase();
   // Normalise amount: strip "up to ", whitespace, lowercase
   const a = (amount ?? "")
