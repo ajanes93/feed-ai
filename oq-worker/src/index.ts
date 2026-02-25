@@ -303,7 +303,7 @@ app.get("/api/score/:date", async (c) => {
     .bind(row.id)
     .all();
 
-  // Strip internal fields before returning
+  // Strip internal ID; externalData is intentionally public for the data snapshot UI
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { id: _id, ...publicScore } = scoreData;
 

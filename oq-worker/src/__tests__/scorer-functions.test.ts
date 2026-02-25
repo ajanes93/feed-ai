@@ -308,7 +308,8 @@ describe("synthesizeAnalysis", () => {
       oqModelScoreFactory.build({
         model: "claude-sonnet",
         suggested_delta: 1,
-        analysis: "Claude thinks X. This is a longer take with multiple sentences.",
+        analysis:
+          "Claude thinks X. This is a longer take with multiple sentences.",
       }),
       oqModelScoreFactory.build({
         model: "gpt-4o",
@@ -345,8 +346,6 @@ describe("synthesizeAnalysis", () => {
     ];
     expect(synthesizeAnalysis(scores, "mostly_agree")).toBe("GPT analysis");
   });
-
-
 });
 
 describe("calculateConsensusDelta", () => {

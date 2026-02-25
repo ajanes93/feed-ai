@@ -356,6 +356,33 @@ async function mockApi(page: Page) {
             publishedAt: "2026-02-22T08:00:00Z",
           },
         ],
+        externalData: {
+          fred_software: {
+            current: 68.5,
+            currentDate: "2026-02-21",
+            change1w: -1.2,
+            change4w: -3.5,
+          },
+          fred_labour: {
+            current: 219000,
+            currentDate: "2026-02-20",
+            change1w: 0.8,
+            change4w: -1.1,
+          },
+          swe_bench: {
+            topVerified: 79.2,
+            topVerifiedModel: "codestory-aide",
+            topBashOnly: 76.8,
+            topBashOnlyModel: "claude-sonnet-4-5-20250929",
+          },
+          sanity_harness: {
+            topPassRate: 72.5,
+            topAgent: "TestAgent",
+            topModel: "TestModel",
+            medianPassRate: 50,
+            languageBreakdown: "go: 95%, rust: 80%, python: 75%",
+          },
+        },
         modelResponses: [
           {
             model: "claude-sonnet-4-5-20250929",

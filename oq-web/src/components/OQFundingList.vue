@@ -17,8 +17,8 @@ const visible = computed(() =>
 <template>
   <div class="space-y-2">
     <div
-      v-for="(event, i) in visible"
-      :key="event.company + (event.date ?? '')"
+      v-for="event in visible"
+      :key="event.company + (event.date ?? '') + (event.round ?? '')"
       class="flex flex-wrap items-center gap-1.5 text-xs"
       data-testid="funding-event"
     >
