@@ -1382,6 +1382,44 @@ Articles:
 ${articles}`;
 }
 
+type FundingCandidate = {
+  company: string;
+  amount?: string;
+  round?: string;
+  valuation?: string;
+  source_url?: string;
+  date?: string;
+  relevance?: string;
+};
+
+function buildFundingVerificationPrompt(events: FundingCandidate[]): string {
+  const eventList = events
+    .map(
+      (e, i) =>
+        `${i + 1}. ${e.company} — ${e.amount ?? "?"} (round: ${e.round ?? "?"}, relevance: ${e.relevance ?? "?"})`
+    )
+    .join("\n");
+
+  return `You are verifying whether each event below is an actual AI company funding/investment round.
+
+KEEP only events that are genuine venture capital funding rounds, investment rounds, or equity raises by AI companies.
+
+REJECT events that are:
+- Corporate capital expenditure or infrastructure spending (e.g. "Meta spending $100B on data centers")
+- VC firms raising their own funds (e.g. "General Catalyst raises $5B fund")
+- Revenue figures, contracts, or government grants
+- Acquisitions or M&A transactions
+- Stock buybacks or market cap changes
+- General financial figures mentioned in articles that are not funding rounds
+
+Events to verify:
+${eventList}
+
+Return JSON: { "verified": [1, 3, 5] }
+where the array contains the 1-based indices of events that are genuine funding rounds.
+If none are valid, return { "verified": [] }. Return ONLY the JSON object.`;
+}
+
 async function callGeminiText(
   prompt: string,
   apiKey: string,
@@ -1418,6 +1456,114 @@ async function callGeminiText(
     inputTokens: data?.usageMetadata?.promptTokenCount,
     outputTokens: data?.usageMetadata?.candidatesTokenCount,
   };
+}
+
+async function callOpenAIText(
+  prompt: string,
+  apiKey: string,
+  opts?: { json?: boolean; maxTokens?: number }
+): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
+  const body: Record<string, unknown> = {
+    model: "gpt-4o-mini",
+    temperature: 0.1,
+    max_tokens: opts?.maxTokens ?? 4096,
+    messages: [{ role: "user", content: prompt }],
+  };
+  if (opts?.json) body.response_format = { type: "json_object" };
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenAI error: ${text.slice(0, 200)}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any = await res.json();
+  const text = data?.choices?.[0]?.message?.content?.trim() ?? "{}";
+  return {
+    text,
+    inputTokens: data?.usage?.prompt_tokens,
+    outputTokens: data?.usage?.completion_tokens,
+  };
+}
+
+async function callClaudeText(
+  prompt: string,
+  apiKey: string,
+  opts?: { maxTokens?: number }
+): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: opts?.maxTokens ?? 4096,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Claude error: ${text.slice(0, 200)}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any = await res.json();
+  const text =
+    data?.content?.[0]?.type === "text" ? data.content[0].text.trim() : "{}";
+  return {
+    text,
+    inputTokens: data?.usage?.input_tokens,
+    outputTokens: data?.usage?.output_tokens,
+  };
+}
+
+type TextProvider = {
+  name: string;
+  model: string;
+  call: (
+    prompt: string,
+    opts?: { json?: boolean; maxTokens?: number }
+  ) => Promise<{ text: string; inputTokens?: number; outputTokens?: number }>;
+};
+
+function buildTextProviders(env: Env): TextProvider[] {
+  const providers: TextProvider[] = [];
+  if (env.GEMINI_API_KEY) {
+    providers.push({
+      name: "gemini",
+      model: FUNDING_MODEL_PRIMARY,
+      call: (prompt, opts) => callGeminiText(prompt, env.GEMINI_API_KEY!, opts),
+    });
+  }
+  if (env.OPENAI_API_KEY) {
+    providers.push({
+      name: "openai",
+      model: "gpt-4o-mini",
+      call: (prompt, opts) => callOpenAIText(prompt, env.OPENAI_API_KEY!, opts),
+    });
+  }
+  if (env.ANTHROPIC_API_KEY) {
+    providers.push({
+      name: "anthropic",
+      model: "claude-haiku-4-5-20251001",
+      call: (prompt, opts) =>
+        callClaudeText(prompt, env.ANTHROPIC_API_KEY!, opts),
+    });
+  }
+  return providers;
 }
 
 async function callOpenAIFunding(
@@ -1567,15 +1713,7 @@ async function extractFundingFromArticles(
       .replace(/```(?:json)?\s*/g, "")
       .replace(/```\s*$/g, "")
       .trim();
-    let events: {
-      company: string;
-      amount?: string;
-      round?: string;
-      valuation?: string;
-      source_url?: string;
-      date?: string;
-      relevance?: string;
-    }[] = [];
+    let events: FundingCandidate[] = [];
     try {
       const parsed = JSON.parse(cleaned);
       events = Array.isArray(parsed.events) ? parsed.events : [];
@@ -1585,14 +1723,57 @@ async function extractFundingFromArticles(
       });
     }
 
-    // Dedup and insert
-    const toInsert = events.filter((fe) => {
+    // Dedup
+    const dedupedCandidates = events.filter((fe) => {
       if (typeof fe.company !== "string" || !fe.company) return false;
       const key = fundingDedupeKey(fe.company, fe.amount);
       if (existingKeys.has(key)) return false;
       existingKeys.add(key);
       return true;
     });
+
+    // AI verification: filter out false positives (capex, VC fund raises, etc.)
+    let toInsert = dedupedCandidates;
+    if (dedupedCandidates.length > 0 && env.GEMINI_API_KEY) {
+      try {
+        const verifyPrompt = buildFundingVerificationPrompt(dedupedCandidates);
+        const vr = await callGeminiText(verifyPrompt, env.GEMINI_API_KEY, {
+          json: true,
+        });
+        const verifyParsed = JSON.parse(
+          vr.text
+            .replace(/```(?:json)?\s*/g, "")
+            .replace(/```\s*$/g, "")
+            .trim()
+        );
+        const verifiedIndices = new Set<number>(
+          Array.isArray(verifyParsed.verified) ? verifyParsed.verified : []
+        );
+        const before = dedupedCandidates.length;
+        toInsert = dedupedCandidates.filter((_, idx) =>
+          verifiedIndices.has(idx + 1)
+        );
+        if (before !== toInsert.length) {
+          await log.info(
+            "extract-funding",
+            `Verification filtered batch ${batchNum}`,
+            { before, after: toInsert.length }
+          );
+        }
+      } catch (verifyErr) {
+        await log.warn(
+          "extract-funding",
+          `Verification failed batch ${batchNum}, using unverified`,
+          {
+            error:
+              verifyErr instanceof Error
+                ? verifyErr.message
+                : String(verifyErr),
+          }
+        );
+        // Fall through with unverified candidates
+      }
+    }
 
     // Find article IDs to mark as scanned — use a sentinel row per article
     const batchIds = batch.map((a) => a.id as string);
@@ -1928,15 +2109,19 @@ async function generateDailyScore(
     outputTokens?: number;
   }[] = [];
 
-  if (needsPreDigest && env.GEMINI_API_KEY) {
-    // Map-reduce: pre-digest large article sets into summaries via Gemini Flash
+  const textProviders = buildTextProviders(env);
+
+  if (needsPreDigest && textProviders.length > 0) {
+    // Map-reduce: pre-digest large article sets, round-robin across providers
     await log?.info("score", "Pre-digest triggered", {
       articleCounts: Object.fromEntries(
         pillars.map((p) => [p, pillarArticles[p].length])
       ),
+      providers: textProviders.map((p) => p.name),
     });
 
     const digestedPillars: Partial<Record<OQPillar, string>> = {};
+    let batchIndex = 0; // Global batch counter for round-robin
 
     for (const pillar of pillars) {
       const pillarArts = pillarArticles[pillar];
@@ -1968,24 +2153,45 @@ ${batchText}
 
 Return ONLY bullet points, one per line, starting with "- ".`;
 
-        try {
-          const r = await callGeminiText(preDigestPrompt, env.GEMINI_API_KEY!, {
-            maxTokens: 2048,
-          });
-          if (r.text) batchSummaries.push(r.text);
+        // Round-robin across providers, fallback to next on failure
+        let succeeded = false;
+        const startProvider = batchIndex % textProviders.length;
+        for (let attempt = 0; attempt < textProviders.length; attempt++) {
+          const provider =
+            textProviders[(startProvider + attempt) % textProviders.length];
+          try {
+            const r = await provider.call(preDigestPrompt, {
+              maxTokens: 2048,
+            });
+            if (r.text) batchSummaries.push(r.text);
 
-          preDigestUsages.push({
-            model: FUNDING_MODEL_PRIMARY,
-            provider: "gemini",
-            inputTokens: r.inputTokens,
-            outputTokens: r.outputTokens,
-          });
-        } catch (err) {
-          await log?.warn("score", `Pre-digest error for ${pillar}`, {
-            error: err instanceof Error ? err.message : String(err),
-          });
+            preDigestUsages.push({
+              model: provider.model,
+              provider: provider.name,
+              inputTokens: r.inputTokens,
+              outputTokens: r.outputTokens,
+            });
+            succeeded = true;
+            break;
+          } catch (err) {
+            await log?.warn(
+              "score",
+              `Pre-digest ${provider.name} failed for ${pillar}`,
+              {
+                error: err instanceof Error ? err.message : String(err),
+              }
+            );
+          }
+        }
+
+        if (!succeeded) {
           preDigestPartial = true;
           batchSummaries.push(batchFallback);
+        }
+        batchIndex++;
+        // Stagger between batches to avoid rate limits (1s delay)
+        if (i + PRE_DIGEST_BATCH < pillarArts.length) {
+          await new Promise((r) => setTimeout(r, 1000));
         }
       }
 
@@ -1998,7 +2204,7 @@ Return ONLY bullet points, one per line, starting with "- ".`;
   } else if (needsPreDigest) {
     await log?.warn(
       "score",
-      "Pre-digest skipped: GEMINI_API_KEY not set, capping at DIRECT_CAP",
+      "Pre-digest skipped: no API keys configured, capping at DIRECT_CAP",
       {
         articleCounts: Object.fromEntries(
           pillars.map((p) => [p, pillarArticles[p].length])
