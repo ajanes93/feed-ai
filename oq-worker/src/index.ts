@@ -979,7 +979,7 @@ async function loadFundingSummary(
   try {
     const rows = await db
       .prepare(
-        "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events WHERE company != ? ORDER BY date DESC LIMIT 200" // Cap at 200; total-raised may understate beyond this
+        "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events WHERE company != ? ORDER BY date DESC"
       )
       .bind(SCANNED_SENTINEL)
       .all<FundingEventRow>();
