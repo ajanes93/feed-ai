@@ -51,6 +51,15 @@ const hasDivergence = computed(() => {
 });
 
 const isOpen = ref(false);
+const showAllFunding = ref(false);
+
+const visibleFunding = computed(() => {
+  if (!props.fundingEvents) return [];
+  if (showAllFunding.value) return props.fundingEvents;
+  return props.fundingEvents.slice(0, 3);
+});
+
+const hasMoreFunding = computed(() => (props.fundingEvents?.length ?? 0) > 3);
 </script>
 
 <template>
@@ -273,7 +282,7 @@ const isOpen = ref(false);
               class="space-y-2"
             >
               <div
-                v-for="(event, i) in fundingEvents"
+                v-for="(event, i) in visibleFunding"
                 :key="i"
                 class="flex flex-wrap items-center gap-1.5"
                 data-testid="funding-event"
@@ -304,6 +313,17 @@ const isOpen = ref(false);
                   <ExternalLink class="h-2.5 w-2.5" />
                 </a>
               </div>
+              <button
+                v-if="hasMoreFunding"
+                class="mt-1 cursor-pointer text-[10px] text-muted-foreground/50 transition-colors hover:text-orange-500/60"
+                @click="showAllFunding = !showAllFunding"
+              >
+                {{
+                  showAllFunding
+                    ? "Show less"
+                    : `Show all ${fundingEvents!.length} events`
+                }}
+              </button>
             </div>
             <p v-else class="text-muted-foreground/50">
               No recent funding events tracked.

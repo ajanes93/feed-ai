@@ -339,6 +339,27 @@ describe("synthesizeAnalysis", () => {
     ];
     expect(synthesizeAnalysis(scores, "mostly_agree")).toBe("GPT analysis");
   });
+
+  it("does not truncate at decimal points in model names when disagreeing", () => {
+    const scores = [
+      oqModelScoreFactory.build({
+        model: "claude-sonnet",
+        suggested_delta: 2,
+        analysis:
+          "OpenAI's release of GPT-5.3 Codex represents a significant leap in coding ability.",
+      }),
+      oqModelScoreFactory.build({
+        model: "gpt-4o",
+        suggested_delta: -2,
+        analysis:
+          "Despite high SWE-bench scores, the Pro score remains low at ~46%.",
+      }),
+    ];
+    const result = synthesizeAnalysis(scores, "disagree");
+    // Should include the full sentence, not cut off at "GPT-5."
+    expect(result).toContain("GPT-5.3 Codex");
+    expect(result).toContain("46%");
+  });
 });
 
 describe("calculateConsensusDelta", () => {

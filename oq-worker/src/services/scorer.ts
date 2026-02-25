@@ -307,9 +307,13 @@ function deltaVerb(delta: number): string {
 }
 
 function firstSentence(text: string): string {
-  const match = text.match(/^[^.!?]+[.!?]/);
+  // Match sentence-ending punctuation, but skip decimal numbers (e.g. GPT-5.3, 46.2%)
+  // and common abbreviations (e.g. vs., etc., Dr.)
+  const match = text.match(
+    /^.+?(?<!\d)(?<!\bvs)(?<!\betc)(?<!\bDr)[.!?](?:\s|$)/
+  );
   if (match) return match[0].trim();
-  return text.length > 120 ? text.slice(0, 120) + "..." : text;
+  return text.length > 200 ? text.slice(0, 200) + "..." : text;
 }
 
 function synthesizeAnalysis(
@@ -421,6 +425,11 @@ interface ScoringInput {
   generalIndex?: number;
   generalDate?: string;
   generalTrend?: FREDSeriesTrend;
+  fundingSummary?: {
+    totalRaised: string;
+    count: number;
+    topRound?: { company: string; amount: string; round?: string };
+  };
   log?: ScorerLogger;
 }
 
@@ -498,6 +507,7 @@ export async function runScoring(
     generalIndex: input.generalIndex,
     generalDate: input.generalDate,
     generalTrend: input.generalTrend,
+    fundingSummary: input.fundingSummary,
   });
 
   const promptHash = await hashPrompt(prompt);

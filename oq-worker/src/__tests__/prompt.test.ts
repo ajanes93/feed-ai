@@ -153,6 +153,32 @@ describe("buildScoringPrompt", () => {
     expect(prompt).not.toContain("funding_events");
   });
 
+  it("includes CEPR study data in industry section", () => {
+    const prompt = buildScoringPrompt(defaultContext);
+    expect(prompt).toContain("CEPR");
+    expect(prompt).toContain("12,000+");
+    expect(prompt).toContain("+4% productivity");
+    expect(prompt).toContain("augmentation, not displacement");
+  });
+
+  it("includes funding summary when provided", () => {
+    const prompt = buildScoringPrompt({
+      ...defaultContext,
+      fundingSummary: {
+        totalRaised: "$2.1B",
+        count: 4,
+        topRound: { company: "Anthropic", amount: "$1B", round: "Series E" },
+      },
+    });
+    expect(prompt).toContain("$2.1B across 4 round(s)");
+    expect(prompt).toContain("Anthropic $1B");
+  });
+
+  it("omits funding line when no funding data", () => {
+    const prompt = buildScoringPrompt(defaultContext);
+    expect(prompt).not.toContain("Recent AI Funding:");
+  });
+
   it("includes SanityHarness data when provided", () => {
     const prompt = buildScoringPrompt({
       ...defaultContext,
