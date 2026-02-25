@@ -95,8 +95,10 @@ function buildTodayResponse(overrides: Record<string, unknown> = {}) {
     ],
     modelAgreement: "agree",
     modelSpread: 0.4,
+    modelSummary:
+      "All models see reliability barriers outweighing modest capability gains.",
     capabilityGap:
-      "SWE-bench Verified: ~79% | Bash Only: ~77% — curated benchmarks; real engineering is harder.",
+      "SWE-bench Pro: ~46% (public) | ~23% (private). Verified (~79%) deprecated — contamination confirmed.",
     fundingEvents: [
       {
         company: "Cursor",
@@ -158,12 +160,13 @@ function buildMethodologyResponse() {
     capabilityGap: {
       verified: "~77%",
       verifiedSource: "https://www.swebench.com",
+      verifiedDeprecated: true,
       pro: "~46%",
       proSource: "https://scale.com/leaderboard/swe_bench_pro_public",
       proPrivate: "~23%",
       proPrivateSource: "https://scale.com/leaderboard/swe_bench_pro_private",
       description:
-        "SWE-bench (Princeton) measures AI on curated open-source bugs. SWE-bench Pro (Scale AI SEAL) uses unfamiliar real-world repos AI hasn't seen in training.",
+        "SWE-bench Verified is deprecated (contamination confirmed Feb 23, 2026). SWE-bench Pro (Scale AI SEAL) is now the primary benchmark, using unfamiliar real-world repos AI hasn't seen in training.",
     },
     sanityHarness: {
       topPassRate: 72.5,
@@ -213,7 +216,8 @@ function buildMethodologyResponse() {
     },
     whatWouldChange: {
       to50: [
-        "SWE-bench Verified consistently above 90%",
+        "SWE-bench Pro Public consistently above 70% with diverse agents",
+        "SWE-bench Pro Private above 50% (proving private code competency)",
         "Multiple Fortune 500 companies reporting 50%+ reduction in engineering headcount",
       ],
       to70: [
@@ -222,7 +226,7 @@ function buildMethodologyResponse() {
       ],
       below20: [
         "AI coding tool market contracting",
-        "SWE-bench Verified progress plateauing for 12+ months",
+        "SWE-bench Pro progress plateauing for 12+ months",
       ],
     },
   };

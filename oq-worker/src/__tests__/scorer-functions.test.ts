@@ -534,6 +534,62 @@ describe("parseModelResponse — sanity_harness_note and economic_note", () => {
   });
 });
 
+describe("parseModelResponse — model_summary", () => {
+  it("parses model_summary when present", () => {
+    const json = JSON.stringify({
+      pillar_scores: {
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
+      suggested_delta: 0,
+      analysis: "Test",
+      model_summary:
+        "All models see reliability barriers outweighing modest capability gains.",
+    });
+    const result = parseModelResponse(json, "test-model");
+    expect(result.model_summary).toBe(
+      "All models see reliability barriers outweighing modest capability gains."
+    );
+  });
+
+  it("leaves model_summary undefined when not provided", () => {
+    const json = JSON.stringify({
+      pillar_scores: {
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
+      suggested_delta: 0,
+      analysis: "Test",
+    });
+    const result = parseModelResponse(json, "test-model");
+    expect(result.model_summary).toBeUndefined();
+  });
+
+  it("truncates model_summary at 200 chars", () => {
+    const long = "A".repeat(250);
+    const json = JSON.stringify({
+      pillar_scores: {
+        capability: 0,
+        labour_market: 0,
+        sentiment: 0,
+        industry: 0,
+        barriers: 0,
+      },
+      suggested_delta: 0,
+      analysis: "Test",
+      model_summary: long,
+    });
+    const result = parseModelResponse(json, "test-model");
+    expect(result.model_summary).toHaveLength(200);
+  });
+});
+
 describe("section notes merge logic", () => {
   it("prefers Claude's sanity_harness_note over other models", () => {
     const scores = [

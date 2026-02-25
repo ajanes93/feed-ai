@@ -69,7 +69,7 @@ test.describe("Methodology page", () => {
     await expect(mockPage.getByText("Below 20")).toBeVisible();
     // Check specific items exist
     await expect(
-      mockPage.getByText(/SWE-bench Verified consistently above 90%/)
+      mockPage.getByText(/SWE-bench Pro Public consistently above 70%/)
     ).toBeVisible();
     await expect(
       mockPage.getByText(/AI coding tool market contracting/)

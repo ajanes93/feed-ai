@@ -1,6 +1,11 @@
 // SWE-bench leaderboard scraper
 // Extracts top scores for Verified and Bash Only tracks from embedded JSON
 // Also scrapes SWE-bench Pro (Public + Private) from Scale AI SEAL leaderboard
+//
+// NOTE (Feb 23, 2026): OpenAI confirmed SWE-bench Verified is contaminated.
+// Models can reproduce gold patches from memory. 59.4% of hard tasks have
+// flawed tests. Verified scores are still scraped but flagged as deprecated.
+// SWE-bench Pro (Scale AI) is now the primary benchmark.
 
 export interface SWEBenchData {
   topVerified: number;
@@ -11,6 +16,8 @@ export interface SWEBenchData {
   topProModel: string;
   topProPrivate: number;
   topProPrivateModel: string;
+  /** SWE-bench Verified is deprecated as of Feb 23, 2026 (contamination confirmed by OpenAI) */
+  verifiedDeprecated: boolean;
   fetchedAt: string;
 }
 
@@ -129,6 +136,7 @@ function parseLeaderboardJson(json: string): SWEBenchData {
     topProModel: "Unknown",
     topProPrivate: 0,
     topProPrivateModel: "Unknown",
+    verifiedDeprecated: true,
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -159,6 +167,7 @@ function parseMarkdownFallback(text: string): SWEBenchData {
     topProModel: "Unknown",
     topProPrivate: 0,
     topProPrivateModel: "Unknown",
+    verifiedDeprecated: true,
     fetchedAt: new Date().toISOString(),
   };
 }

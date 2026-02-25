@@ -160,6 +160,10 @@ async function callOpenAI(
 
 // --- Parsing ---
 
+function truncateStr(value: unknown, maxLen: number): string | undefined {
+  return typeof value === "string" ? value.slice(0, maxLen) : undefined;
+}
+
 function parseModelResponse(text: string, model: string): OQModelScore {
   const cleaned = text
     .replace(/```(?:json)?\s*/g, "")
@@ -195,23 +199,12 @@ function parseModelResponse(text: string, model: string): OQModelScore {
           : {}),
       })
     ) as OQSignal[],
-    delta_explanation:
-      typeof parsed.delta_explanation === "string"
-        ? parsed.delta_explanation.slice(0, 200)
-        : undefined,
-    capability_gap_note: parsed.capability_gap_note,
-    sanity_harness_note:
-      typeof parsed.sanity_harness_note === "string"
-        ? parsed.sanity_harness_note.slice(0, 300)
-        : undefined,
-    economic_note:
-      typeof parsed.economic_note === "string"
-        ? parsed.economic_note.slice(0, 300)
-        : undefined,
-    labour_note:
-      typeof parsed.labour_note === "string"
-        ? parsed.labour_note.slice(0, 300)
-        : undefined,
+    delta_explanation: truncateStr(parsed.delta_explanation, 200),
+    capability_gap_note: truncateStr(parsed.capability_gap_note, 300),
+    sanity_harness_note: truncateStr(parsed.sanity_harness_note, 300),
+    economic_note: truncateStr(parsed.economic_note, 300),
+    labour_note: truncateStr(parsed.labour_note, 300),
+    model_summary: truncateStr(parsed.model_summary, 200),
   };
 }
 
@@ -353,6 +346,7 @@ export interface OQScoringResult {
   modelResponses: OQModelResponse[];
   modelAgreement: OQModelAgreement;
   modelSpread: number;
+  modelSummary?: string;
   capabilityGap?: string;
   sanityHarnessNote?: string;
   economicNote?: string;
@@ -445,18 +439,9 @@ async function callModelWithRetry(
         attempt: attempt + 1,
         error: lastError,
       };
-      if (isLastAttempt) {
-        await log?.error(
-          "score",
-          `${name} attempt ${attempt + 1} failed`,
-          details
-        );
-      } else {
-        await log?.warn(
-          "score",
-          `${name} attempt ${attempt + 1} failed`,
-          details
-        );
+      const logFn = isLastAttempt ? log?.error : log?.warn;
+      await logFn?.("score", `${name} attempt ${attempt + 1} failed`, details);
+      if (!isLastAttempt) {
         await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
       }
     }
@@ -593,13 +578,15 @@ export async function runScoring(
   const gapNotes = scores
     .map((s) => s.capability_gap_note)
     .filter(Boolean)
-    .join(" ");
+    .join(" ")
+    .slice(0, 500);
 
   const sanityHarnessNote = preferClaude("sanity_harness_note");
   const economicNote = preferClaude("economic_note");
   const labourNote = preferClaude("labour_note");
 
   const deltaExplanation = preferClaude("delta_explanation");
+  const modelSummary = preferClaude("model_summary");
 
   return {
     score: newScore,
@@ -614,6 +601,7 @@ export async function runScoring(
     modelResponses,
     modelAgreement: agreement,
     modelSpread: Math.round(spread * 10) / 10,
+    modelSummary: modelSummary || undefined,
     capabilityGap: gapNotes || undefined,
     sanityHarnessNote: sanityHarnessNote || undefined,
     economicNote: economicNote || undefined,
