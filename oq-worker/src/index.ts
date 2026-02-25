@@ -650,22 +650,93 @@ app.post("/api/maintenance", (c) =>
   })
 );
 
+// Purge scores and linkage — allows a fresh start without losing articles
+app.post("/api/admin/purge-scores", (c) =>
+  adminHandler(c, "purge-scores", async () => {
+    const results = await c.env.DB.batch([
+      c.env.DB.prepare("DELETE FROM oq_score_articles"),
+      c.env.DB.prepare("DELETE FROM oq_model_responses"),
+      c.env.DB.prepare("DELETE FROM oq_funding_events"),
+      c.env.DB.prepare("DELETE FROM oq_ai_usage"),
+      c.env.DB.prepare("DELETE FROM oq_scores"),
+    ]);
+    return {
+      scoreArticles: results[0].meta.changes,
+      modelResponses: results[1].meta.changes,
+      fundingEvents: results[2].meta.changes,
+      aiUsage: results[3].meta.changes,
+      scores: results[4].meta.changes,
+    };
+  })
+);
+
+// Unified backfill endpoint: ?type=fred|funding|dedup-funding
+// - fred: backfill historical FRED labour data
+// - funding: insert funding events from JSON body (with dedup)
+// - dedup-funding: remove duplicate rows from oq_funding_events
+app.post("/api/admin/backfill", async (c) => {
+  const type = c.req.query("type");
+  const log = createLogger(c.env.DB);
+
+  try {
+    if (type === "fred") {
+      if (!c.env.FRED_API_KEY) {
+        return c.json({ error: "FRED_API_KEY not configured" }, 503);
+      }
+      const result = await backfillFRED(c.env.DB, c.env.FRED_API_KEY, log);
+      return c.json(result);
+    }
+
+    if (type === "funding") {
+      const body = await c.req.json<{
+        events: {
+          company: string;
+          amount?: string;
+          round?: string;
+          valuation?: string;
+          source_url?: string;
+          date?: string;
+          relevance?: string;
+        }[];
+      }>();
+      if (!Array.isArray(body.events) || body.events.length === 0) {
+        return c.json(
+          { error: "body must contain non-empty events array" },
+          400
+        );
+      }
+      const result = await backfillFunding(c.env.DB, body.events, log);
+      return c.json(result);
+    }
+
+    if (type === "dedup-funding") {
+      const result = await dedupFundingEvents(c.env.DB, log);
+      return c.json(result);
+    }
+
+    return c.json(
+      { error: "type param required: fred | funding | dedup-funding" },
+      400
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await log.error("external", `backfill-${type} failed`, { error: message });
+    return c.json({ error: message }, 500);
+  }
+});
+
+// Keep old endpoint as alias for backwards compatibility
 app.post("/api/admin/backfill-fred", async (c) => {
   if (!c.env.FRED_API_KEY) {
     return c.json({ error: "FRED_API_KEY not configured" }, 503);
   }
   const log = createLogger(c.env.DB);
   try {
-    const result = await backfillFRED(c.env.DB, c.env.FRED_API_KEY, log);
-    return c.json(result);
+    return c.json(await backfillFRED(c.env.DB, c.env.FRED_API_KEY, log));
   } catch (err) {
-    await log.error("external", "backfill-fred failed", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return c.json(
-      { error: err instanceof Error ? err.message : String(err) },
-      500
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    await log.error("external", "backfill-fred failed", { error: message });
+    return c.json({ error: message }, 500);
   }
 });
 
@@ -909,7 +980,7 @@ async function loadFundingSummary(
       )
       .all<FundingEventRow>();
 
-    const events = rows.results;
+    const events = dedupFundingRows(rows.results);
     if (events.length === 0) {
       return { totalRaised: "$0", count: 0 };
     }
@@ -970,6 +1041,37 @@ function formatTotalRaised(millions: number): string {
   return "$0";
 }
 
+/** Normalise a company+amount pair into a dedup key */
+function fundingDedupeKey(company: string, amount?: string | null): string {
+  const c = company.trim().toLowerCase();
+  // Normalise amount: strip "up to ", whitespace, lowercase
+  const a = (amount ?? "")
+    .replace(/^up\s+to\s+/i, "")
+    .trim()
+    .toLowerCase();
+  return `${c}|${a}`;
+}
+
+/** Deduplicate funding rows by company+amount and source_url */
+function dedupFundingRows<
+  T extends {
+    company: string;
+    amount?: string | null;
+    source_url?: string | null;
+  },
+>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const seenUrls = new Set<string>();
+  return rows.filter((r) => {
+    const key = fundingDedupeKey(r.company, r.amount);
+    const url = r.source_url?.trim().toLowerCase() ?? "";
+    if (seen.has(key) || (url && seenUrls.has(url))) return false;
+    seen.add(key);
+    if (url) seenUrls.add(url);
+    return true;
+  });
+}
+
 async function loadRecentFundingEvents(
   db: D1Database,
   days: number,
@@ -989,24 +1091,27 @@ async function loadRecentFundingEvents(
     const cutoff = new Date(Date.now() - days * 86400000)
       .toISOString()
       .split("T")[0];
+    // Fetch more than needed so dedup still yields enough results
     const rows = await db
       .prepare(
         "SELECT company, amount, round, source_url, date, relevance FROM oq_funding_events WHERE date >= ? ORDER BY date DESC LIMIT ?"
       )
-      .bind(cutoff, limit)
+      .bind(cutoff, limit * 3)
       .all<FundingEventRow>();
 
-    return rows.results.map((r) => ({
-      company: r.company,
-      amount: r.amount ?? undefined,
-      round: r.round ?? undefined,
-      sourceUrl:
-        r.source_url && /^https?:\/\//.test(r.source_url)
-          ? r.source_url
-          : undefined,
-      date: r.date ?? undefined,
-      relevance: r.relevance ?? undefined,
-    }));
+    return dedupFundingRows(rows.results)
+      .slice(0, limit)
+      .map((r) => ({
+        company: r.company,
+        amount: r.amount ?? undefined,
+        round: r.round ?? undefined,
+        sourceUrl:
+          r.source_url && /^https?:\/\//.test(r.source_url)
+            ? r.source_url
+            : undefined,
+        date: r.date ?? undefined,
+        relevance: r.relevance ?? undefined,
+      }));
   } catch (err) {
     await log?.error("external", "loadRecentFundingEvents failed", {
       error: err instanceof Error ? err.message : String(err),
@@ -1204,43 +1309,151 @@ async function backfillFRED(
     existingRows.results.map((r) => (r.fetched_at as string).split("T")[0])
   );
 
-  let inserted = 0;
-  let skipped = 0;
-
   // Sort dates ascending so chart renders chronologically
-  const dates = [...byDate.keys()].sort();
-  for (const date of dates) {
-    if (existingDates.has(date)) {
-      skipped++;
-      continue;
-    }
-    const entry = byDate.get(date)!;
-    await db
-      .prepare(
-        "INSERT INTO oq_external_data_history (id, key, value, fetched_at) VALUES (?, ?, ?, ?)"
-      )
-      .bind(
-        crypto.randomUUID(),
-        "fred_labour",
-        JSON.stringify({
-          softwareIndex: entry.softwareIndex,
-          softwareDate: date,
-          generalIndex: entry.generalIndex,
-          generalDate: date,
-          fetchedAt: `${date}T12:00:00Z`,
-        }),
-        `${date}T12:00:00Z`
-      )
-      .run();
-    inserted++;
+  const toInsert = [...byDate.keys()]
+    .sort()
+    .filter((date) => !existingDates.has(date));
+
+  // Batch in chunks of 100 (D1 batch limit)
+  for (let i = 0; i < toInsert.length; i += 100) {
+    const chunk = toInsert.slice(i, i + 100);
+    await db.batch(
+      chunk.map((date) => {
+        const entry = byDate.get(date)!;
+        return db
+          .prepare(
+            "INSERT INTO oq_external_data_history (id, key, value, fetched_at) VALUES (?, ?, ?, ?)"
+          )
+          .bind(
+            crypto.randomUUID(),
+            "fred_labour",
+            JSON.stringify({
+              softwareIndex: entry.softwareIndex,
+              softwareDate: date,
+              generalIndex: entry.generalIndex,
+              generalDate: date,
+              fetchedAt: `${date}T12:00:00Z`,
+            }),
+            `${date}T12:00:00Z`
+          );
+      })
+    );
   }
 
+  const inserted = toInsert.length;
+  const skipped = byDate.size - inserted;
   await log?.info("external", "FRED backfill complete", {
     inserted,
     skipped,
-    totalDates: dates.length,
+    totalDates: byDate.size,
   });
   return { inserted, skipped };
+}
+
+async function backfillFunding(
+  db: D1Database,
+  events: {
+    company: string;
+    amount?: string;
+    round?: string;
+    valuation?: string;
+    source_url?: string;
+    date?: string;
+    relevance?: string;
+  }[],
+  log?: Logger
+): Promise<{ inserted: number; skipped: number }> {
+  const existing = await db
+    .prepare("SELECT company, amount, source_url FROM oq_funding_events")
+    .all<{
+      company: string;
+      amount: string | null;
+      source_url: string | null;
+    }>();
+  const existingKeys = new Set(
+    existing.results.map((r) => fundingDedupeKey(r.company, r.amount))
+  );
+  const existingUrls = new Set(
+    existing.results
+      .map((r) => r.source_url?.trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  const toInsert = events.filter((fe) => {
+    const key = fundingDedupeKey(fe.company, fe.amount);
+    const url = fe.source_url?.trim().toLowerCase() ?? "";
+    if (existingKeys.has(key) || (url && existingUrls.has(url))) return false;
+    existingKeys.add(key);
+    if (url) existingUrls.add(url);
+    return true;
+  });
+
+  if (toInsert.length > 0) {
+    await db.batch(
+      toInsert.map((fe) =>
+        db
+          .prepare(
+            "INSERT INTO oq_funding_events (id, company, amount, round, valuation, source_url, date, relevance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+          )
+          .bind(
+            crypto.randomUUID(),
+            fe.company,
+            fe.amount ?? null,
+            fe.round ?? null,
+            fe.valuation ?? null,
+            fe.source_url ?? null,
+            fe.date ?? null,
+            fe.relevance ?? null
+          )
+      )
+    );
+  }
+
+  const inserted = toInsert.length;
+  const skipped = events.length - inserted;
+  await log?.info("external", "Funding backfill complete", {
+    inserted,
+    skipped,
+  });
+  return { inserted, skipped };
+}
+
+async function dedupFundingEvents(
+  db: D1Database,
+  log?: Logger
+): Promise<{ deleted: number; remaining: number }> {
+  const rows = await db
+    .prepare(
+      "SELECT id, company, amount, source_url FROM oq_funding_events ORDER BY created_at ASC"
+    )
+    .all<{
+      id: string;
+      company: string;
+      amount: string | null;
+      source_url: string | null;
+    }>();
+
+  const keepIds = new Set(dedupFundingRows(rows.results).map((r) => r.id));
+  const toDelete = rows.results
+    .filter((r) => !keepIds.has(r.id))
+    .map((r) => r.id);
+
+  if (toDelete.length > 0) {
+    for (let i = 0; i < toDelete.length; i += 100) {
+      const chunk = toDelete.slice(i, i + 100);
+      await db.batch(
+        chunk.map((id) =>
+          db.prepare("DELETE FROM oq_funding_events WHERE id = ?").bind(id)
+        )
+      );
+    }
+  }
+
+  await log?.info("external", "Funding dedup complete", {
+    deleted: toDelete.length,
+    remaining: keepIds.size,
+  });
+  return { deleted: toDelete.length, remaining: keepIds.size };
 }
 
 // --- Article fetching ---
@@ -1424,15 +1637,11 @@ async function generateDailyScore(
     .map((r) => `${r.date}: ${r.score} (${r.delta > 0 ? "+" : ""}${r.delta})`)
     .join(", ");
 
-  // Only send recent articles to models — 2-day window keeps token usage low on
-  // subsequent runs while still catching anything published since the last score.
-  const TWO_DAYS_MS = 2 * 86400000;
-  const articleCutoff = new Date(Date.now() - TWO_DAYS_MS).toISOString();
+  // Score all articles not yet linked to a score — no time window.
+  // First run scores everything; subsequent runs only pick up new articles.
   const articles = await env.DB.prepare(
-    "SELECT a.id, a.title, a.url, a.source, a.pillar, a.summary FROM oq_articles a LEFT JOIN oq_score_articles sa ON a.id = sa.article_id WHERE a.published_at >= ? AND sa.article_id IS NULL ORDER BY a.published_at DESC"
-  )
-    .bind(articleCutoff)
-    .all();
+    "SELECT a.id, a.title, a.url, a.source, a.pillar, a.summary FROM oq_articles a LEFT JOIN oq_score_articles sa ON a.id = sa.article_id WHERE sa.article_id IS NULL ORDER BY a.published_at DESC"
+  ).all();
 
   const pillars: OQPillar[] = [
     "capability",
@@ -1660,25 +1869,45 @@ async function generateDailyScore(
     },
     {
       label: "funding_events",
-      fn: () =>
-        result.fundingEvents.length > 0
-          ? env.DB.batch(
-              result.fundingEvents.map((fe) =>
-                env.DB.prepare(
-                  "INSERT INTO oq_funding_events (id, company, amount, round, valuation, source_url, date, relevance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-                ).bind(
-                  crypto.randomUUID(),
-                  fe.company,
-                  fe.amount ?? null,
-                  fe.round ?? null,
-                  fe.valuation ?? null,
-                  fe.source_url ?? null,
-                  fe.date ?? null,
-                  fe.relevance ?? null
-                )
-              )
+      fn: async () => {
+        if (result.fundingEvents.length === 0) return;
+        // Check existing events to avoid cross-run duplicates
+        const existing = await env.DB.prepare(
+          "SELECT company, amount, source_url FROM oq_funding_events"
+        ).all<{
+          company: string;
+          amount: string | null;
+          source_url: string | null;
+        }>();
+        const existingKeys = new Set(
+          dedupFundingRows(existing.results).map((r) =>
+            fundingDedupeKey(r.company, r.amount)
+          )
+        );
+        const toInsert = result.fundingEvents.filter((fe) => {
+          const key = fundingDedupeKey(fe.company, fe.amount);
+          if (existingKeys.has(key)) return false;
+          existingKeys.add(key);
+          return true;
+        });
+        if (toInsert.length === 0) return;
+        await env.DB.batch(
+          toInsert.map((fe) =>
+            env.DB.prepare(
+              "INSERT INTO oq_funding_events (id, company, amount, round, valuation, source_url, date, relevance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            ).bind(
+              crypto.randomUUID(),
+              fe.company,
+              fe.amount ?? null,
+              fe.round ?? null,
+              fe.valuation ?? null,
+              fe.source_url ?? null,
+              fe.date ?? null,
+              fe.relevance ?? null
             )
-          : Promise.resolve(),
+          )
+        );
+      },
     },
   ];
 

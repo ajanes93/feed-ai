@@ -122,7 +122,13 @@ export const oqSources: OQSource[] = [
 
   // === Pillar 4: Industry & Economic Signals (20%) ===
   {
-    id: "oq-techcrunch-ai",
+    id: "oq-anthropic-news",
+    name: "Anthropic News",
+    url: "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml",
+    pillar: "industry",
+    type: "rss",
+  },
+  {
     name: "TechCrunch AI",
     url: "https://techcrunch.com/category/artificial-intelligence/feed/",
     pillar: "industry",

@@ -603,7 +603,7 @@ export async function runScoring(
   const econDelta = dampen(avg((s) => s.economic_delta));
 
   const clampScore = (prev: number, delta: number) =>
-    Math.round(Math.max(5, Math.min(95, prev + delta)));
+    Math.round(Math.max(5, Math.min(95, prev + delta)) * 10) / 10;
 
   const newScore = clampScore(input.previousScore, finalDelta);
   const newTechnical = clampScore(input.previousTechnical, techDelta);
