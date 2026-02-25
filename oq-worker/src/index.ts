@@ -308,7 +308,7 @@ app.get("/api/score/:date", async (c) => {
   const { id: _id, ...publicScore } = scoreData;
 
   const log = createLogger(c.env.DB);
-  const fundingEvents = await loadRecentFundingEvents(c.env.DB, 30, 20, log);
+  const fundingEvents = await loadRecentFundingEvents(c.env.DB, 365, 100, log);
 
   return c.json({
     ...publicScore,
