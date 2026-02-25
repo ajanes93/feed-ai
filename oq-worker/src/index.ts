@@ -2570,7 +2570,16 @@ export async function findCompletedCronRun(
     .first();
 }
 
-export { fetchOQArticles, generateDailyScore, extractFeedItems, stripHtml };
+export {
+  fetchOQArticles,
+  generateDailyScore,
+  extractFeedItems,
+  stripHtml,
+  stripJsonFences,
+  buildFundingVerificationPrompt,
+  buildTextProviders,
+};
+export type { FundingCandidate, TextProvider };
 
 // Crons moved to GitHub Actions (.github/workflows/oq-cron.yml).
 // The worker exposes HTTP endpoints that the workflow calls directly.
