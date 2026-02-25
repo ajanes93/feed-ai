@@ -11,6 +11,8 @@ const TABLES = [
   "oq_cron_runs",
   "oq_fetch_errors",
   "oq_logs",
+  "oq_funding_events",
+  "oq_prompt_versions",
 ];
 
 export async function cleanAllTables() {

@@ -40,17 +40,6 @@ export interface OQModelScore {
   sanity_harness_note?: string;
   economic_note?: string;
   labour_note?: string;
-  funding_events?: OQFundingEvent[];
-}
-
-export interface OQFundingEvent {
-  company: string;
-  amount?: string;
-  round?: string;
-  valuation?: string;
-  source_url?: string;
-  date?: string;
-  relevance?: string;
 }
 
 export interface OQHistoryEntry {
