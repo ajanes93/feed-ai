@@ -8,6 +8,7 @@ import {
 import { ExternalLink, ChevronDown } from "lucide-vue-next";
 import OQExplainer from "./OQExplainer.vue";
 import OQFundingList from "./OQFundingList.vue";
+import type { OQFundingEvent } from "@feed-ai/shared/oq-types";
 
 const props = defineProps<{
   softwareIndex?: number;
@@ -21,14 +22,7 @@ const props = defineProps<{
   totalRaised?: string;
   fundingCount?: number;
   topRound?: { company: string; amount: string; round?: string };
-  fundingEvents?: {
-    company: string;
-    amount?: string;
-    round?: string;
-    sourceUrl?: string;
-    date?: string;
-    relevance?: string;
-  }[];
+  fundingEvents?: OQFundingEvent[];
 }>();
 
 function formatDelta(delta: number | undefined): string {

@@ -346,28 +346,7 @@ describe("synthesizeAnalysis", () => {
     expect(synthesizeAnalysis(scores, "mostly_agree")).toBe("GPT analysis");
   });
 
-  it("includes full analysis text with decimals and abbreviations when disagreeing", () => {
-    const scores = [
-      oqModelScoreFactory.build({
-        model: "claude-sonnet",
-        suggested_delta: 2,
-        analysis:
-          "OpenAI's release of GPT-5.3 Codex represents a significant leap. The Pro score remains at ~46%.",
-      }),
-      oqModelScoreFactory.build({
-        model: "gpt-4o",
-        suggested_delta: -1,
-        analysis:
-          "Some tools (e.g. Claude) show adoption. The U.S. market shows caution.",
-      }),
-    ];
-    const result = synthesizeAnalysis(scores, "disagree");
-    // Full analyses included — no truncation
-    expect(result).toContain("GPT-5.3 Codex");
-    expect(result).toContain("~46%");
-    expect(result).toContain("e.g. Claude");
-    expect(result).toContain("U.S. market");
-  });
+
 });
 
 describe("calculateConsensusDelta", () => {

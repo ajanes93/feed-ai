@@ -1,18 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { ExternalLink } from "lucide-vue-next";
-
-interface FundingEvent {
-  company: string;
-  amount?: string;
-  round?: string;
-  sourceUrl?: string;
-  date?: string;
-  relevance?: string;
-}
+import type { OQFundingEvent } from "@feed-ai/shared/oq-types";
 
 const props = defineProps<{
-  events: FundingEvent[];
+  events: OQFundingEvent[];
 }>();
 
 const showAll = ref(false);
@@ -26,7 +18,7 @@ const visible = computed(() =>
   <div class="space-y-2">
     <div
       v-for="(event, i) in visible"
-      :key="i"
+      :key="event.company + (event.date ?? '')"
       class="flex flex-wrap items-center gap-1.5 text-xs"
       data-testid="funding-event"
     >
@@ -56,6 +48,7 @@ const visible = computed(() =>
     </div>
     <button
       v-if="events.length > 3"
+      type="button"
       class="mt-1 cursor-pointer text-[10px] text-muted-foreground/50 transition-colors hover:text-orange-500/60"
       @click="showAll = !showAll"
     >

@@ -13,6 +13,7 @@ import { ChevronDown, ArrowLeft, ExternalLink } from "lucide-vue-next";
 import OQSignalList from "../components/OQSignalList.vue";
 import OQExplainer from "../components/OQExplainer.vue";
 import OQFundingList from "../components/OQFundingList.vue";
+import type { OQFundingEvent } from "@feed-ai/shared/oq-types";
 import { formatModelName } from "@feed-ai/shared/utils";
 
 interface ModelResponse {
@@ -42,15 +43,6 @@ interface Article {
   source: string;
   pillar: string;
   publishedAt: string;
-}
-
-interface FundingEvent {
-  company: string;
-  amount?: string;
-  round?: string;
-  sourceUrl?: string;
-  date?: string;
-  relevance?: string;
 }
 
 interface ExternalDataSnapshot {
@@ -103,7 +95,7 @@ interface ScoreDetail {
   economicNote?: string;
   labourNote?: string;
   externalData?: ExternalDataSnapshot;
-  fundingEvents?: FundingEvent[];
+  fundingEvents?: OQFundingEvent[];
   promptHash?: string;
   articles: Article[];
   modelResponses: ModelResponse[];
