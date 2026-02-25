@@ -300,22 +300,6 @@ function formatModelName(model: string): string {
   return model.split("-")[0];
 }
 
-function deltaVerb(delta: number): string {
-  if (delta > 0.5) return "upgraded the score";
-  if (delta < -0.5) return "downgraded the score";
-  return "held steady";
-}
-
-function firstSentence(text: string): string {
-  // Match sentence-ending punctuation, but skip decimal numbers (e.g. GPT-5.3, 46.2%)
-  // and common abbreviations (vs., etc., Dr., e.g., i.e., U.S., No., Fig.)
-  const match = text.match(
-    /^.+?(?<!\d)(?<!\bvs)(?<!\betc)(?<!\bDr)(?<!\be\.g)(?<!\bi\.e)(?<!\bU\.S)(?<!\bNo)(?<!\bFig)[.!?](?:\s|$)/
-  );
-  if (match) return match[0].trim();
-  return text.length > 200 ? text.slice(0, 200) + "..." : text;
-}
-
 function synthesizeAnalysis(
   scores: OQModelScore[],
   agreement: OQModelAgreement
@@ -326,9 +310,9 @@ function synthesizeAnalysis(
     return scores
       .map((s) => {
         const sign = s.suggested_delta > 0 ? "+" : "";
-        return `${formatModelName(s.model)} ${deltaVerb(s.suggested_delta)} (${sign}${s.suggested_delta}), citing: ${firstSentence(s.analysis)}`;
+        return `${formatModelName(s.model)} (${sign}${s.suggested_delta}): ${s.analysis}`;
       })
-      .join(" ");
+      .join("\n\n");
   }
 
   const claude = scores.find((s) => s.model.includes("claude"));

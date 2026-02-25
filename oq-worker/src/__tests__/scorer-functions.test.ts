@@ -303,19 +303,25 @@ describe("synthesizeAnalysis", () => {
     expect(synthesizeAnalysis(scores, "agree")).toBe("Solo analysis");
   });
 
-  it("joins analyses with model labels when models disagree", () => {
+  it("includes full analyses with model labels when models disagree", () => {
     const scores = [
       oqModelScoreFactory.build({
         model: "claude-sonnet",
-        analysis: "Claude thinks X",
+        suggested_delta: 1,
+        analysis: "Claude thinks X. This is a longer take with multiple sentences.",
       }),
-      oqModelScoreFactory.build({ model: "gpt-4o", analysis: "GPT thinks Y" }),
+      oqModelScoreFactory.build({
+        model: "gpt-4o",
+        suggested_delta: -1,
+        analysis: "GPT thinks Y. It also has more detail here.",
+      }),
     ];
     const result = synthesizeAnalysis(scores, "disagree");
-    expect(result).toContain("Claude");
-    expect(result).toContain("GPT-4");
-    expect(result).toContain("held steady");
-    expect(result).toContain("citing:");
+    expect(result).toContain("Claude (+1):");
+    expect(result).toContain("GPT-4 (-1):");
+    // Full analyses are included, not truncated to first sentence
+    expect(result).toContain("multiple sentences");
+    expect(result).toContain("more detail here");
   });
 
   it("uses Claude analysis when models agree", () => {
@@ -340,43 +346,25 @@ describe("synthesizeAnalysis", () => {
     expect(synthesizeAnalysis(scores, "mostly_agree")).toBe("GPT analysis");
   });
 
-  it("does not truncate at decimal points in model names when disagreeing", () => {
+  it("includes full analysis text with decimals and abbreviations when disagreeing", () => {
     const scores = [
       oqModelScoreFactory.build({
         model: "claude-sonnet",
         suggested_delta: 2,
         analysis:
-          "OpenAI's release of GPT-5.3 Codex represents a significant leap in coding ability.",
-      }),
-      oqModelScoreFactory.build({
-        model: "gpt-4o",
-        suggested_delta: -2,
-        analysis:
-          "Despite high SWE-bench scores, the Pro score remains low at ~46%.",
-      }),
-    ];
-    const result = synthesizeAnalysis(scores, "disagree");
-    // Should include the full sentence, not cut off at "GPT-5."
-    expect(result).toContain("GPT-5.3 Codex");
-    expect(result).toContain("46%");
-  });
-
-  it("does not truncate at e.g. or i.e. abbreviations when disagreeing", () => {
-    const scores = [
-      oqModelScoreFactory.build({
-        model: "claude-sonnet",
-        suggested_delta: 1,
-        analysis:
-          "Some tools (e.g. Claude) are showing strong adoption across enterprises.",
+          "OpenAI's release of GPT-5.3 Codex represents a significant leap. The Pro score remains at ~46%.",
       }),
       oqModelScoreFactory.build({
         model: "gpt-4o",
         suggested_delta: -1,
         analysis:
-          "The U.S. market shows caution despite high benchmark scores.",
+          "Some tools (e.g. Claude) show adoption. The U.S. market shows caution.",
       }),
     ];
     const result = synthesizeAnalysis(scores, "disagree");
+    // Full analyses included — no truncation
+    expect(result).toContain("GPT-5.3 Codex");
+    expect(result).toContain("~46%");
     expect(result).toContain("e.g. Claude");
     expect(result).toContain("U.S. market");
   });

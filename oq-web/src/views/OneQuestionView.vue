@@ -203,7 +203,7 @@ onMounted(async () => {
                   Today's AI Take
                 </div>
                 <p
-                  class="text-[15px] leading-[1.7] font-light text-muted-foreground"
+                  class="whitespace-pre-line text-[15px] leading-[1.7] font-light text-muted-foreground"
                 >
                   {{ today.analysis }}
                 </p>

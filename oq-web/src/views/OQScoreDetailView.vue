@@ -261,7 +261,7 @@ onMounted(async () => {
                 AI Analysis
               </div>
               <p
-                class="text-[15px] leading-[1.7] font-light text-muted-foreground"
+                class="whitespace-pre-line text-[15px] leading-[1.7] font-light text-muted-foreground"
               >
                 {{ data.analysis }}
               </p>
