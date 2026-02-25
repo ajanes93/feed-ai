@@ -1370,6 +1370,15 @@ async function backfillFRED(
 const FUNDING_EXTRACT_BATCH_SIZE = 80;
 const FUNDING_MODEL_PRIMARY = "gemini-2.0-flash";
 const FUNDING_MODEL_FALLBACK = "gpt-4o";
+const TEXT_MODEL_OPENAI = "gpt-4o-mini";
+const TEXT_MODEL_CLAUDE = "claude-haiku-4-5-20251001";
+
+function stripJsonFences(text: string): string {
+  return text
+    .replace(/```(?:json)?\s*/g, "")
+    .replace(/```\s*$/g, "")
+    .trim();
+}
 
 function buildFundingPrompt(articles: string): string {
   return `Extract ALL AI-related funding/investment events from these articles. Only include events with a specific company name and dollar amount.
@@ -1461,10 +1470,10 @@ async function callGeminiText(
 async function callOpenAIText(
   prompt: string,
   apiKey: string,
-  opts?: { json?: boolean; maxTokens?: number }
+  opts?: { json?: boolean; maxTokens?: number; model?: string }
 ): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
   const body: Record<string, unknown> = {
-    model: "gpt-4o-mini",
+    model: opts?.model ?? TEXT_MODEL_OPENAI,
     temperature: 0.1,
     max_tokens: opts?.maxTokens ?? 4096,
     messages: [{ role: "user", content: prompt }],
@@ -1508,7 +1517,7 @@ async function callClaudeText(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model: TEXT_MODEL_CLAUDE,
       max_tokens: opts?.maxTokens ?? 4096,
       messages: [{ role: "user", content: prompt }],
     }),
@@ -1551,53 +1560,19 @@ function buildTextProviders(env: Env): TextProvider[] {
   if (env.OPENAI_API_KEY) {
     providers.push({
       name: "openai",
-      model: "gpt-4o-mini",
+      model: TEXT_MODEL_OPENAI,
       call: (prompt, opts) => callOpenAIText(prompt, env.OPENAI_API_KEY!, opts),
     });
   }
   if (env.ANTHROPIC_API_KEY) {
     providers.push({
       name: "anthropic",
-      model: "claude-haiku-4-5-20251001",
+      model: TEXT_MODEL_CLAUDE,
       call: (prompt, opts) =>
         callClaudeText(prompt, env.ANTHROPIC_API_KEY!, opts),
     });
   }
   return providers;
-}
-
-async function callOpenAIFunding(
-  articles: string,
-  apiKey: string
-): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: FUNDING_MODEL_FALLBACK,
-      temperature: 0.1,
-      max_tokens: 4096,
-      response_format: { type: "json_object" },
-      messages: [{ role: "user", content: buildFundingPrompt(articles) }],
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`OpenAI error: ${body.slice(0, 200)}`);
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data: any = await res.json();
-  const text = data?.choices?.[0]?.message?.content?.trim() ?? "{}";
-  return {
-    text,
-    inputTokens: data?.usage?.prompt_tokens,
-    outputTokens: data?.usage?.completion_tokens,
-  };
 }
 
 async function extractFundingFromArticles(
@@ -1627,6 +1602,8 @@ async function extractFundingFromArticles(
   if (articles.results.length === 0) {
     return { extracted: 0, articlesScanned: 0, batches: 0, skippedDupes: 0 };
   }
+
+  const textProviders = buildTextProviders(env);
 
   // Load existing funding keys for dedup
   const existing = await env.DB.prepare(
@@ -1686,7 +1663,11 @@ async function extractFundingFromArticles(
       wasFallback = true;
       provider = "openai";
       model = FUNDING_MODEL_FALLBACK;
-      const r = await callOpenAIFunding(articleText, env.OPENAI_API_KEY);
+      const r = await callOpenAIText(
+        buildFundingPrompt(articleText),
+        env.OPENAI_API_KEY,
+        { json: true, model: FUNDING_MODEL_FALLBACK }
+      );
       responseText = r.text;
       inputTokens = r.inputTokens;
       outputTokens = r.outputTokens;
@@ -1709,10 +1690,7 @@ async function extractFundingFromArticles(
     );
 
     // Parse response
-    const cleaned = responseText
-      .replace(/```(?:json)?\s*/g, "")
-      .replace(/```\s*$/g, "")
-      .trim();
+    const cleaned = stripJsonFences(responseText);
     let events: FundingCandidate[] = [];
     try {
       const parsed = JSON.parse(cleaned);
@@ -1734,18 +1712,11 @@ async function extractFundingFromArticles(
 
     // AI verification: filter out false positives (capex, VC fund raises, etc.)
     let toInsert = dedupedCandidates;
-    if (dedupedCandidates.length > 0 && env.GEMINI_API_KEY) {
+    if (dedupedCandidates.length > 0 && textProviders.length > 0) {
       try {
         const verifyPrompt = buildFundingVerificationPrompt(dedupedCandidates);
-        const vr = await callGeminiText(verifyPrompt, env.GEMINI_API_KEY, {
-          json: true,
-        });
-        const verifyParsed = JSON.parse(
-          vr.text
-            .replace(/```(?:json)?\s*/g, "")
-            .replace(/```\s*$/g, "")
-            .trim()
-        );
+        const vr = await textProviders[0].call(verifyPrompt, { json: true });
+        const verifyParsed = JSON.parse(stripJsonFences(vr.text));
         const verifiedIndices = new Set<number>(
           Array.isArray(verifyParsed.verified) ? verifyParsed.verified : []
         );
