@@ -459,16 +459,16 @@ app.get("/api/methodology", async (c) => {
         description:
           "When more than 20 articles exist per pillar, a map-reduce pre-digest runs before scoring. Gemini Flash summarizes articles in batches of 150 into 8-12 bullet points per batch, then the condensed summaries are fed into the multi-model scoring prompt. This ensures all articles contribute to the score, not just the most recent 20.",
         trigger: "More than 20 unscored articles in any pillar",
-        model: "Gemini 2.0 Flash",
-        batchSize: 150,
-        directCap: 20,
+        model: FUNDING_MODEL_PRIMARY,
+        batchSize: PRE_DIGEST_BATCH,
+        directCap: DIRECT_CAP,
       },
       fundingExtraction: {
         description:
           "Funding events are extracted from articles by a separate AI process (not the scoring prompt). All articles are scanned in batches, and extracted events are deduplicated by company+amount. This runs independently of scoring to ensure complete funding data regardless of when articles were fetched.",
-        model: "Gemini 2.0 Flash (primary), GPT-4o (fallback)",
-        batchSize: 80,
-        deduplication: "company+amount key and source_url",
+        model: `${FUNDING_MODEL_PRIMARY} (primary), ${FUNDING_MODEL_FALLBACK} (fallback)`,
+        batchSize: FUNDING_EXTRACT_BATCH_SIZE,
+        deduplication: "company+amount key",
       },
     },
     whatWouldChange: {
@@ -1058,7 +1058,10 @@ export function fundingDedupeKey(company: string, amount?: string | null): strin
   return `${c}|${a}`;
 }
 
-/** Deduplicate funding rows by company+amount and source_url */
+/** Deduplicate funding rows by company+amount key. URL is only used as a
+ *  secondary check within the same key (same article covering one round
+ *  reported by multiple sources). Different companies from the same article
+ *  are preserved. */
 function dedupFundingRows<
   T extends {
     company: string;
@@ -1067,13 +1070,10 @@ function dedupFundingRows<
   },
 >(rows: T[]): T[] {
   const seen = new Set<string>();
-  const seenUrls = new Set<string>();
   return rows.filter((r) => {
     const key = fundingDedupeKey(r.company, r.amount);
-    const url = r.source_url?.trim().toLowerCase() ?? "";
-    if (seen.has(key) || (url && seenUrls.has(url))) return false;
+    if (seen.has(key)) return false;
     seen.add(key);
-    if (url) seenUrls.add(url);
     return true;
   });
 }
@@ -1359,38 +1359,39 @@ async function backfillFRED(
 // --- AI-powered funding extraction from articles ---
 
 const FUNDING_EXTRACT_BATCH_SIZE = 80;
+const FUNDING_MODEL_PRIMARY = "gemini-2.0-flash";
+const FUNDING_MODEL_FALLBACK = "gpt-4o";
 
-async function callGeminiFunding(
-  articles: string,
-  apiKey: string
-): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: `Extract ALL AI-related funding/investment events from these articles. Only include events with a specific company name and dollar amount.
+function buildFundingPrompt(articles: string): string {
+  return `Extract ALL AI-related funding/investment events from these articles. Only include events with a specific company name and dollar amount.
 
 Return JSON: { "events": [{ "company": "Name", "amount": "$XB", "round": "Series X", "valuation": "$XB", "source_url": "https://...", "date": "YYYY-MM-DD", "relevance": "AI lab funding | AI code tool | AI infrastructure" }] }
 
 If no funding events found, return { "events": [] }. Return ONLY the JSON object.
 
 Articles:
-${articles}`,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 4096,
-          responseMimeType: "application/json",
-        },
+${articles}`;
+}
+
+async function callGeminiText(
+  prompt: string,
+  apiKey: string,
+  opts?: { json?: boolean; maxTokens?: number }
+): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
+  const genConfig: Record<string, unknown> = {
+    temperature: 0.1,
+    maxOutputTokens: opts?.maxTokens ?? 4096,
+  };
+  if (opts?.json) genConfig.responseMimeType = "application/json";
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${FUNDING_MODEL_PRIMARY}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: genConfig,
       }),
     }
   );
@@ -1402,7 +1403,8 @@ ${articles}`,
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "{}";
+  const text =
+    data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "{}";
   return {
     text,
     inputTokens: data?.usageMetadata?.promptTokenCount,
@@ -1421,23 +1423,11 @@ async function callOpenAIFunding(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "gpt-4o",
+      model: FUNDING_MODEL_FALLBACK,
       temperature: 0.1,
       max_tokens: 4096,
       response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "user",
-          content: `Extract ALL AI-related funding/investment events from these articles. Only include events with a specific company name and dollar amount.
-
-Return JSON: { "events": [{ "company": "Name", "amount": "$XB", "round": "Series X", "valuation": "$XB", "source_url": "https://...", "date": "YYYY-MM-DD", "relevance": "AI lab funding | AI code tool | AI infrastructure" }] }
-
-If no funding events found, return { "events": [] }. Return ONLY the JSON object.
-
-Articles:
-${articles}`,
-        },
-      ],
+      messages: [{ role: "user", content: buildFundingPrompt(articles) }],
     }),
   });
 
@@ -1471,10 +1461,9 @@ async function extractFundingFromArticles(
   const articles = await env.DB.prepare(
     `SELECT a.id, a.title, a.url, a.source, a.summary, a.published_at
      FROM oq_articles a
-     WHERE a.id NOT IN (
-       SELECT DISTINCT extracted_from_article_id FROM oq_funding_events
-       WHERE extracted_from_article_id IS NOT NULL
-     )
+     LEFT JOIN oq_funding_events fe
+       ON fe.extracted_from_article_id = a.id
+     WHERE fe.id IS NULL
      ORDER BY a.published_at DESC
      LIMIT ?`
   )
@@ -1521,12 +1510,16 @@ async function extractFundingFromArticles(
     let inputTokens: number | undefined;
     let outputTokens: number | undefined;
     let provider = "gemini";
-    let model = "gemini-2.0-flash";
+    let model = FUNDING_MODEL_PRIMARY;
     let wasFallback = false;
 
     try {
       if (!env.GEMINI_API_KEY) throw new Error("No GEMINI_API_KEY");
-      const r = await callGeminiFunding(articleText, env.GEMINI_API_KEY);
+      const r = await callGeminiText(
+        buildFundingPrompt(articleText),
+        env.GEMINI_API_KEY,
+        { json: true }
+      );
       responseText = r.text;
       inputTokens = r.inputTokens;
       outputTokens = r.outputTokens;
@@ -1538,30 +1531,28 @@ async function extractFundingFromArticles(
       if (!env.OPENAI_API_KEY) throw geminiErr;
       wasFallback = true;
       provider = "openai";
-      model = "gpt-4o";
+      model = FUNDING_MODEL_FALLBACK;
       const r = await callOpenAIFunding(articleText, env.OPENAI_API_KEY);
       responseText = r.text;
       inputTokens = r.inputTokens;
       outputTokens = r.outputTokens;
     }
 
-    // Track AI usage
-    await env.DB.prepare(
+    // AI usage tracked in the batch below (atomic with sentinel writes)
+    const aiUsageStmt = env.DB.prepare(
       "INSERT INTO oq_ai_usage (id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    )
-      .bind(
-        crypto.randomUUID(),
-        model,
-        provider,
-        inputTokens ?? null,
-        outputTokens ?? null,
-        (inputTokens ?? 0) + (outputTokens ?? 0) || null,
-        null,
-        wasFallback ? 1 : 0,
-        null,
-        "success"
-      )
-      .run();
+    ).bind(
+      crypto.randomUUID(),
+      model,
+      provider,
+      inputTokens ?? null,
+      outputTokens ?? null,
+      (inputTokens ?? 0) + (outputTokens ?? 0) || null,
+      null,
+      wasFallback ? 1 : 0,
+      null,
+      "success"
+    );
 
     // Parse response
     const cleaned = responseText
@@ -1598,8 +1589,8 @@ async function extractFundingFromArticles(
     // Find article IDs to mark as scanned — use a sentinel row per article
     const batchIds = batch.map((a) => a.id as string);
 
-    // Build all inserts: funding events + sentinel rows for scanned articles
-    const stmts: D1PreparedStatement[] = [];
+    // Build all inserts: AI usage + funding events + sentinel rows (atomic batch)
+    const stmts: D1PreparedStatement[] = [aiUsageStmt];
 
     for (const fe of toInsert) {
       // Find the article this event came from by matching source_url
@@ -1958,18 +1949,7 @@ async function generateDailyScore(
           .map(formatArticleLine)
           .join("\n");
 
-        try {
-          const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    parts: [
-                      {
-                        text: `You are summarizing articles for the "${pillar}" pillar of an AI replacement tracker.
+        const preDigestPrompt = `You are summarizing articles for the "${pillar}" pillar of an AI replacement tracker.
 Distill these ${batch.length} articles into 8-12 bullet points capturing the most significant signals.
 Each bullet should reference specific data points, companies, or metrics where possible.
 Include the source URL [url] for the most important signals.
@@ -1978,39 +1958,22 @@ Focus on what matters for assessing whether AI will replace software engineers.
 Articles:
 ${batchText}
 
-Return ONLY bullet points, one per line, starting with "- ".`,
-                      },
-                    ],
-                  },
-                ],
-                generationConfig: {
-                  temperature: 0.2,
-                  maxOutputTokens: 2048,
-                },
-              }),
-            }
+Return ONLY bullet points, one per line, starting with "- ".`;
+
+        try {
+          const r = await callGeminiText(
+            preDigestPrompt,
+            env.GEMINI_API_KEY!,
+            { maxTokens: 2048 }
           );
+          if (r.text) batchSummaries.push(r.text);
 
-          if (res.ok) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const data: any = await res.json();
-            const summary =
-              data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-            if (summary) batchSummaries.push(summary);
-
-            preDigestUsages.push({
-              model: "gemini-2.0-flash",
-              provider: "gemini",
-              inputTokens: data?.usageMetadata?.promptTokenCount,
-              outputTokens: data?.usageMetadata?.candidatesTokenCount,
-            });
-          } else {
-            await log?.warn("score", `Pre-digest failed for ${pillar}`, {
-              status: res.status,
-            });
-            preDigestPartial = true;
-            batchSummaries.push(batchFallback);
-          }
+          preDigestUsages.push({
+            model: FUNDING_MODEL_PRIMARY,
+            provider: "gemini",
+            inputTokens: r.inputTokens,
+            outputTokens: r.outputTokens,
+          });
         } catch (err) {
           await log?.warn("score", `Pre-digest error for ${pillar}`, {
             error: err instanceof Error ? err.message : String(err),
@@ -2048,14 +2011,11 @@ Return ONLY bullet points, one per line, starting with "- ".`,
       ])
     ) as Record<OQPillar, string>;
   } else {
-    // Normal path: small article count, pass directly (capped at DIRECT_CAP per pillar)
+    // Normal path: all pillars already <= DIRECT_CAP, pass directly
     articlesByPillar = Object.fromEntries(
       pillars.map((pillar) => [
         pillar,
-        pillarArticles[pillar]
-          .slice(0, DIRECT_CAP)
-          .map(formatArticleLine)
-          .join("\n"),
+        pillarArticles[pillar].map(formatArticleLine).join("\n"),
       ])
     ) as Record<OQPillar, string>;
   }
