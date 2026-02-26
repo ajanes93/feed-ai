@@ -40,6 +40,7 @@ export interface OQModelScore {
   sanity_harness_note?: string;
   economic_note?: string;
   labour_note?: string;
+  model_summary?: string;
 }
 
 export interface OQFundingEvent {

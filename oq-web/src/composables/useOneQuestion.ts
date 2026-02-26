@@ -75,6 +75,7 @@ export interface MethodologyResponse {
   capabilityGap: {
     verified: string;
     verifiedSource?: string;
+    verifiedDeprecated?: boolean;
     pro: string;
     proSource?: string;
     proPrivate?: string;
@@ -143,6 +144,7 @@ export interface TodayResponse {
   modelScores: OQModelScore[];
   modelAgreement: OQModelAgreement;
   modelSpread: number;
+  modelSummary?: string;
   capabilityGap?: string;
   sanityHarnessNote?: string;
   economicNote?: string;

@@ -5,59 +5,159 @@ import {
   buildMethodologyResponse,
 } from "./fixtures";
 
-test.describe("Capability Gap section", () => {
+test.describe("Capability Gap section (SWE-bench deprecation)", () => {
   test("renders the Capability Gap heading", async ({ mockPage }) => {
     await mockPage.goto("/");
     await expect(mockPage.getByText("The Capability Gap")).toBeVisible();
   });
 
-  test("shows SWE-bench Verified and Pro scores", async ({ mockPage }) => {
+  test("shows SWE-bench Pro and Pro Private as primary scores", async ({
+    mockPage,
+  }) => {
     await mockPage.goto("/");
-    await expect(mockPage.getByText("~77%").first()).toBeVisible();
-    await expect(mockPage.getByText("~46%")).toBeVisible();
+    await expect(mockPage.getByTestId("pro-score")).toContainText("~46%");
+    await expect(mockPage.getByTestId("pro-private-score")).toContainText(
+      "~23%"
+    );
   });
 
-  test("displays gap indicator", async ({ mockPage }) => {
+  test("displays gap indicator between Pro scores", async ({ mockPage }) => {
     await mockPage.goto("/");
     await expect(
       mockPage.locator("[data-testid='gap-indicator']")
     ).toBeVisible();
   });
 
-  test("shows Verified and Pro labels", async ({ mockPage }) => {
+  test("shows Pro and Pro Private labels", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(
-      mockPage.getByText("SWE-bench Verified").first()
-    ).toBeVisible();
-    await expect(mockPage.getByText("SWE-bench Pro")).toBeVisible();
+    await expect(mockPage.getByTestId("pro-label")).toContainText(
+      "SWE-bench Pro"
+    );
+    await expect(mockPage.getByTestId("pro-private-label")).toContainText(
+      "Pro Private"
+    );
   });
 
-  test("shows updated benchmark descriptions", async ({ mockPage }) => {
+  test("shows Pro descriptions", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(mockPage.getByText("Curated open-source bugs")).toBeVisible();
-    await expect(
-      mockPage.getByText("Unfamiliar real-world repos")
-    ).toBeVisible();
+    await expect(mockPage.getByText("Public GPL repos")).toBeVisible();
+    await expect(mockPage.getByText("Proprietary startup code")).toBeVisible();
   });
 
-  test("shows source links for benchmarks", async ({ mockPage }) => {
+  test("shows Scale AI SEAL source links", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(
-      mockPage.locator('a[href="https://www.swebench.com"]')
-    ).toBeVisible();
     await expect(
       mockPage.locator(
         'a[href="https://scale.com/leaderboard/swe_bench_pro_public"]'
       )
     ).toBeVisible();
+    await expect(
+      mockPage.locator(
+        'a[href="https://scale.com/leaderboard/swe_bench_pro_private"]'
+      )
+    ).toBeVisible();
   });
 
-  test("drill-down reveals Pro Private score", async ({ mockPage }) => {
+  test("shows deprecated Verified score as footnote", async ({ mockPage }) => {
     await mockPage.goto("/");
-    const drillDown = mockPage.getByText("Drill down: Private codebases");
+    await expect(mockPage.getByText("Previously: ~77%").first()).toBeVisible();
+    await expect(mockPage.getByText("deprecated Feb 23").first()).toBeVisible();
+    await expect(
+      mockPage.getByText("contamination confirmed").first()
+    ).toBeVisible();
+  });
+
+  test("links to OpenAI deprecation post", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    const link = mockPage
+      .locator(
+        'a[href="https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/"]'
+      )
+      .first();
+    await expect(link).toBeVisible();
+  });
+
+  test("drill-down explains deprecation story", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    const drillDown = mockPage.getByText("Drill down", { exact: true }).first();
     await drillDown.click();
-    await expect(mockPage.getByText("~23%")).toBeVisible();
-    await expect(mockPage.getByText("truly private code")).toBeVisible();
+    await expect(
+      mockPage.getByText("Why was SWE-bench Verified deprecated")
+    ).toBeVisible();
+    await expect(
+      mockPage.getByText("memorised SWE-bench Verified solutions")
+    ).toBeVisible();
+  });
+
+  test("drill-down shows LessWrong counterpoint", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    const drillDown = mockPage.getByText("Drill down", { exact: true }).first();
+    await drillDown.click();
+    await expect(mockPage.getByText("LessWrong audit")).toBeVisible();
+    await expect(mockPage.getByText("test leniency")).toBeVisible();
+  });
+
+  test("shows fraction text about unfamiliar code", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    await expect(
+      mockPage.getByText("Less than 1 in 2 on unfamiliar code", {
+        exact: false,
+      })
+    ).toBeVisible();
+  });
+});
+
+test.describe("Model agreement + summary", () => {
+  test("shows model agreement indicator", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    await expect(mockPage.getByText("Models agree")).toBeVisible();
+  });
+
+  test("shows model spread value", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    await expect(mockPage.getByText("spread: 0.4")).toBeVisible();
+  });
+
+  test("shows AI-generated model summary", async ({ mockPage }) => {
+    await mockPage.goto("/");
+    await expect(
+      mockPage.getByText(
+        "All models see reliability barriers outweighing modest capability gains."
+      )
+    ).toBeVisible();
+  });
+
+  test("model summary not shown when absent", async ({ page }) => {
+    const todayData = buildTodayResponse({ modelSummary: undefined });
+
+    await page.route("**/api/today", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(todayData),
+      })
+    );
+    await page.route("**/api/history*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "[]",
+      })
+    );
+    await page.route("**/api/methodology", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(buildMethodologyResponse()),
+      })
+    );
+
+    await page.goto("/");
+    // The model agreement section should still appear
+    await expect(page.getByText("Models agree")).toBeVisible();
+    // But no model summary text
+    const summaryLocator = page.locator("[data-testid='model-summary']");
+    await expect(summaryLocator).toHaveCount(0);
   });
 });
 
@@ -102,6 +202,21 @@ test.describe("Sanity Harness section", () => {
   });
 });
 
+test.describe("Technical Evidence merged section", () => {
+  test("both Capability Gap and SanityHarness under same header", async ({
+    mockPage,
+  }) => {
+    await mockPage.goto("/");
+    // The section header
+    await expect(
+      mockPage.getByText("Can AI actually do the job?")
+    ).toBeVisible();
+    // Both components should be visible under it
+    await expect(mockPage.getByText("The Capability Gap")).toBeVisible();
+    await expect(mockPage.getByText("AI Agent Reality Check")).toBeVisible();
+  });
+});
+
 test.describe("Economic Reality section", () => {
   test("renders the Economic Reality heading", async ({ mockPage }) => {
     await mockPage.goto("/");
@@ -138,7 +253,7 @@ test.describe("Economic Reality section", () => {
 test.describe("Delta explanation", () => {
   test("shows delta explanation when present", async ({ page }) => {
     const todayData = buildTodayResponse({
-      deltaExplanation: "SWE-bench Verified rose 2 points to 81%.",
+      deltaExplanation: "SWE-bench Pro rose 2 points to 48%.",
     });
 
     await page.route("**/api/today", (route) =>
@@ -165,7 +280,7 @@ test.describe("Delta explanation", () => {
 
     await page.goto("/");
     await expect(
-      page.getByText("SWE-bench Verified rose 2 points to 81%.")
+      page.getByText("SWE-bench Pro rose 2 points to 48%.")
     ).toBeVisible();
   });
 
@@ -182,21 +297,12 @@ test.describe("Delta explanation", () => {
 });
 
 test.describe("Narrative section headers", () => {
-  test("shows 'Can AI actually do the job?' before capability gap", async ({
+  test("shows 'Can AI actually do the job?' before technical evidence", async ({
     mockPage,
   }) => {
     await mockPage.goto("/");
     await expect(
       mockPage.getByText("Can AI actually do the job?")
-    ).toBeVisible();
-  });
-
-  test("shows 'How reliable are AI agents?' before sanity harness", async ({
-    mockPage,
-  }) => {
-    await mockPage.goto("/");
-    await expect(
-      mockPage.getByText("How reliable are AI agents?")
     ).toBeVisible();
   });
 

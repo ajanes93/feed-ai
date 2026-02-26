@@ -9,7 +9,15 @@ defineProps<{
   modelAgreement: OQModelAgreement;
   modelSpread: number;
   modelScores: OQModelScore[];
+  modelSummary?: string;
 }>();
+
+const AGREEMENT_LABELS: Record<OQModelAgreement, string> = {
+  agree: "Models agree",
+  mostly_agree: "Models mostly agree",
+  disagree: "Models disagree",
+  partial: "Partial consensus",
+};
 </script>
 
 <template>
@@ -25,12 +33,7 @@ defineProps<{
             'bg-gray-500': modelAgreement === 'partial',
           }"
         />
-        <span v-if="modelAgreement === 'agree'">Models agree</span>
-        <span v-else-if="modelAgreement === 'mostly_agree'"
-          >Models mostly agree</span
-        >
-        <span v-else-if="modelAgreement === 'disagree'">Models disagree</span>
-        <span v-else>Partial consensus</span>
+        <span>{{ AGREEMENT_LABELS[modelAgreement] }}</span>
         <span
           class="ml-auto flex items-center gap-1 font-mono text-[10px] text-muted-foreground"
         >
@@ -40,6 +43,15 @@ defineProps<{
           />
         </span>
       </div>
+
+      <!-- AI-generated consensus summary -->
+      <p
+        v-if="modelSummary"
+        data-testid="model-summary"
+        class="mt-1 text-[11px] leading-snug text-muted-foreground/80 italic"
+      >
+        "{{ modelSummary }}"
+      </p>
 
       <!-- Show individual model scores when they disagree -->
       <div
@@ -54,6 +66,7 @@ defineProps<{
           <span class="font-medium text-muted-foreground">
             {{ formatModelName(score.model) }}
           </span>
+          <!-- Positive delta = score rising toward replacement = bad for engineers = red -->
           <Badge
             :variant="
               score.suggested_delta > 0

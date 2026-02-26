@@ -18,6 +18,7 @@ interface SWEBenchContext {
   topProModel?: string;
   topProPrivate?: number;
   topProPrivateModel?: string;
+  verifiedDeprecated?: boolean;
 }
 
 interface FundingContext {
@@ -66,12 +67,21 @@ production code, debugging complex systems, collaborating with
 non-technical stakeholders, and maintaining software over time.
 A human engineer is no longer needed.
 
+BENCHMARK UPDATE (Feb 23, 2026): OpenAI deprecated SWE-bench Verified.
+Confirmed contamination — models can reproduce gold patches from memory.
+59.4% of hard tasks have flawed tests rejecting correct solutions.
+SWE-bench Pro (Scale AI) is now the industry standard.
+
+Note: LessWrong audit (Feb 24) found SWE-bench Pro also has issues
+(test leniency, requirements inflation). No benchmark is perfect —
+which is why we track multiple independent sources.
+
 KEY FRAMING: The central metric is the "Capability Gap":
-- SWE-bench Verified (best agent+model, curated open-source): ${ctx.sweBench ? `${ctx.sweBench.topVerified}% (${ctx.sweBench.topVerifiedModel})` : "~79%"}
-- SWE-bench Bash Only (raw model capability, standardized agent): ${ctx.sweBench ? `${ctx.sweBench.topBashOnly}% (${ctx.sweBench.topBashOnlyModel})` : "~77%"}
 - SWE-bench Pro Public (unfamiliar real-world repos, Scale AI SEAL): ${typeof ctx.sweBench?.topPro === "number" && ctx.sweBench.topPro > 0 ? `${ctx.sweBench.topPro}% (${ctx.sweBench.topProModel})` : "~46%"}
 - SWE-bench Pro Private (truly private startup codebases, Scale AI SEAL): ${typeof ctx.sweBench?.topProPrivate === "number" && ctx.sweBench.topProPrivate > 0 ? `${ctx.sweBench.topProPrivate}% (${ctx.sweBench.topProPrivateModel})` : "~23%"}
-The gap between Verified (~77%) and Pro Public (~46%) IS the story. Curated open-source benchmarks flatter AI capabilities. On private codebases it drops to ~23%.
+- SWE-bench Verified (DEPRECATED — contamination confirmed): ${ctx.sweBench ? `${ctx.sweBench.topVerified}% (${ctx.sweBench.topVerifiedModel})` : "~79%"}
+- SWE-bench Bash Only (raw model capability, standardized agent): ${ctx.sweBench ? `${ctx.sweBench.topBashOnly}% (${ctx.sweBench.topBashOnlyModel})` : "~77%"}
+The honest numbers are Pro Public (~46%) and Pro Private (~23%). Verified scores are inflated by memorisation and should NOT be cited as evidence of capability. On private codebases it drops to ~23%.
 
 Current score: ${ctx.currentScore}/100
 Technical sub-score: ${ctx.technicalScore}/100
@@ -144,7 +154,8 @@ Provide your assessment as JSON:
   "capability_gap_note": "<optional: note if SWE-bench Verified, Bash Only, or Pro changed today>",
   "sanity_harness_note": "<optional: one-sentence interpretation of today's SanityHarness agent benchmark data — language spread, top agent performance, what it means for replacement>",
   "economic_note": "<optional: one-sentence interpretation of today's economic signals — Indeed index trend, funding activity, hiring/layoff patterns>",
-  "labour_note": "<optional: one sentence about software vs. general job posting divergence — only include if the data shows meaningful divergence>"
+  "labour_note": "<optional: one sentence about software vs. general job posting divergence — only include if the data shows meaningful divergence>",
+  "model_summary": "<REQUIRED: one sentence (max 30 words) summarising the consensus or disagreement across models. If models agree, state the consensus view. If they disagree, state WHAT they disagree on, not just that they disagree. Do not name individual models.>"
 }
 
 IMPORTANT: Return 3-5 top_signals. Fewer than 3 looks broken. Include a mix of up/down/neutral directions.
@@ -166,7 +177,7 @@ ANALYSIS QUALITY RULES:
 - Bad: "The labour market shows mixed signals."
 - Good: "Indeed's software posting index dropped 3 points this week while general postings held steady — the first divergence since October."
 - Bad: "The AI Capability pillar remains neutral as there is a mix of incremental improvements."
-- Good: "SWE-bench Pro holds at ~46%, still far below the 79% Verified score, while SanityHarness median stayed at 50% — agents are good at curated bugs but mediocre at real code."
+- Good: "SWE-bench Pro holds at ~46% on public repos and ~23% on private code, while SanityHarness median stayed at 50% — agents solve less than half of unfamiliar problems."
 
 Return ONLY the JSON object, no other text.`;
 }

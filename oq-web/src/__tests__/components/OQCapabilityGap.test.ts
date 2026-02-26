@@ -6,6 +6,7 @@ describe("OQCapabilityGap", () => {
   const defaultProps = {
     verified: "~79%",
     pro: "~46%",
+    proPrivate: "~23%",
   };
 
   const global = { stubs: { OQExplainer: true } };
@@ -15,18 +16,18 @@ describe("OQCapabilityGap", () => {
     expect(wrapper.text()).toContain("The Capability Gap");
   });
 
-  it("displays verified score with description", () => {
-    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
-    expect(wrapper.text()).toContain("~79%");
-    expect(wrapper.text()).toContain("SWE-bench Verified");
-    expect(wrapper.text()).toContain("Curated open-source bugs");
-  });
-
-  it("displays pro score with description", () => {
+  it("displays pro score as primary (left position)", () => {
     const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
     expect(wrapper.text()).toContain("~46%");
     expect(wrapper.text()).toContain("SWE-bench Pro");
-    expect(wrapper.text()).toContain("Unfamiliar real-world repos");
+    expect(wrapper.text()).toContain("Public GPL repos");
+  });
+
+  it("displays pro private score as secondary (right position)", () => {
+    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
+    expect(wrapper.text()).toContain("~23%");
+    expect(wrapper.text()).toContain("Pro Private");
+    expect(wrapper.text()).toContain("Proprietary startup code");
   });
 
   it("renders gap indicator", () => {
@@ -34,9 +35,24 @@ describe("OQCapabilityGap", () => {
     expect(wrapper.text()).toContain("gap");
   });
 
-  it("renders narrative summary text", () => {
+  it("renders narrative summary text about unfamiliar code", () => {
     const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
-    expect(wrapper.text()).toContain("AI solves 3 in 4 practiced problems");
+    expect(wrapper.text()).toContain("Less than 1 in 2 on unfamiliar code");
+  });
+
+  it("shows deprecated Verified score as footnote", () => {
+    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
+    expect(wrapper.text()).toContain("Previously: ~79%");
+    expect(wrapper.text()).toContain("deprecated Feb 23");
+    expect(wrapper.text()).toContain("contamination confirmed");
+  });
+
+  it("links to OpenAI deprecation post", () => {
+    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
+    const link = wrapper.find(
+      'a[href="https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/"]'
+    );
+    expect(link.exists()).toBe(true);
   });
 
   it("does not render note when not provided", () => {
@@ -49,36 +65,21 @@ describe("OQCapabilityGap", () => {
     const wrapper = mount(OQCapabilityGap, {
       props: {
         ...defaultProps,
-        note: "SWE-bench Verified rose 2 points to 81%.",
+        note: "SWE-bench Pro rose 2 points.",
       },
       global,
     });
-    expect(wrapper.text()).toContain(
-      "SWE-bench Verified rose 2 points to 81%."
-    );
+    expect(wrapper.text()).toContain("SWE-bench Pro rose 2 points.");
   });
 
   it("renders with dynamic score values", () => {
     const wrapper = mount(OQCapabilityGap, {
-      props: { verified: "81%", pro: "48%" },
+      props: { verified: "81%", pro: "48%", proPrivate: "25%" },
       global,
     });
-    expect(wrapper.text()).toContain("81%");
     expect(wrapper.text()).toContain("48%");
-  });
-
-  it("renders source link for verified when provided", () => {
-    const wrapper = mount(OQCapabilityGap, {
-      props: {
-        ...defaultProps,
-        verifiedSource: "https://www.swebench.com",
-      },
-      global,
-    });
-    const link = wrapper.find('a[href="https://www.swebench.com"]');
-    expect(link.exists()).toBe(true);
-    expect(link.text()).toContain("swebench.com");
-    expect(link.attributes("target")).toBe("_blank");
+    expect(wrapper.text()).toContain("25%");
+    expect(wrapper.text()).toContain("Previously: 81%");
   });
 
   it("renders source link for pro when provided", () => {
@@ -96,10 +97,19 @@ describe("OQCapabilityGap", () => {
     expect(link.text()).toContain("Scale AI SEAL");
   });
 
-  it("does not render source links when not provided", () => {
-    const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
-    const links = wrapper.findAll("a");
-    expect(links.length).toBe(0);
+  it("renders source link for pro private when provided", () => {
+    const wrapper = mount(OQCapabilityGap, {
+      props: {
+        ...defaultProps,
+        proPrivateSource: "https://scale.com/leaderboard/swe_bench_pro_private",
+      },
+      global,
+    });
+    const link = wrapper.find(
+      'a[href="https://scale.com/leaderboard/swe_bench_pro_private"]'
+    );
+    expect(link.exists()).toBe(true);
+    expect(link.text()).toContain("Scale AI SEAL");
   });
 
   it("renders drill-down trigger", () => {
@@ -107,28 +117,9 @@ describe("OQCapabilityGap", () => {
     expect(wrapper.text()).toContain("Drill down");
   });
 
-  it("shows Updated date in source link when lastUpdated provided", () => {
+  it("shows deprecation context in drill-down", async () => {
     const wrapper = mount(OQCapabilityGap, {
-      props: {
-        ...defaultProps,
-        verifiedSource: "https://www.swebench.com",
-        lastUpdated: "2026-02-18",
-      },
-      global,
-    });
-    const link = wrapper.find('a[href="https://www.swebench.com"]');
-    expect(link.exists()).toBe(true);
-    expect(link.text()).toContain("Updated");
-    expect(link.text()).toContain("18 Feb");
-  });
-
-  it("shows pro private score in drill-down when provided", async () => {
-    const wrapper = mount(OQCapabilityGap, {
-      props: {
-        ...defaultProps,
-        proPrivate: "~23%",
-        proPrivateSource: "https://scale.com/leaderboard/swe_bench_pro_private",
-      },
+      props: defaultProps,
       global,
     });
 
@@ -136,7 +127,46 @@ describe("OQCapabilityGap", () => {
     const trigger = wrapper.find("[data-slot='collapsible-trigger']");
     await trigger.trigger("click");
 
+    expect(wrapper.text()).toContain("Why was SWE-bench Verified deprecated");
+    expect(wrapper.text()).toContain("memorised SWE-bench Verified solutions");
+    expect(wrapper.text()).toContain("59.4%");
+  });
+
+  it("shows LessWrong counterpoint in drill-down", async () => {
+    const wrapper = mount(OQCapabilityGap, {
+      props: defaultProps,
+      global,
+    });
+
+    const trigger = wrapper.find("[data-slot='collapsible-trigger']");
+    await trigger.trigger("click");
+
+    expect(wrapper.text()).toContain("LessWrong audit");
+    expect(wrapper.text()).toContain("test leniency");
+  });
+
+  it("toFraction returns less than 1 in 4 for values under 25", () => {
+    const wrapper = mount(OQCapabilityGap, {
+      props: { verified: "~79%", pro: "~46%", proPrivate: "~23%" },
+      global,
+    });
+    expect(wrapper.text()).toContain("Less than 1 in 4");
+  });
+
+  it("shows default ~23% when proPrivate is not provided", () => {
+    const wrapper = mount(OQCapabilityGap, {
+      props: { verified: "~79%", pro: "~46%" },
+      global,
+    });
     expect(wrapper.text()).toContain("~23%");
-    expect(wrapper.text()).toContain("truly private code");
+  });
+
+  it("shows fallback gapText when pro and proPrivate produce same fraction", () => {
+    const wrapper = mount(OQCapabilityGap, {
+      props: { verified: "~79%", pro: "~30%", proPrivate: "~35%" },
+      global,
+    });
+    // Both are "less than 1 in 2" so fallback branch renders
+    expect(wrapper.text()).toContain("AI solves less than 1 in 2 problems");
   });
 });

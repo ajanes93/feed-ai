@@ -226,7 +226,7 @@ app.get("/api/today", async (c) => {
       scoreEconomic: STARTING_ECONOMIC,
       delta: 0,
       analysis:
-        "Tracking begins today. SWE-bench Verified: ~79% | Bash Only: ~77%. High scores on curated bugs — real enterprise engineering is far harder.",
+        "Tracking begins today. SWE-bench Pro: ~46% on public repos, ~23% on private code. SWE-bench Verified (~79%) is deprecated due to contamination. AI solves less than half of unfamiliar problems.",
       signals: [],
       pillarScores: {
         capability: 0,
@@ -239,7 +239,7 @@ app.get("/api/today", async (c) => {
       modelAgreement: "partial",
       modelSpread: 0,
       capabilityGap:
-        "SWE-bench Verified: ~79% | Bash Only: ~77% — curated benchmarks; real engineering is harder.",
+        "SWE-bench Pro: ~46% (public) | ~23% (private). Verified (~79%) deprecated — contamination confirmed.",
       isSeed: true,
       fundingEvents: [],
     });
@@ -435,8 +435,9 @@ app.get("/api/methodology", async (c) => {
           ? `~${Math.round(externalData.sweBench.topProPrivate)}%`
           : "~23%",
       proPrivateSource: "https://scale.com/leaderboard/swe_bench_pro_private",
+      verifiedDeprecated: true,
       description:
-        "SWE-bench (Princeton) measures AI on curated open-source bugs. SWE-bench Pro (Scale AI SEAL) uses unfamiliar real-world repos AI hasn't seen in training.",
+        "SWE-bench Verified is deprecated (contamination confirmed Feb 23, 2026). SWE-bench Pro (Scale AI SEAL) is now the primary benchmark, using unfamiliar real-world repos AI hasn't seen in training.",
     },
     sanityHarness: externalData.sanityHarness
       ? {
@@ -477,7 +478,8 @@ app.get("/api/methodology", async (c) => {
     },
     whatWouldChange: {
       to50: [
-        "SWE-bench Verified consistently above 90% with diverse agents",
+        "SWE-bench Pro Public consistently above 70% with diverse agents",
+        "SWE-bench Pro Private above 50% (proving private code competency)",
         "Top SanityHarness agent >85% AND all languages >60%",
         "Multiple Fortune 500 companies reporting 50%+ reduction in engineering headcount",
         "Indeed software job posting index dropping significantly faster than general postings",
@@ -491,7 +493,7 @@ app.get("/api/methodology", async (c) => {
       below20: [
         "AI coding tool market contracting",
         "Major failures of AI-generated production code causing regulatory backlash",
-        "SWE-bench Verified progress plateauing for 12+ months",
+        "SWE-bench Pro progress plateauing for 12+ months",
         "Top SanityHarness agent plateaus or regresses",
         "Debugging AI code consistently taking longer than writing it from scratch",
       ],
@@ -2526,6 +2528,15 @@ function safeJsonParse(value: unknown, fallback: unknown = []) {
 }
 
 function mapScoreRow(row: Record<string, unknown>) {
+  const modelScores = safeJsonParse(row.model_scores, []);
+  // Extract modelSummary from model scores (prefer Claude's, fallback to first available)
+  const modelSummary =
+    modelScores.find(
+      (s: Record<string, unknown>) =>
+        s.model?.includes?.("claude") && s.model_summary
+    )?.model_summary ??
+    modelScores.find((s: Record<string, unknown>) => s.model_summary)
+      ?.model_summary;
   return {
     id: row.id,
     date: row.date,
@@ -2537,9 +2548,10 @@ function mapScoreRow(row: Record<string, unknown>) {
     analysis: row.analysis,
     signals: safeJsonParse(row.signals, []),
     pillarScores: safeJsonParse(row.pillar_scores, {}),
-    modelScores: safeJsonParse(row.model_scores, []),
+    modelScores,
     modelAgreement: row.model_agreement,
     modelSpread: row.model_spread,
+    modelSummary,
     capabilityGap: row.capability_gap,
     sanityHarnessNote: row.sanity_harness_note,
     economicNote: row.economic_note,

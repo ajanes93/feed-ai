@@ -45,22 +45,29 @@ function formatUpdatedDate(iso: string | undefined): string {
 
 const isOpen = ref(false);
 
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function toFraction(pctStr: string): string {
   const n = parseFloat(pctStr.replace("~", "").replace("%", ""));
   if (isNaN(n)) return "unknown";
   if (n >= 75) return "3 in 4";
   if (n >= 66) return "2 in 3";
   if (n >= 50) return "1 in 2";
-  return "less than 1 in 2";
+  if (n >= 25) return "less than 1 in 2";
+  return "less than 1 in 4";
 }
 
+const proPrivateDisplay = computed(() => props.proPrivate ?? "~23%");
+
 const gapText = computed(() => {
-  const vFrac = toFraction(props.verified);
-  const pFrac = toFraction(props.pro);
-  if (vFrac === pFrac) {
-    return `AI solves ${vFrac} problems on both curated and unfamiliar codebases.`;
+  const proFrac = toFraction(props.pro);
+  const privateFrac = props.proPrivate ? toFraction(props.proPrivate) : null;
+  if (privateFrac && privateFrac !== proFrac) {
+    return `${capitalize(proFrac)} on unfamiliar code. ${capitalize(privateFrac)} on code AI has never seen.`;
   }
-  return `AI solves ${vFrac} practiced problems. ${pFrac.charAt(0).toUpperCase() + pFrac.slice(1)} on code it hasn't seen before.`;
+  return `AI solves ${proFrac} problems on unfamiliar codebases.`;
 });
 </script>
 
@@ -74,41 +81,41 @@ const gapText = computed(() => {
       </div>
 
       <div class="flex items-center justify-center gap-6 sm:gap-10">
-        <!-- Verified -->
+        <!-- Pro Public (primary) -->
         <div class="text-center">
           <div
+            data-testid="pro-score"
             class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
           >
-            {{ verified }}
+            {{ pro }}
             <span
-              v-if="verifiedDelta !== undefined && verifiedDelta !== 0"
+              v-if="proDelta !== undefined && proDelta !== 0"
               class="ml-1 text-sm font-normal"
-              :class="deltaColor(verifiedDelta)"
+              :class="deltaColor(proDelta)"
             >
-              {{ formatDelta(verifiedDelta) }}
+              {{ formatDelta(proDelta) }}
             </span>
           </div>
           <div
+            data-testid="pro-label"
             class="mt-1 flex max-w-[120px] items-center justify-center gap-1 text-[10px] leading-tight tracking-widest text-muted-foreground uppercase"
           >
-            SWE-bench Verified
+            SWE-bench Pro
             <OQExplainer
-              text="AI agents fix real bugs from 12 popular open-source Python repos. 'Verified' = human-reviewed test cases. Run by Princeton's SWE-bench team."
+              text="Harder benchmark using repos AI hasn't seen in training. GPL licences deter training inclusion. Run by Scale AI, separate from SWE-bench team."
             />
           </div>
           <div class="mt-0.5 text-[9px] text-muted-foreground/60">
-            Curated open-source bugs AI may have memorised
+            Public GPL repos
           </div>
           <a
-            v-if="verifiedSource"
-            :href="verifiedSource"
+            v-if="proSource"
+            :href="proSource"
             target="_blank"
             rel="noopener noreferrer"
             class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/40 transition-colors hover:text-orange-500/60"
           >
-            swebench.com<span v-if="lastUpdated" class="ml-0.5"
-              >· Updated {{ formatUpdatedDate(lastUpdated) }}</span
-            >
+            Scale AI SEAL
             <ExternalLink class="h-2 w-2" />
           </a>
         </div>
@@ -128,34 +135,36 @@ const gapText = computed(() => {
           />
         </div>
 
-        <!-- Pro -->
+        <!-- Pro Private -->
         <div class="text-center">
           <div
+            data-testid="pro-private-score"
             class="text-3xl font-semibold tracking-tight text-orange-500 sm:text-4xl"
           >
-            {{ pro }}
+            {{ proPrivateDisplay }}
             <span
-              v-if="proDelta !== undefined && proDelta !== 0"
+              v-if="proPrivateDelta !== undefined && proPrivateDelta !== 0"
               class="ml-1 text-sm font-normal"
-              :class="deltaColor(proDelta)"
+              :class="deltaColor(proPrivateDelta)"
             >
-              {{ formatDelta(proDelta) }}
+              {{ formatDelta(proPrivateDelta) }}
             </span>
           </div>
           <div
+            data-testid="pro-private-label"
             class="mt-1 flex max-w-[120px] items-center justify-center gap-1 text-[10px] leading-tight tracking-widest text-muted-foreground uppercase"
           >
-            SWE-bench Pro
+            Pro Private
             <OQExplainer
-              text="Harder benchmark using repos AI hasn't seen in training. GPL licences deter training inclusion. Run by Scale AI, separate from SWE-bench team."
+              text="Proprietary startup codebases AI has never seen. The most honest measure of real-world coding ability. Run by Scale AI SEAL."
             />
           </div>
           <div class="mt-0.5 text-[9px] text-muted-foreground/60">
-            Unfamiliar real-world repos AI hasn't seen in training
+            Proprietary startup code
           </div>
           <a
-            v-if="proSource"
-            :href="proSource"
+            v-if="proPrivateSource"
+            :href="proPrivateSource"
             target="_blank"
             rel="noopener noreferrer"
             class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/40 transition-colors hover:text-orange-500/60"
@@ -168,6 +177,23 @@ const gapText = computed(() => {
 
       <p class="mt-5 text-center text-xs leading-relaxed text-muted-foreground">
         {{ gapText }}
+      </p>
+
+      <!-- Deprecated Verified footnote -->
+      <p
+        class="mt-2 text-center text-[10px] leading-relaxed text-muted-foreground/50"
+      >
+        Previously: {{ verified }} on SWE-bench Verified — deprecated Feb 23
+        (contamination confirmed).
+        <a
+          href="https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-0.5 text-muted-foreground/40 transition-colors hover:text-orange-500/60"
+        >
+          OpenAI post
+          <ExternalLink class="h-2 w-2" />
+        </a>
       </p>
 
       <p
@@ -183,7 +209,7 @@ const gapText = computed(() => {
         <CollapsibleTrigger
           class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-[10px] tracking-widest text-muted-foreground/60 uppercase transition-colors hover:text-muted-foreground"
         >
-          <span>Drill down: Private codebases</span>
+          <span>Drill down</span>
           <ChevronDown
             class="h-3 w-3 transition-transform duration-200"
             :class="{ 'rotate-180': isOpen }"
@@ -193,35 +219,72 @@ const gapText = computed(() => {
           <div
             class="mt-3 space-y-3 rounded-xl border border-border bg-secondary/30 p-4 text-xs leading-relaxed text-muted-foreground"
           >
-            <p v-if="proPrivate">
-              On truly private code (startup codebases AI can never have seen):
-              top score drops to
-              <span class="font-semibold text-orange-400">{{ proPrivate }}</span
-              ><span
-                v-if="proPrivateDelta !== undefined && proPrivateDelta !== 0"
-                class="ml-1 text-[11px] font-medium"
-                :class="deltaColor(proPrivateDelta)"
-                >{{ formatDelta(proPrivateDelta) }}</span
-              >.
-              <a
-                v-if="proPrivateSource"
-                :href="proPrivateSource"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="ml-1 inline-flex items-center gap-0.5 text-muted-foreground/50 transition-colors hover:text-orange-500/60"
-              >
-                Source: Scale AI SEAL Private
-                <ExternalLink class="h-2 w-2" />
-              </a>
-            </p>
+            <div>
+              <p class="mb-1 text-[10px] tracking-widest uppercase">
+                Why was SWE-bench Verified deprecated?
+              </p>
+              <p>
+                On Feb 23, OpenAI confirmed that models had memorised SWE-bench
+                Verified solutions. The 79% score was partly recall, not coding
+                ability. 59.4% of hard tasks have broken tests that reject
+                correct solutions.
+                <a
+                  href="https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="ml-1 inline-flex items-center gap-0.5 text-muted-foreground/50 transition-colors hover:text-orange-500/60"
+                >
+                  OpenAI post
+                  <ExternalLink class="h-2 w-2" />
+                </a>
+              </p>
+            </div>
+
+            <div>
+              <p class="mb-1 text-[10px] tracking-widest uppercase">
+                Are Pro benchmarks reliable?
+              </p>
+              <p>
+                LessWrong audit (Feb 24) found SWE-bench Pro also has issues —
+                test leniency and requirements inflation. No benchmark is
+                perfect, which is why this site tracks multiple independent
+                sources (SWE-bench Pro, SanityHarness, FRED labour data).
+              </p>
+            </div>
 
             <div>
               <p class="mb-1 text-[10px] tracking-widest uppercase">Note</p>
               <p>
-                SWE-bench (Princeton) and SWE-bench Pro (Scale AI) are separate
-                benchmarks with different datasets and evaluation methods. High
-                Verified scores don't predict Pro performance.
+                SWE-bench Pro Public ({{ pro }}) uses GPL repos AI is unlikely
+                to have trained on. Pro Private ({{ proPrivateDisplay }}) uses
+                truly proprietary startup code. The gap between these numbers
+                reveals how much benchmark scores depend on data familiarity.
               </p>
+            </div>
+
+            <div class="flex items-center gap-3 text-[9px]">
+              <a
+                v-if="proSource"
+                :href="proSource"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-0.5 text-muted-foreground/50 transition-colors hover:text-orange-500/60"
+              >
+                Source: Scale AI SEAL<span v-if="lastUpdated" class="ml-0.5"
+                  >· Updated {{ formatUpdatedDate(lastUpdated) }}</span
+                >
+                <ExternalLink class="h-2 w-2" />
+              </a>
+              <a
+                v-if="verifiedSource"
+                :href="verifiedSource"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-0.5 text-muted-foreground/50 transition-colors hover:text-orange-500/60"
+              >
+                swebench.com (deprecated)
+                <ExternalLink class="h-2 w-2" />
+              </a>
             </div>
           </div>
         </CollapsibleContent>

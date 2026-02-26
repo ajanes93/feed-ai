@@ -129,6 +129,7 @@ export const oqSources: OQSource[] = [
     type: "rss",
   },
   {
+    id: "oq-techcrunch-ai",
     name: "TechCrunch AI",
     url: "https://techcrunch.com/category/artificial-intelligence/feed/",
     pillar: "industry",

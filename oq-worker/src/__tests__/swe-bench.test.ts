@@ -99,6 +99,14 @@ describe("parseSWEBenchHtml", () => {
     expect(result.topProPrivateModel).toBe("Unknown");
   });
 
+  it("flags verified as deprecated", () => {
+    const html = buildHtml([
+      { name: "verified", results: [{ name: "A", resolved: 80 }] },
+    ]);
+    const result = parseSWEBenchHtml(html);
+    expect(result.verifiedDeprecated).toBe(true);
+  });
+
   it("parses resolved as string number", () => {
     const html = buildHtml([
       { name: "verified", results: [{ name: "A", resolved: "85.5" }] },

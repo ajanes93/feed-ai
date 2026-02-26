@@ -188,6 +188,7 @@ onMounted(async () => {
                 :model-agreement="today.modelAgreement"
                 :model-spread="today.modelSpread"
                 :model-scores="today.modelScores"
+                :model-summary="today.modelSummary"
                 class="mt-6"
               />
 
@@ -243,7 +244,7 @@ onMounted(async () => {
           <OQTrendChart :history="history" />
         </motion.section>
 
-        <!-- ═══ CAPABILITY GAP (Technical evidence) ═══ -->
+        <!-- ═══ TECHNICAL EVIDENCE (Capability Gap + Agent Reality) ═══ -->
         <motion.section
           class="mt-10"
           :initial="{ opacity: 0, y: 20 }"
@@ -276,23 +277,8 @@ onMounted(async () => {
             :pro-private-delta="methodology?.deltas?.sweBench?.proPrivateDelta"
             :previous-date="methodology?.deltas?.sweBench?.previousDate"
           />
-        </motion.section>
-
-        <!-- ═══ SANITY HARNESS (Agent Reality Check) ═══ -->
-        <motion.section
-          v-if="methodology?.sanityHarness"
-          class="mt-8"
-          :initial="{ opacity: 0, y: 20 }"
-          :animate="{ opacity: 1, y: 0 }"
-          :transition="{ duration: 0.6, delay: 0.4 }"
-        >
-          <div class="mb-3">
-            <span
-              class="text-[10px] tracking-widest text-muted-foreground uppercase"
-              >How reliable are AI agents?</span
-            >
-          </div>
           <OQSanityHarness
+            v-if="methodology?.sanityHarness"
             :top-pass-rate="methodology.sanityHarness.topPassRate"
             :top-agent="methodology.sanityHarness.topAgent"
             :top-model="methodology.sanityHarness.topModel"
@@ -307,6 +293,7 @@ onMounted(async () => {
               methodology?.deltas?.sanityHarness?.medianPassRateDelta
             "
             :previous-date="methodology?.deltas?.sanityHarness?.previousDate"
+            class="mt-4"
           />
         </motion.section>
 

@@ -95,16 +95,31 @@ describe("buildScoringPrompt", () => {
     expect(prompt).not.toContain("week-over-week");
   });
 
-  it("includes capability gap framing", () => {
+  it("includes capability gap framing with deprecation notice", () => {
     const prompt = buildScoringPrompt(defaultContext);
     expect(prompt).toContain("SWE-bench Verified");
-    expect(prompt).toContain("SWE-bench Bash Only");
+    expect(prompt).toContain("DEPRECATED");
+    expect(prompt).toContain("contamination");
     expect(prompt).toContain("Capability Gap");
   });
 
-  it("includes SWE-bench Pro in capability gap framing", () => {
+  it("includes SWE-bench Pro as primary benchmark", () => {
     const prompt = buildScoringPrompt(defaultContext);
-    expect(prompt).toContain("SWE-bench Pro");
+    expect(prompt).toContain("SWE-bench Pro Public");
+    expect(prompt).toContain("SWE-bench Pro Private");
+  });
+
+  it("includes deprecation context block", () => {
+    const prompt = buildScoringPrompt(defaultContext);
+    expect(prompt).toContain("BENCHMARK UPDATE (Feb 23, 2026)");
+    expect(prompt).toContain("OpenAI deprecated SWE-bench Verified");
+    expect(prompt).toContain("59.4%");
+    expect(prompt).toContain("LessWrong audit");
+  });
+
+  it("includes model_summary field in JSON schema", () => {
+    const prompt = buildScoringPrompt(defaultContext);
+    expect(prompt).toContain("model_summary");
   });
 
   it("includes SWE-bench Pro score when provided", () => {
