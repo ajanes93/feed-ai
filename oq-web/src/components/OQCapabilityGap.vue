@@ -84,6 +84,7 @@ const gapText = computed(() => {
         <!-- Pro Public (primary) -->
         <div class="text-center">
           <div
+            data-testid="pro-score"
             class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
           >
             {{ pro }}
@@ -96,6 +97,7 @@ const gapText = computed(() => {
             </span>
           </div>
           <div
+            data-testid="pro-label"
             class="mt-1 flex max-w-[120px] items-center justify-center gap-1 text-[10px] leading-tight tracking-widest text-muted-foreground uppercase"
           >
             SWE-bench Pro
@@ -136,6 +138,7 @@ const gapText = computed(() => {
         <!-- Pro Private -->
         <div class="text-center">
           <div
+            data-testid="pro-private-score"
             class="text-3xl font-semibold tracking-tight text-orange-500 sm:text-4xl"
           >
             {{ proPrivateDisplay }}
@@ -148,6 +151,7 @@ const gapText = computed(() => {
             </span>
           </div>
           <div
+            data-testid="pro-private-label"
             class="mt-1 flex max-w-[120px] items-center justify-center gap-1 text-[10px] leading-tight tracking-widest text-muted-foreground uppercase"
           >
             Pro Private

@@ -15,8 +15,10 @@ test.describe("Capability Gap section (SWE-bench deprecation)", () => {
     mockPage,
   }) => {
     await mockPage.goto("/");
-    await expect(mockPage.getByText("~46%")).toBeVisible();
-    await expect(mockPage.getByText("~23%")).toBeVisible();
+    await expect(mockPage.getByTestId("pro-score")).toContainText("~46%");
+    await expect(mockPage.getByTestId("pro-private-score")).toContainText(
+      "~23%"
+    );
   });
 
   test("displays gap indicator between Pro scores", async ({ mockPage }) => {
@@ -28,8 +30,12 @@ test.describe("Capability Gap section (SWE-bench deprecation)", () => {
 
   test("shows Pro and Pro Private labels", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(mockPage.getByText("SWE-bench Pro")).toBeVisible();
-    await expect(mockPage.getByText("Pro Private")).toBeVisible();
+    await expect(mockPage.getByTestId("pro-label")).toContainText(
+      "SWE-bench Pro"
+    );
+    await expect(mockPage.getByTestId("pro-private-label")).toContainText(
+      "Pro Private"
+    );
   });
 
   test("shows Pro descriptions", async ({ mockPage }) => {
