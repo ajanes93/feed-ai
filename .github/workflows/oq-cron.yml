@@ -18,6 +18,8 @@ on:
           - fetch
           - score
           - rescore
+          - delete-score
+          - predigest
           - fetch-external
           - maintenance
 
@@ -93,9 +95,37 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Delete and regenerate today's score
+      - name: Delete existing score
         run: |
-          curl -sf -X POST "$OQ_WORKER_URL/api/rescore" \
+          curl -sf -X POST "$OQ_WORKER_URL/api/delete-score" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+      - name: Pre-digest articles
+        run: |
+          curl -sf -X POST "$OQ_WORKER_URL/api/predigest" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+      - name: Generate new score
+        run: |
+          curl -sf -X POST "$OQ_WORKER_URL/api/score" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+
+  delete-score:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'delete-score'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Delete today's score
+        run: |
+          curl -sf -X POST "$OQ_WORKER_URL/api/delete-score" \
+            -H "Authorization: Bearer $OQ_ADMIN_KEY"
+
+  predigest:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'predigest'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Pre-digest articles
+        run: |
+          curl -sf -X POST "$OQ_WORKER_URL/api/predigest" \
             -H "Authorization: Bearer $OQ_ADMIN_KEY"
 
   fetch-external:

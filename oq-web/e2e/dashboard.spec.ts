@@ -2,7 +2,12 @@ import { test, expect } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /** Mock admin dashboard API */
-async function mockDashboardApi(page: Page) {
+async function mockDashboardApi(
+  page: Page,
+  opts?: { todayScoreExists?: boolean }
+) {
+  const todayScoreExists = opts?.todayScoreExists ?? false;
+
   await page.route("**/api/admin/dashboard", (route) => {
     const auth = route.request().headers()["authorization"];
     if (!auth || !auth.startsWith("Bearer ")) {
@@ -19,6 +24,7 @@ async function mockDashboardApi(page: Page) {
         totalScores: 14,
         totalArticles: 328,
         totalSubscribers: 5,
+        todayScoreExists,
         ai: {
           totalTokens: 125000,
           recentCalls: [
@@ -99,6 +105,27 @@ async function mockDashboardApi(page: Page) {
       body: JSON.stringify({ score: 33, delta: 0.3, date: "2025-01-15" }),
     });
   });
+
+  await page.route("**/api/delete-score", (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ deleted: true, date: "2025-01-15" }),
+    });
+  });
+
+  await page.route("**/api/predigest", (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        articleCount: 42,
+        pillarCounts: { capability: 10 },
+        preDigested: false,
+        date: "2025-01-15",
+      }),
+    });
+  });
 }
 
 /** Set admin key in sessionStorage and navigate to dashboard */
@@ -171,85 +198,47 @@ test.describe("Dashboard", () => {
     await expect(page.getByText("Total Scores")).toBeVisible();
   });
 
-  test("shows Force Regenerate button when score already exists", async ({
+  test("disables Score button when today's score exists", async ({ page }) => {
+    await mockDashboardApi(page, { todayScoreExists: true });
+    await gotoDashboard(page);
+
+    await page.getByText("Actions").click();
+    // Score menu item should show "delete first" hint
+    await expect(page.getByText("Score (delete first)")).toBeVisible();
+  });
+
+  test("shows Delete Score, Predigest, and Score in actions menu", async ({
     page,
   }) => {
     await mockDashboardApi(page);
-
-    // Override /api/score to return alreadyExists
-    await page.route("**/api/score", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          score: 33,
-          delta: 0.3,
-          date: "2025-01-15",
-          alreadyExists: true,
-        }),
-      })
-    );
-
     await gotoDashboard(page);
 
-    // Open actions dropdown and click Generate Score
     await page.getByText("Actions").click();
-    await page.getByText("Generate Score").click();
-
-    // Should show "already exists" message with Force Regenerate button
-    await expect(page.getByText(/Score already exists/)).toBeVisible();
+    await expect(page.getByText("Delete Score")).toBeVisible();
+    await expect(page.getByText("Predigest")).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Force Regenerate" })
+      page.getByText("Score", { exact: true }).first()
     ).toBeVisible();
   });
 
-  test("Force Regenerate calls rescore and shows result", async ({ page }) => {
+  test("Delete Score shows success result", async ({ page }) => {
     await mockDashboardApi(page);
-
-    // Override /api/score to return alreadyExists
-    await page.route("**/api/score", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          score: 33,
-          delta: 0.3,
-          date: "2025-01-15",
-          alreadyExists: true,
-        }),
-      })
-    );
-
-    // Mock /api/rescore
-    await page.route("**/api/rescore", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          score: 35,
-          delta: 0.5,
-          date: "2025-01-15",
-        }),
-      })
-    );
-
     await gotoDashboard(page);
 
-    // Trigger "already exists" state
     await page.getByText("Actions").click();
-    await page.getByText("Generate Score").click();
-    await expect(
-      page.getByRole("button", { name: "Force Regenerate" })
-    ).toBeVisible();
+    await page.getByText("Delete Score").click();
 
-    // Click Force Regenerate
-    await page.getByRole("button", { name: "Force Regenerate" }).click();
+    await expect(page.getByText(/Deleted score/)).toBeVisible();
+  });
 
-    // Should show regenerated result and no more Force Regenerate button
-    await expect(page.getByText(/Regenerated score/)).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Force Regenerate" })
-    ).not.toBeVisible();
+  test("Predigest shows success result", async ({ page }) => {
+    await mockDashboardApi(page);
+    await gotoDashboard(page);
+
+    await page.getByText("Actions").click();
+    await page.getByText("Predigest").click();
+
+    await expect(page.getByText(/Pre-digested 42 articles/)).toBeVisible();
   });
 
   test("shows friendly error when dashboard API network fails", async ({

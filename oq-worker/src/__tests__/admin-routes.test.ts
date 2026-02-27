@@ -26,6 +26,8 @@ describe("Admin API routes", () => {
       { method: "POST", url: "/api/fetch-swebench" },
       { method: "POST", url: "/api/fetch-fred" },
       { method: "POST", url: "/api/rescore" },
+      { method: "POST", url: "/api/delete-score" },
+      { method: "POST", url: "/api/predigest" },
     ];
 
     for (const { method, url } of protectedEndpoints) {
@@ -65,6 +67,36 @@ describe("Admin API routes", () => {
       expect(data.totalScores).toBe(0);
       expect(data.totalArticles).toBe(0);
       expect(data.totalSubscribers).toBe(0);
+      expect(data.todayScoreExists).toBe(false);
+    });
+
+    it("returns todayScoreExists true when score exists for today", async () => {
+      const today = new Date().toISOString().split("T")[0];
+      await env.DB.prepare(
+        "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, prompt_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+        .bind(
+          "s1",
+          today,
+          35,
+          28,
+          40,
+          0.5,
+          "Analysis",
+          "[]",
+          "{}",
+          "[]",
+          "partial",
+          0.3,
+          "hash"
+        )
+        .run();
+
+      const res = await SELF.fetch("http://localhost/api/admin/dashboard", {
+        headers: AUTH_HEADERS,
+      });
+      const data = await res.json();
+      expect(data.todayScoreExists).toBe(true);
     });
 
     it("returns populated dashboard data", async () => {
@@ -533,6 +565,164 @@ describe("Admin API routes", () => {
         .bind(today)
         .first();
       expect(score).not.toBeNull();
+    });
+  });
+
+  // --- Delete score ---
+
+  describe("POST /api/delete-score", () => {
+    it("deletes existing score and linked data", async () => {
+      const today = new Date().toISOString().split("T")[0];
+
+      // Seed an existing score for today
+      await env.DB.prepare(
+        "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, prompt_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+        .bind(
+          "del-score-id",
+          today,
+          35,
+          28,
+          40,
+          0.5,
+          "Old analysis",
+          "[]",
+          "{}",
+          "[]",
+          "partial",
+          0.3,
+          "old-hash"
+        )
+        .run();
+
+      // Seed linked rows
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO oq_score_articles (score_id, article_id) VALUES (?, ?)"
+        ).bind("del-score-id", "art-1"),
+        env.DB.prepare(
+          "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(
+          "mr-1",
+          "del-score-id",
+          "claude",
+          "anthropic",
+          "{}",
+          "{}",
+          0,
+          0,
+          0,
+          "a",
+          "[]"
+        ),
+        env.DB.prepare(
+          "INSERT INTO oq_ai_usage (id, model, provider, status, score_id) VALUES (?, ?, ?, ?, ?)"
+        ).bind("au-1", "claude", "anthropic", "success", "del-score-id"),
+      ]);
+
+      const res = await SELF.fetch("http://localhost/api/delete-score", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.deleted).toBe(true);
+      expect(data.date).toBe(today);
+
+      // Score and linked rows should be gone
+      const score = await env.DB.prepare(
+        "SELECT id FROM oq_scores WHERE id = 'del-score-id'"
+      ).first();
+      expect(score).toBeNull();
+
+      const linkedArticles = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM oq_score_articles WHERE score_id = 'del-score-id'"
+      ).first();
+      expect(linkedArticles!.cnt).toBe(0);
+
+      const linkedResponses = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM oq_model_responses WHERE score_id = 'del-score-id'"
+      ).first();
+      expect(linkedResponses!.cnt).toBe(0);
+
+      const linkedUsage = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM oq_ai_usage WHERE score_id = 'del-score-id'"
+      ).first();
+      expect(linkedUsage!.cnt).toBe(0);
+    });
+
+    it("returns deleted false when no score exists", async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const res = await SELF.fetch("http://localhost/api/delete-score", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.deleted).toBe(false);
+      expect(data.date).toBe(today);
+    });
+  });
+
+  // --- Predigest ---
+
+  describe("POST /api/predigest", () => {
+    it("caches pre-digested articles", async () => {
+      const today = new Date().toISOString().split("T")[0];
+
+      // Seed some articles (no scores linked)
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO oq_articles (id, title, url, source, pillar, summary, published_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        ).bind(
+          "a1",
+          "Test AI",
+          "https://example.com/1",
+          "TestSource",
+          "capability",
+          "Summary 1",
+          today
+        ),
+        env.DB.prepare(
+          "INSERT INTO oq_articles (id, title, url, source, pillar, summary, published_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        ).bind(
+          "a2",
+          "Test Labour",
+          "https://example.com/2",
+          "TestSource",
+          "labour_market",
+          "Summary 2",
+          today
+        ),
+      ]);
+
+      const res = await SELF.fetch("http://localhost/api/predigest", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.articleCount).toBe(2);
+      expect(data.date).toBe(today);
+
+      // Check cache was written
+      const cached = await env.DB.prepare(
+        "SELECT * FROM oq_predigest_cache WHERE date = ?"
+      )
+        .bind(today)
+        .first();
+      expect(cached).not.toBeNull();
+      expect(cached!.article_count).toBe(2);
+    });
+
+    it("returns zero articles when none available", async () => {
+      const res = await SELF.fetch("http://localhost/api/predigest", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.articleCount).toBe(0);
     });
   });
 
