@@ -756,7 +756,7 @@ app.post("/api/admin/purge-scores", (c) =>
   })
 );
 
-// Purge only funding events + sentinels — allows re-extraction without losing scores
+// Purge all funding events INCLUDING scan sentinels — extract-funding will re-scan all articles
 app.post("/api/admin/purge-funding", (c) =>
   adminHandler(c, "purge-funding", async () => {
     const result = await c.env.DB.prepare(
