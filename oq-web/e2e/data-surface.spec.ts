@@ -429,14 +429,14 @@ test.describe("Economic Reality funding headline", () => {
     await expect(total).toContainText("$2.1B");
   });
 
-  test("shows funding round count", async ({ mockPage }) => {
+  test("shows funding event count", async ({ mockPage }) => {
     await mockPage.goto("/");
     const count = mockPage.locator("[data-testid='funding-count']");
     await expect(count).toBeVisible();
-    await expect(count).toContainText("4 rounds");
+    await expect(count).toContainText("4 events");
   });
 
-  test("shows top round callout", async ({ mockPage }) => {
+  test("shows top event callout", async ({ mockPage }) => {
     await mockPage.goto("/");
     const topEvent = mockPage.locator("[data-testid='top-event']");
     await expect(topEvent).toBeVisible();
