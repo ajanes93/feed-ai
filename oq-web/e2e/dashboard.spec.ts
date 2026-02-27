@@ -216,7 +216,9 @@ test.describe("Dashboard", () => {
     await page.getByText("Actions").click();
     await expect(page.getByText("Delete Score")).toBeVisible();
     await expect(page.getByText("Predigest")).toBeVisible();
-    await expect(page.getByText("Score")).toBeVisible();
+    await expect(
+      page.getByText("Score", { exact: true }).first()
+    ).toBeVisible();
   });
 
   test("Delete Score shows success result", async ({ page }) => {
