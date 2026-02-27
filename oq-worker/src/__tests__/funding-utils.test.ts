@@ -81,12 +81,12 @@ describe("parseAmount", () => {
 
 describe("fundingDedupeKey", () => {
   it("normalises company name to lowercase", () => {
-    expect(fundingDedupeKey("OpenAI", "$500M")).toBe("openai|$500m");
+    expect(fundingDedupeKey("OpenAI", "$500M")).toBe("openai|500");
   });
 
   it("strips 'up to' prefix from amount", () => {
-    expect(fundingDedupeKey("Acme", "up to $500M")).toBe("acme|$500m");
-    expect(fundingDedupeKey("Acme", "Up To $500M")).toBe("acme|$500m");
+    expect(fundingDedupeKey("Acme", "up to $500M")).toBe("acme|500");
+    expect(fundingDedupeKey("Acme", "Up To $500M")).toBe("acme|500");
   });
 
   it("handles null/undefined amount", () => {
@@ -95,12 +95,27 @@ describe("fundingDedupeKey", () => {
   });
 
   it("trims whitespace", () => {
-    expect(fundingDedupeKey("  Acme  ", "  $500M  ")).toBe("acme|$500m");
+    expect(fundingDedupeKey("  Acme  ", "  $500M  ")).toBe("acme|500");
   });
 
   it("produces same key for equivalent entries", () => {
     const a = fundingDedupeKey("OpenAI", "$500M");
     const b = fundingDedupeKey("openai", "up to $500M");
     expect(a).toBe(b);
+  });
+
+  it("normalises different amount formats to same key", () => {
+    // $100B, $100 billion, $100,000M should all produce the same key
+    const a = fundingDedupeKey("Meta", "$100B");
+    const b = fundingDedupeKey("Meta", "$100 billion");
+    const c = fundingDedupeKey("Meta", "$100,000M");
+    expect(a).toBe(b);
+    expect(b).toBe(c);
+    expect(a).toBe("meta|100000"); // 100B = 100,000M
+  });
+
+  it("falls back to lowercased string for unparseable amounts", () => {
+    expect(fundingDedupeKey("Acme", "undisclosed")).toBe("acme|undisclosed");
+    expect(fundingDedupeKey("Acme", "N/A")).toBe("acme|n/a");
   });
 });

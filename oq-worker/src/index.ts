@@ -1118,17 +1118,19 @@ function formatTotalRaised(millions: number): string {
   return "$0";
 }
 
-/** Normalise a company+amount pair into a dedup key */
+/** Normalise a company+amount pair into a dedup key.
+ *  Amounts are converted to millions via parseAmount so that
+ *  "$100B", "$100 billion", and "$100,000M" all produce the same key. */
 export function fundingDedupeKey(
   company: string,
   amount?: string | null
 ): string {
   const c = company.trim().toLowerCase();
-  // Normalise amount: strip "up to ", whitespace, lowercase
-  const a = (amount ?? "")
-    .replace(/^up\s+to\s+/i, "")
-    .trim()
-    .toLowerCase();
+  const raw = (amount ?? "").replace(/^up\s+to\s+/i, "").trim();
+  const millions = parseAmount(raw);
+  // Use normalised millions as canonical amount; fall back to lowercased string
+  // so that unparseable amounts still dedup by exact match
+  const a = millions > 0 ? String(millions) : raw.toLowerCase();
   return `${c}|${a}`;
 }
 
@@ -1444,6 +1446,11 @@ function stripJsonFences(text: string): string {
 
 function buildFundingPrompt(articles: string): string {
   return `Extract ALL AI-related funding, investment, and spending events from these articles. Include both funding rounds (VC/equity raises) AND corporate AI infrastructure spending (capex/buildouts). Only include events with a specific company name and dollar amount.
+
+DEDUP RULES — avoid double-counting the same money:
+- Use the company that is RECEIVING the investment or SPENDING the money as the company name.
+- If the same dollar amount appears from multiple angles (e.g. "Meta spending $100B on AI" and "Nvidia to receive $100B from Meta"), that is ONE event — use the spender/raiser (Meta) as the company.
+- If an article mentions both a total round and individual investor contributions that sum to it, only report the total round once.
 
 Return JSON: { "events": [{ "company": "Name", "amount": "$XB", "round": "Series X", "valuation": "$XB", "source_url": "https://...", "date": "YYYY-MM-DD", "relevance": "AI lab funding | AI code tool | AI infrastructure | AI capex" }] }
 
