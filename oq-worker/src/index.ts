@@ -1034,7 +1034,7 @@ async function loadExternalData(
 interface FundingSummary {
   totalRaised: string;
   count: number;
-  topRound?: { company: string; amount: string; round?: string };
+  topEvent?: { company: string; amount: string; round?: string };
 }
 
 interface FundingEventRow {
@@ -1065,7 +1065,7 @@ async function loadFundingSummary(
 
     let totalMillions = 0;
     let topAmount = 0;
-    let topRound: FundingSummary["topRound"] = undefined;
+    let topEvent: FundingSummary["topEvent"] = undefined;
 
     for (const ev of events) {
       const parsed = parseAmount(ev.amount);
@@ -1073,7 +1073,7 @@ async function loadFundingSummary(
         totalMillions += parsed;
         if (parsed > topAmount) {
           topAmount = parsed;
-          topRound = {
+          topEvent = {
             company: ev.company,
             amount: ev.amount!,
             round: ev.round ?? undefined,
@@ -1085,7 +1085,7 @@ async function loadFundingSummary(
     return {
       totalRaised: formatTotalRaised(totalMillions),
       count: events.length,
-      topRound,
+      topEvent,
     };
   } catch (err) {
     await log?.error("external", "loadFundingSummary failed", {
@@ -1096,7 +1096,6 @@ async function loadFundingSummary(
 }
 
 /** Parse "$2.1B", "$500M", "$100 billion" etc. into millions (USD only).
- *  Handles both abbreviations (T/B/M/K) and spelled-out units (trillion/billion/million/thousand).
  *  Bare numbers >1000 without a unit are treated as raw dollars (e.g. "$500,000" → 0.5M). */
 export function parseAmount(amount: string | null | undefined): number {
   if (!amount) return 0;
@@ -1661,6 +1660,7 @@ async function extractFundingFromArticles(
   articlesScanned: number;
   batches: number;
   skippedDupes: number;
+  skippedVerification: number;
 }> {
   // Find articles not yet scanned for funding (no row in oq_funding_events with their ID)
   // Limit to 800 per call (10 batches of 80) — call repeatedly to process all articles
@@ -1698,7 +1698,8 @@ async function extractFundingFromArticles(
   );
 
   let totalExtracted = 0;
-  let totalSkipped = 0;
+  let totalSkippedDupes = 0;
+  let totalSkippedVerification = 0;
   const totalBatches = Math.ceil(
     articles.results.length / FUNDING_EXTRACT_BATCH_SIZE
   );
@@ -1868,14 +1869,18 @@ async function extractFundingFromArticles(
       await env.DB.batch(stmts.slice(j, j + 100));
     }
 
+    const batchDupes = events.length - dedupedCandidates.length;
+    const batchRejected = dedupedCandidates.length - toInsert.length;
     totalExtracted += toInsert.length;
-    totalSkipped += events.length - toInsert.length;
+    totalSkippedDupes += batchDupes;
+    totalSkippedVerification += batchRejected;
 
     await log.info("extract-funding", `Batch ${batchNum} complete`, {
       articles: batch.length,
       eventsFound: events.length,
       inserted: toInsert.length,
-      skippedDupes: events.length - toInsert.length,
+      skippedDupes: batchDupes,
+      skippedVerification: batchRejected,
     });
   }
 
@@ -1883,7 +1888,8 @@ async function extractFundingFromArticles(
     extracted: totalExtracted,
     articlesScanned: articles.results.length,
     batches: totalBatches,
-    skippedDupes: totalSkipped,
+    skippedDupes: totalSkippedDupes,
+    skippedVerification: totalSkippedVerification,
   };
 }
 

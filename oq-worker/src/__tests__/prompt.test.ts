@@ -182,7 +182,7 @@ describe("buildScoringPrompt", () => {
       fundingSummary: {
         totalRaised: "$2.1B",
         count: 4,
-        topRound: { company: "Anthropic", amount: "$1B", round: "Series E" },
+        topEvent: { company: "Anthropic", amount: "$1B", round: "Series E" },
       },
     });
     expect(prompt).toContain("$2.1B across 4 event(s)");

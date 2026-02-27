@@ -208,7 +208,7 @@ function buildMethodologyResponse() {
     fundingSummary: {
       totalRaised: "$2.1B",
       count: 4,
-      topRound: {
+      topEvent: {
         company: "OpenAI",
         amount: "$1.5B",
         round: "Series G",

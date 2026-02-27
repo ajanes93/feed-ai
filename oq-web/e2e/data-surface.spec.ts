@@ -438,10 +438,10 @@ test.describe("Economic Reality funding headline", () => {
 
   test("shows top round callout", async ({ mockPage }) => {
     await mockPage.goto("/");
-    const topRound = mockPage.locator("[data-testid='top-round']");
-    await expect(topRound).toBeVisible();
-    await expect(topRound).toContainText("OpenAI");
-    await expect(topRound).toContainText("$1.5B");
+    const topEvent = mockPage.locator("[data-testid='top-event']");
+    await expect(topEvent).toBeVisible();
+    await expect(topEvent).toContainText("OpenAI");
+    await expect(topEvent).toContainText("$1.5B");
   });
 });
 

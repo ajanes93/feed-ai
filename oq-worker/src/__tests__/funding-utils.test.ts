@@ -89,6 +89,10 @@ describe("parseAmount", () => {
     expect(parseAmount("  $500M")).toBe(500);
     expect(parseAmount("  $2.1B  ")).toBe(2100);
   });
+
+  it("returns 0 for 'up to' prefix (stripped by fundingDedupeKey, not parseAmount)", () => {
+    expect(parseAmount("up to $500M")).toBe(0);
+  });
 });
 
 describe("fundingDedupeKey", () => {

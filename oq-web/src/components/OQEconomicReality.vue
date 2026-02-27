@@ -21,7 +21,7 @@ const props = defineProps<{
   labourNote?: string;
   totalRaised?: string;
   fundingCount?: number;
-  topRound?: { company: string; amount: string; round?: string };
+  topEvent?: { company: string; amount: string; round?: string };
   fundingEvents?: OQFundingEvent[];
 }>();
 
@@ -131,12 +131,12 @@ const isOpen = ref(false);
           across {{ fundingCount }} event{{ fundingCount !== 1 ? "s" : "" }}
         </div>
         <div
-          v-if="topRound"
+          v-if="topEvent"
           class="mt-1 text-[9px] text-muted-foreground/50"
-          data-testid="top-round"
+          data-testid="top-event"
         >
-          Top: {{ topRound.company }} · {{ topRound.amount
-          }}<span v-if="topRound.round"> · {{ topRound.round }}</span>
+          Top: {{ topEvent.company }} · {{ topEvent.amount
+          }}<span v-if="topEvent.round"> · {{ topEvent.round }}</span>
         </div>
       </div>
     </div>
