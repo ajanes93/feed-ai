@@ -1090,18 +1090,13 @@ async function loadFundingSummary(
  *  Bare numbers >1000 without a unit are treated as raw dollars (e.g. "$500,000" → 0.5M). */
 export function parseAmount(amount: string | null | undefined): number {
   if (!amount) return 0;
-  const cleaned = amount.replace(/,/g, "");
-  // Match number + optional unit (abbreviation or spelled-out word)
-  const match = cleaned.match(
-    /^\$?\s*([\d.]+)\s*(billion|billion|million|thousand|[BMKbmk])?/i
-  );
+  const match = amount.replace(/,/g, "").match(/^\$?\s*([\d.]+)\s*(billion|million|thousand|[BMK])?/i);
   if (!match) return 0;
   const num = parseFloat(match[1]);
   if (isNaN(num)) return 0;
   const unit = (match[2] ?? "").toUpperCase();
-  if (unit === "B" || unit === "BILLION") return num * 1000;
-  if (unit === "M" || unit === "MILLION") return num;
-  if (unit === "K" || unit === "THOUSAND") return num / 1000;
+  const multipliers: Record<string, number> = { B: 1000, BILLION: 1000, M: 1, MILLION: 1, K: 0.001, THOUSAND: 0.001 };
+  if (unit in multipliers) return num * multipliers[unit];
   // No unit: if num > 1000, assume raw dollars (e.g. "$500,000" → 0.5M)
   if (num > 1000) return num / 1_000_000;
   return num; // small numbers without unit assumed to be millions
@@ -1118,9 +1113,8 @@ function formatTotalRaised(millions: number): string {
   return "$0";
 }
 
-/** Normalise a company+amount pair into a dedup key.
- *  Amounts are converted to millions via parseAmount so that
- *  "$100B", "$100 billion", and "$100,000M" all produce the same key. */
+/** Normalise a company+amount pair into a dedup key. Amount is converted to
+ *  millions so "$100B", "$100 billion", and "$100,000M" all match. */
 export function fundingDedupeKey(
   company: string,
   amount?: string | null
@@ -1128,8 +1122,6 @@ export function fundingDedupeKey(
   const c = company.trim().toLowerCase();
   const raw = (amount ?? "").replace(/^up\s+to\s+/i, "").trim();
   const millions = parseAmount(raw);
-  // Use normalised millions as canonical amount; fall back to lowercased string
-  // so that unparseable amounts still dedup by exact match
   const a = millions > 0 ? String(millions) : raw.toLowerCase();
   return `${c}|${a}`;
 }
@@ -1445,12 +1437,12 @@ function stripJsonFences(text: string): string {
 }
 
 function buildFundingPrompt(articles: string): string {
-  return `Extract ALL AI-related funding, investment, and spending events from these articles. Include both funding rounds (VC/equity raises) AND corporate AI infrastructure spending (capex/buildouts). Only include events with a specific company name and dollar amount.
+  return `Extract ALL AI-related funding and spending events from these articles. Include VC/equity raises AND corporate AI infrastructure capex. Only include events with a specific company name and dollar amount.
 
 DEDUP RULES — avoid double-counting the same money:
-- Use the company that is RECEIVING the investment or SPENDING the money as the company name.
-- If the same dollar amount appears from multiple angles (e.g. "Meta spending $100B on AI" and "Nvidia to receive $100B from Meta"), that is ONE event — use the spender/raiser (Meta) as the company.
-- If an article mentions both a total round and individual investor contributions that sum to it, only report the total round once.
+- Company name = whoever is RECEIVING the investment or SPENDING the money.
+- Same dollar amount from multiple angles (e.g. "Meta spending $100B on AI" + "Nvidia to receive $100B from Meta") = ONE event.
+- Total round + individual investor contributions that sum to it = ONE event (report the total).
 
 Return JSON: { "events": [{ "company": "Name", "amount": "$XB", "round": "Series X", "valuation": "$XB", "source_url": "https://...", "date": "YYYY-MM-DD", "relevance": "AI lab funding | AI code tool | AI infrastructure | AI capex" }] }
 
@@ -1483,7 +1475,6 @@ function buildFundingVerificationPrompt(events: FundingCandidate[]): string {
 KEEP events that are:
 - Venture capital funding rounds, investment rounds, or equity raises by AI companies (any size)
 - Corporate AI infrastructure spending and capital expenditure (e.g. "Meta spending $65B on AI data centers", "Google investing $75B in AI infrastructure")
-- Any significant financial commitment to AI — funding rounds, infra buildouts, or AI-specific capex
 
 REJECT events that are:
 - VC firms raising their own funds (e.g. "General Catalyst raises $5B fund") — this is the VC fundraising, not an AI company receiving money
