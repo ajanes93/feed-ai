@@ -198,7 +198,7 @@ describe("parseModelResponse", () => {
 });
 
 describe("mergeSignals", () => {
-  it("deduplicates signals by first 50 chars lowercased", () => {
+  it("deduplicates signals with identical text", () => {
     const s1 = oqSignalFactory.build({
       text: "AI benchmark improved significantly",
       impact: 3,
@@ -246,6 +246,50 @@ describe("mergeSignals", () => {
   it("returns empty array when no signals", () => {
     const scores = [oqModelScoreFactory.build({ top_signals: [] })];
     expect(mergeSignals(scores)).toEqual([]);
+  });
+
+  it("deduplicates signals with different phrasing of same event", () => {
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "Block lays off 4,000 employees (50% of workforce) citing AI adoption",
+            impact: 3,
+          }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "Block lays off 4,000 employees citing AI adoption.",
+            impact: 2,
+          }),
+        ],
+      }),
+    ];
+    const result = mergeSignals(scores);
+    expect(result).toHaveLength(1);
+    // Keeps the first occurrence (higher impact)
+    expect(result[0].impact).toBe(3);
+  });
+
+  it("does NOT deduplicate genuinely different signals", () => {
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "Block lays off 4,000 employees citing AI adoption",
+            impact: 3,
+          }),
+          oqSignalFactory.build({
+            text: "SWE-bench Pro scores remain low on private codebases",
+            impact: -2,
+          }),
+        ],
+      }),
+    ];
+    const result = mergeSignals(scores);
+    expect(result).toHaveLength(2);
   });
 });
 

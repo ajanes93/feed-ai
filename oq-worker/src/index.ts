@@ -1127,6 +1127,20 @@ function formatTotalRaised(millions: number): string {
   return "$0";
 }
 
+const AMOUNT_QUALIFIER_RE =
+  /^(up\s+to|more\s+than|at\s+least|approximately|around|about|nearly|over|roughly|almost)\s+/i;
+
+/** Round a millions value to the nearest significant tier so that minor
+ *  reporting differences (e.g. $6.5B vs $6.6B) resolve to the same bucket. */
+export function bucketAmount(millions: number): number {
+  if (millions <= 0) return 0;
+  if (millions < 10) return Math.round(millions);
+  if (millions < 100) return Math.round(millions / 5) * 5;
+  if (millions < 1000) return Math.round(millions / 25) * 25;
+  if (millions < 10_000) return Math.round(millions / 250) * 250;
+  return Math.round(millions / 1000) * 1000;
+}
+
 /** Normalise a company+amount pair into a dedup key. Amount is converted to
  *  millions so "$100B", "$100 billion", and "$100,000M" all match. */
 export function fundingDedupeKey(
@@ -1134,9 +1148,10 @@ export function fundingDedupeKey(
   amount?: string | null
 ): string {
   const c = company.trim().toLowerCase();
-  const raw = (amount ?? "").replace(/^up\s+to\s+/i, "").trim();
+  const raw = (amount ?? "").replace(AMOUNT_QUALIFIER_RE, "").trim();
   const millions = parseAmount(raw);
-  const a = millions > 0 ? String(millions) : raw.toLowerCase();
+  const bucketed = bucketAmount(millions);
+  const a = bucketed > 0 ? String(bucketed) : raw.toLowerCase();
   return `${c}|${a}`;
 }
 
@@ -1460,6 +1475,7 @@ INCLUDE ONLY completed, concrete financial transactions:
 EXCLUDE — do not extract these:
 - Spending PROJECTIONS, TARGETS, or PLANS for future years (e.g. "OpenAI targets $600B by 2030", "Amazon plans to invest $200B")
 - Individual investor contributions when the total round is also mentioned (report ONLY the total round)
+- Funding rounds described as "being finalized", "expected to close", "in discussions", "targeting", "could total", or "may reach" — only extract rounds that have already closed or been officially announced as complete
 - Legal verdicts, fines, settlements, or lawsuit damages
 - Acquisitions, M&A, or payments for non-AI companies
 - Revenue, contracts, government grants, or stock/market cap figures
@@ -1507,6 +1523,7 @@ REJECT — these are NOT funding events:
 - Legal verdicts, fines, settlements, or lawsuit damages (e.g. "Tesla loses $243M verdict")
 - Acquisitions, M&A, or payments for non-AI products (e.g. "Google paid $1B for battery company")
 - VC firms raising their own funds (e.g. "General Catalyst raises $5B fund")
+- Funding rounds described as "being finalized", "expected to close", "could total", "targeting", or otherwise unconfirmed (e.g. "OpenAI is finalizing a round that could total $100B" → REJECT)
 - Revenue, bookings, contracts, or government grants
 - Stock buybacks, market cap changes, or valuation figures without a funding event
 - General financial figures not specifically about AI company fundraising

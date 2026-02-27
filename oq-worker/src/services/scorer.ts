@@ -249,13 +249,24 @@ function calculateModelAgreement(scores: OQModelScore[]): {
   return { agreement: "disagree", spread };
 }
 
+function normaliseSignalText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, "") // strip parentheticals: "(50% of workforce)"
+    .replace(/[\d,]+%?/g, "") // strip numbers and percentages
+    .replace(/[^\w\s]/g, " ") // punctuation → space
+    .replace(/\s+/g, " ") // collapse whitespace
+    .trim()
+    .slice(0, 60);
+}
+
 function mergeSignals(scores: OQModelScore[]): OQSignal[] {
   const seen = new Set<string>();
   const signals: OQSignal[] = [];
 
   for (const score of scores) {
     for (const signal of score.top_signals) {
-      const key = signal.text.toLowerCase().slice(0, 50);
+      const key = normaliseSignalText(signal.text);
       if (!seen.has(key)) {
         seen.add(key);
         signals.push(signal);
