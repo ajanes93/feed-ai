@@ -429,19 +429,19 @@ test.describe("Economic Reality funding headline", () => {
     await expect(total).toContainText("$2.1B");
   });
 
-  test("shows funding round count", async ({ mockPage }) => {
+  test("shows funding event count", async ({ mockPage }) => {
     await mockPage.goto("/");
     const count = mockPage.locator("[data-testid='funding-count']");
     await expect(count).toBeVisible();
-    await expect(count).toContainText("4 rounds");
+    await expect(count).toContainText("4 events");
   });
 
-  test("shows top round callout", async ({ mockPage }) => {
+  test("shows top event callout", async ({ mockPage }) => {
     await mockPage.goto("/");
-    const topRound = mockPage.locator("[data-testid='top-round']");
-    await expect(topRound).toBeVisible();
-    await expect(topRound).toContainText("OpenAI");
-    await expect(topRound).toContainText("$1.5B");
+    const topEvent = mockPage.locator("[data-testid='top-event']");
+    await expect(topEvent).toBeVisible();
+    await expect(topEvent).toContainText("OpenAI");
+    await expect(topEvent).toContainText("$1.5B");
   });
 });
 
@@ -450,7 +450,7 @@ test.describe("Economic Reality drill-down", () => {
     await mockPage.goto("/");
     const drillDowns = mockPage.getByText("Drill down", { exact: true });
     await drillDowns.last().click();
-    await expect(mockPage.getByText("Recent AI Funding")).toBeVisible();
+    await expect(mockPage.getByText("Recent AI Spending")).toBeVisible();
     const events = mockPage.locator("[data-testid='funding-event']");
     await expect(events).toHaveCount(2);
   });

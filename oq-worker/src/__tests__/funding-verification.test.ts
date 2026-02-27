@@ -63,9 +63,9 @@ describe("buildFundingVerificationPrompt", () => {
   it("includes rejection criteria", () => {
     const events: FundingCandidate[] = [{ company: "TestCo", amount: "$100M" }];
     const prompt = buildFundingVerificationPrompt(events);
-    expect(prompt).toContain("Corporate capital expenditure");
     expect(prompt).toContain("VC firms raising their own funds");
     expect(prompt).toContain("Acquisitions or M&A");
+    expect(prompt).toContain("not specifically related to AI");
   });
 
   it("handles empty events array", () => {

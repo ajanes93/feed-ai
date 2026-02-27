@@ -329,7 +329,7 @@ onMounted(async () => {
             :labour-note="today.labourNote"
             :total-raised="methodology?.fundingSummary?.totalRaised"
             :funding-count="methodology?.fundingSummary?.count"
-            :top-round="methodology?.fundingSummary?.topRound"
+            :top-event="methodology?.fundingSummary?.topEvent"
             :funding-events="today.fundingEvents"
           />
         </motion.section>

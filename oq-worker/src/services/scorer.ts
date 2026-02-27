@@ -406,7 +406,7 @@ interface ScoringInput {
   fundingSummary?: {
     totalRaised: string;
     count: number;
-    topRound?: { company: string; amount: string; round?: string };
+    topEvent?: { company: string; amount: string; round?: string };
   };
   log?: ScorerLogger;
 }

@@ -59,16 +59,50 @@ describe("parseAmount", () => {
     expect(parseAmount("€500M")).toBe(0);
     expect(parseAmount("£200M")).toBe(0);
   });
+
+  it("parses spelled-out billion", () => {
+    expect(parseAmount("$100 billion")).toBe(100_000);
+    expect(parseAmount("$6.6 billion")).toBe(6600);
+    expect(parseAmount("100 billion")).toBe(100_000);
+    expect(parseAmount("$2.1 Billion")).toBe(2100);
+  });
+
+  it("parses spelled-out million", () => {
+    expect(parseAmount("$500 million")).toBe(500);
+    expect(parseAmount("$12.5 million")).toBe(12.5);
+    expect(parseAmount("250 Million")).toBe(250);
+  });
+
+  it("parses spelled-out thousand", () => {
+    expect(parseAmount("$800 thousand")).toBe(0.8);
+    expect(parseAmount("500 Thousand")).toBe(0.5);
+  });
+
+  it("parses trillion amounts", () => {
+    expect(parseAmount("$1T")).toBe(1_000_000);
+    expect(parseAmount("$1.5 trillion")).toBe(1_500_000);
+    expect(parseAmount("$0.5T")).toBe(500_000);
+    expect(parseAmount("2 Trillion")).toBe(2_000_000);
+  });
+
+  it("handles leading whitespace", () => {
+    expect(parseAmount("  $500M")).toBe(500);
+    expect(parseAmount("  $2.1B  ")).toBe(2100);
+  });
+
+  it("returns 0 for 'up to' prefix (stripped by fundingDedupeKey, not parseAmount)", () => {
+    expect(parseAmount("up to $500M")).toBe(0);
+  });
 });
 
 describe("fundingDedupeKey", () => {
   it("normalises company name to lowercase", () => {
-    expect(fundingDedupeKey("OpenAI", "$500M")).toBe("openai|$500m");
+    expect(fundingDedupeKey("OpenAI", "$500M")).toBe("openai|500");
   });
 
   it("strips 'up to' prefix from amount", () => {
-    expect(fundingDedupeKey("Acme", "up to $500M")).toBe("acme|$500m");
-    expect(fundingDedupeKey("Acme", "Up To $500M")).toBe("acme|$500m");
+    expect(fundingDedupeKey("Acme", "up to $500M")).toBe("acme|500");
+    expect(fundingDedupeKey("Acme", "Up To $500M")).toBe("acme|500");
   });
 
   it("handles null/undefined amount", () => {
@@ -77,12 +111,27 @@ describe("fundingDedupeKey", () => {
   });
 
   it("trims whitespace", () => {
-    expect(fundingDedupeKey("  Acme  ", "  $500M  ")).toBe("acme|$500m");
+    expect(fundingDedupeKey("  Acme  ", "  $500M  ")).toBe("acme|500");
   });
 
   it("produces same key for equivalent entries", () => {
     const a = fundingDedupeKey("OpenAI", "$500M");
     const b = fundingDedupeKey("openai", "up to $500M");
     expect(a).toBe(b);
+  });
+
+  it("normalises different amount formats to same key", () => {
+    // $100B, $100 billion, $100,000M should all produce the same key
+    const a = fundingDedupeKey("Meta", "$100B");
+    const b = fundingDedupeKey("Meta", "$100 billion");
+    const c = fundingDedupeKey("Meta", "$100,000M");
+    expect(a).toBe(b);
+    expect(b).toBe(c);
+    expect(a).toBe("meta|100000"); // 100B = 100,000M
+  });
+
+  it("falls back to lowercased string for unparseable amounts", () => {
+    expect(fundingDedupeKey("Acme", "undisclosed")).toBe("acme|undisclosed");
+    expect(fundingDedupeKey("Acme", "N/A")).toBe("acme|n/a");
   });
 });
