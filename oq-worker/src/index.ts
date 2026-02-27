@@ -1451,14 +1451,25 @@ function stripJsonFences(text: string): string {
 }
 
 function buildFundingPrompt(articles: string): string {
-  return `Extract ALL AI-related funding and spending events from these articles. Include VC/equity raises AND corporate AI infrastructure capex. Only include events with a specific company name and dollar amount.
+  return `Extract AI-related funding events from these articles.
 
-DEDUP RULES — avoid double-counting the same money:
-- Company name = whoever is RECEIVING the investment or SPENDING the money.
-- Same dollar amount from multiple angles (e.g. "Meta spending $100B on AI" + "Nvidia to receive $100B from Meta") = ONE event.
-- Total round + individual investor contributions that sum to it = ONE event (report the total).
+INCLUDE ONLY completed, concrete financial transactions:
+- Venture capital rounds, equity raises, and investment rounds (e.g. "OpenAI raises $6.6B Series C")
+- Corporate AI infrastructure spending that has been COMMITTED or ANNOUNCED as a specific deal (e.g. "Meta signs $100B AMD chip deal")
 
-Return JSON: { "events": [{ "company": "Name", "amount": "$XB", "round": "Series X", "valuation": "$XB", "source_url": "https://...", "date": "YYYY-MM-DD", "relevance": "AI lab funding | AI code tool | AI infrastructure | AI capex" }] }
+EXCLUDE — do not extract these:
+- Spending PROJECTIONS, TARGETS, or PLANS for future years (e.g. "OpenAI targets $600B by 2030", "Amazon plans to invest $200B")
+- Individual investor contributions when the total round is also mentioned (report ONLY the total round)
+- Legal verdicts, fines, settlements, or lawsuit damages
+- Acquisitions, M&A, or payments for non-AI companies
+- Revenue, contracts, government grants, or stock/market cap figures
+- VC firms raising their own funds (not an AI company receiving money)
+
+DEDUP: If the same money appears from multiple angles (e.g. "OpenAI raises $110B" + "Amazon invests $50B in OpenAI"), report ONLY ONE event for the recipient with the total amount.
+
+Company name = the company RECEIVING the investment or MAKING the committed spend.
+
+Return JSON: { "events": [{ "company": "Name", "amount": "$XB", "round": "Series X", "valuation": "$XB", "source_url": "https://...", "date": "YYYY-MM-DD", "relevance": "AI lab funding | AI code tool | AI infrastructure" }] }
 
 If no funding events found, return { "events": [] }. Return ONLY the JSON object.
 
@@ -1484,25 +1495,28 @@ function buildFundingVerificationPrompt(events: FundingCandidate[]): string {
     )
     .join("\n");
 
-  return `You are verifying whether each event below is genuine AI-related spending or investment.
+  return `You are a strict verifier. ONLY keep events that are completed, concrete AI funding transactions. When in doubt, REJECT.
 
-KEEP events that are:
-- Venture capital funding rounds, investment rounds, or equity raises by AI companies (any size)
-- Corporate AI infrastructure spending and capital expenditure (e.g. "Meta spending $65B on AI data centers", "Google investing $75B in AI infrastructure")
+KEEP — genuine funding events:
+- Venture capital rounds, equity raises, and investment rounds with a specific dollar amount that has been raised or closed (e.g. "OpenAI raises $6.6B in Series C")
+- Committed corporate AI infrastructure deals with a specific counterparty (e.g. "Meta signs $100B AMD chip deal for AI")
 
-REJECT events that are:
-- VC firms raising their own funds (e.g. "General Catalyst raises $5B fund") — this is the VC fundraising, not an AI company receiving money
-- Revenue figures, contracts, or government grants
-- Acquisitions or M&A transactions
-- Stock buybacks or market cap changes
-- General financial figures not specifically related to AI
-- Non-AI infrastructure spending (e.g. general real estate, non-tech capex)
+REJECT — these are NOT funding events:
+- Spending PROJECTIONS, TARGETS, or PLANS (e.g. "targets $600B by 2030", "plans to invest $200B", "expects to spend")
+- Individual investor contributions when the total round is also in the list (e.g. if "OpenAI $110B" exists, reject separate "Amazon $50B investment in OpenAI")
+- Legal verdicts, fines, settlements, or lawsuit damages (e.g. "Tesla loses $243M verdict")
+- Acquisitions, M&A, or payments for non-AI products (e.g. "Google paid $1B for battery company")
+- VC firms raising their own funds (e.g. "General Catalyst raises $5B fund")
+- Revenue, bookings, contracts, or government grants
+- Stock buybacks, market cap changes, or valuation figures without a funding event
+- General financial figures not specifically about AI company fundraising
+- Vague or aspirational spending without a concrete commitment
 
 Events to verify:
 ${eventList}
 
 Return JSON: { "verified": [1, 3, 5] }
-where the array contains the 1-based indices of events that are genuine AI-related spending or investment.
+where the array contains ONLY the 1-based indices of events you are CERTAIN are genuine, completed AI funding transactions.
 If none are valid, return { "verified": [] }. Return ONLY the JSON object.`;
 }
 
