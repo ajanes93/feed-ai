@@ -77,6 +77,18 @@ describe("parseAmount", () => {
     expect(parseAmount("$800 thousand")).toBe(0.8);
     expect(parseAmount("500 Thousand")).toBe(0.5);
   });
+
+  it("parses trillion amounts", () => {
+    expect(parseAmount("$1T")).toBe(1_000_000);
+    expect(parseAmount("$1.5 trillion")).toBe(1_500_000);
+    expect(parseAmount("$0.5T")).toBe(500_000);
+    expect(parseAmount("2 Trillion")).toBe(2_000_000);
+  });
+
+  it("handles leading whitespace", () => {
+    expect(parseAmount("  $500M")).toBe(500);
+    expect(parseAmount("  $2.1B  ")).toBe(2100);
+  });
 });
 
 describe("fundingDedupeKey", () => {

@@ -1086,16 +1086,28 @@ async function loadFundingSummary(
 }
 
 /** Parse "$2.1B", "$500M", "$100 billion" etc. into millions (USD only).
- *  Handles both abbreviations (B/M/K) and spelled-out units (billion/million/thousand).
+ *  Handles both abbreviations (T/B/M/K) and spelled-out units (trillion/billion/million/thousand).
  *  Bare numbers >1000 without a unit are treated as raw dollars (e.g. "$500,000" → 0.5M). */
 export function parseAmount(amount: string | null | undefined): number {
   if (!amount) return 0;
-  const match = amount.replace(/,/g, "").match(/^\$?\s*([\d.]+)\s*(billion|million|thousand|[BMK])?/i);
+  const match = amount
+    .trim()
+    .replace(/,/g, "")
+    .match(/^\$?\s*([\d.]+)\s*(trillion|billion|million|thousand|[TBMK])?/i);
   if (!match) return 0;
   const num = parseFloat(match[1]);
   if (isNaN(num)) return 0;
   const unit = (match[2] ?? "").toUpperCase();
-  const multipliers: Record<string, number> = { B: 1000, BILLION: 1000, M: 1, MILLION: 1, K: 0.001, THOUSAND: 0.001 };
+  const multipliers: Record<string, number> = {
+    T: 1_000_000,
+    TRILLION: 1_000_000,
+    B: 1000,
+    BILLION: 1000,
+    M: 1,
+    MILLION: 1,
+    K: 0.001,
+    THOUSAND: 0.001,
+  };
   if (unit in multipliers) return num * multipliers[unit];
   // No unit: if num > 1000, assume raw dollars (e.g. "$500,000" → 0.5M)
   if (num > 1000) return num / 1_000_000;
