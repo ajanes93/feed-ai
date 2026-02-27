@@ -11,9 +11,9 @@ describe("OQCapabilityGap", () => {
 
   const global = { stubs: { OQExplainer: true } };
 
-  it("renders section header", () => {
+  it("renders pro benchmark label", () => {
     const wrapper = mount(OQCapabilityGap, { props: defaultProps, global });
-    expect(wrapper.text()).toContain("The Capability Gap");
+    expect(wrapper.text()).toContain("SWE-bench Pro");
   });
 
   it("displays pro score as primary (left position)", () => {

@@ -13,9 +13,9 @@ describe("OQSanityHarness", () => {
 
   const global = { stubs: { OQExplainer: true } };
 
-  it("renders section header", () => {
+  it("renders top agent label", () => {
     const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
-    expect(wrapper.text()).toContain("AI Agent Reality Check");
+    expect(wrapper.text()).toContain("Top Agent");
   });
 
   it("displays top agent pass rate", () => {

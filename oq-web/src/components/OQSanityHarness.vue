@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ExternalLink } from "lucide-vue-next";
-import OQExplainer from "./OQExplainer.vue";
 
 const props = defineProps<{
   topPassRate: number;
@@ -60,16 +59,7 @@ function langBg(pct: number) {
 </script>
 
 <template>
-  <div class="rounded-2xl border border-border bg-card p-6 sm:p-8">
-    <div
-      class="mb-4 flex items-center gap-1.5 text-[10px] tracking-widest text-muted-foreground uppercase"
-    >
-      AI Agent Reality Check
-      <OQExplainer
-        text="Independent benchmark testing AI coding agents across multiple languages. Created by Can Boluk."
-      />
-    </div>
-
+  <div>
     <!-- Top vs Median -->
     <div class="flex items-center justify-center gap-8 sm:gap-12">
       <div class="text-center">

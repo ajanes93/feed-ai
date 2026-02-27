@@ -37,10 +37,10 @@ test.describe("Score display", () => {
 
   test("displays the capability gap section", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(mockPage.getByText("The Capability Gap")).toBeVisible();
     await expect(
-      mockPage.getByText("SWE-bench Verified").first()
+      mockPage.getByText("Can AI actually do the job?")
     ).toBeVisible();
+    await expect(mockPage.getByTestId("pro-score")).toBeVisible();
   });
 });
 

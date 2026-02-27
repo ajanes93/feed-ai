@@ -161,7 +161,12 @@ async function callOpenAI(
 // --- Parsing ---
 
 function truncateStr(value: unknown, maxLen: number): string | undefined {
-  return typeof value === "string" ? value.slice(0, maxLen) : undefined;
+  if (typeof value !== "string") return undefined;
+  if (value.length <= maxLen) return value;
+  // Avoid cutting mid-word: find last space before limit
+  const trimmed = value.slice(0, maxLen);
+  const lastSpace = trimmed.lastIndexOf(" ");
+  return lastSpace > maxLen * 0.6 ? trimmed.slice(0, lastSpace) : trimmed;
 }
 
 function parseModelResponse(text: string, model: string): OQModelScore {
@@ -199,7 +204,7 @@ function parseModelResponse(text: string, model: string): OQModelScore {
           : {}),
       })
     ) as OQSignal[],
-    delta_explanation: truncateStr(parsed.delta_explanation, 200),
+    delta_explanation: truncateStr(parsed.delta_explanation, 150),
     capability_gap_note: truncateStr(parsed.capability_gap_note, 300),
     sanity_harness_note: truncateStr(parsed.sanity_harness_note, 300),
     economic_note: truncateStr(parsed.economic_note, 300),

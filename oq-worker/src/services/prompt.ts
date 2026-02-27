@@ -149,8 +149,8 @@ Provide your assessment as JSON:
       "url": "<REQUIRED: article URL from [url] tag, or source URL for data signals (https://www.swebench.com for SWE-bench, https://sanityboard.lr7.dev for SanityHarness, https://fred.stlouisfed.org for FRED/Indeed data)>"
     }
   ],
-  "delta_explanation": "<one sentence explaining what drove the delta, referencing specific signals by name>",
-  "analysis": "<2-3 sentences. Be specific. Reference concrete data. Mention the Capability Gap if relevant. Avoid generic statements.>",
+  "delta_explanation": "<max 140 characters. Lead with the most important change. Concrete, no hedge words.>",
+  "analysis": "<2-3 punchy sentences as a sharp briefing. Use concrete numbers. No hedge words (suggests, indicates, represents). Write for an engineer scanning this over coffee.>",
   "capability_gap_note": "<optional: note if SWE-bench Verified, Bash Only, or Pro changed today>",
   "sanity_harness_note": "<optional: one-sentence interpretation of today's SanityHarness agent benchmark data — language spread, top agent performance, what it means for replacement>",
   "economic_note": "<optional: one-sentence interpretation of today's economic signals — Indeed index trend, funding activity, hiring/layoff patterns>",
@@ -159,6 +159,10 @@ Provide your assessment as JSON:
 }
 
 IMPORTANT: Return 3-5 top_signals. Fewer than 3 looks broken. Include a mix of up/down/neutral directions.
+Each signal should describe a DISTINCT piece of evidence. If one event has opposing implications
+(e.g. a layoff is ▲ for replacement likelihood but ▼ because it's isolated), phrase each signal
+to clearly distinguish the aspect: "Block cuts 50% workforce citing AI" (▲) vs
+"Block layoff is isolated — software hiring still up 4.1%" (▼).
 
 CALIBRATION RULES:
 - Most days the score should move 0-2 points. 3+ requires landmark news.
@@ -172,12 +176,13 @@ CALIBRATION RULES:
 - Job market declines only matter if software is falling FASTER than general.
 
 ANALYSIS QUALITY RULES:
-- Your analysis MUST reference at least 2 specific articles or data points by name.
-- Never use phrases like "a mix of" or "remains neutral" without citing why.
-- Bad: "The labour market shows mixed signals."
-- Good: "Indeed's software posting index dropped 3 points this week while general postings held steady — the first divergence since October."
-- Bad: "The AI Capability pillar remains neutral as there is a mix of incremental improvements."
-- Good: "SWE-bench Pro holds at ~46% on public repos and ~23% on private code, while SanityHarness median stayed at 50% — agents solve less than half of unfamiliar problems."
+- Write as a sharp briefing, not an academic paper.
+- Lead with the most important development in one punchy sentence.
+- Then 1-2 sentences of context with concrete numbers.
+- Reference at least 2 specific data points by name.
+- NEVER use: "suggests", "indicates", "represents", "a mix of", "remains neutral".
+- Bad: "Block's 4,000-person layoff explicitly citing AI adoption represents the most significant AI-driven headcount reduction to date, but the signal is muddied by Indeed software postings growing 4.1%."
+- Good: "Block cut half its workforce and blamed AI — the biggest AI-driven layoff yet. But software job postings are actually up 4.1% this month. One company restructuring doesn't make a trend."
 
 Return ONLY the JSON object, no other text.`;
 }

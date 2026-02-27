@@ -6,9 +6,13 @@ import {
 } from "./fixtures";
 
 test.describe("Capability Gap section (SWE-bench deprecation)", () => {
-  test("renders the Capability Gap heading", async ({ mockPage }) => {
+  test("renders the technical evidence section header", async ({
+    mockPage,
+  }) => {
     await mockPage.goto("/");
-    await expect(mockPage.getByText("The Capability Gap")).toBeVisible();
+    await expect(
+      mockPage.getByText("Can AI actually do the job?")
+    ).toBeVisible();
   });
 
   test("shows SWE-bench Pro and Pro Private as primary scores", async ({
@@ -162,9 +166,11 @@ test.describe("Model agreement + summary", () => {
 });
 
 test.describe("Sanity Harness section", () => {
-  test("renders the AI Agent Reality Check heading", async ({ mockPage }) => {
+  test("renders top agent label", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(mockPage.getByText("AI Agent Reality Check")).toBeVisible();
+    await expect(
+      mockPage.getByText("Top Agent", { exact: true })
+    ).toBeVisible();
   });
 
   test("shows top and median pass rates", async ({ mockPage }) => {
@@ -212,8 +218,10 @@ test.describe("Technical Evidence merged section", () => {
       mockPage.getByText("Can AI actually do the job?")
     ).toBeVisible();
     // Both components should be visible under it
-    await expect(mockPage.getByText("The Capability Gap")).toBeVisible();
-    await expect(mockPage.getByText("AI Agent Reality Check")).toBeVisible();
+    await expect(mockPage.getByTestId("pro-score")).toBeVisible();
+    await expect(
+      mockPage.getByText("Top Agent", { exact: true })
+    ).toBeVisible();
   });
 });
 

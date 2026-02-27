@@ -160,7 +160,7 @@ describe("buildScoringPrompt", () => {
   it("includes analysis quality rules", () => {
     const prompt = buildScoringPrompt(defaultContext);
     expect(prompt).toContain("ANALYSIS QUALITY RULES");
-    expect(prompt).toContain("at least 2 specific articles");
+    expect(prompt).toContain("at least 2 specific data points");
   });
 
   it("does not include funding_events in JSON schema (extracted separately)", () => {
