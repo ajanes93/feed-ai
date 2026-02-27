@@ -722,11 +722,15 @@ app.post("/api/maintenance", (c) =>
       c.env.DB.prepare(
         "DELETE FROM oq_logs WHERE created_at < datetime('now', '-30 days')"
       ),
+      c.env.DB.prepare(
+        "DELETE FROM oq_predigest_cache WHERE date < date('now')"
+      ),
     ]);
     return {
       deletedFetchErrors: results[0].meta.changes,
       deletedCronRuns: results[1].meta.changes,
       deletedLogs: results[2].meta.changes,
+      deletedPredigestCache: results[3].meta.changes,
     };
   })
 );
@@ -2298,10 +2302,6 @@ async function generateDailyScore(
     await log?.info("score", "Using cached pre-digest data", { date: today });
     articlesByPillar = JSON.parse(cached.pillar_data as string);
     preDigestPartial = cached.pre_digest_partial === 1;
-    // Clear cache after use
-    await env.DB.prepare("DELETE FROM oq_predigest_cache WHERE date = ?")
-      .bind(today)
-      .run();
   } else {
     // No cache — compute pre-digest inline (original path)
     const pillarArticles = Object.fromEntries(
