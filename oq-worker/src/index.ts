@@ -756,6 +756,16 @@ app.post("/api/admin/purge-scores", (c) =>
   })
 );
 
+// Purge only funding events + sentinels — allows re-extraction without losing scores
+app.post("/api/admin/purge-funding", (c) =>
+  adminHandler(c, "purge-funding", async () => {
+    const result = await c.env.DB.prepare(
+      "DELETE FROM oq_funding_events"
+    ).run();
+    return { fundingEvents: result.meta.changes };
+  })
+);
+
 // Unified backfill endpoint: ?type=fred|dedup-funding
 // - fred: backfill historical FRED labour data
 // - dedup-funding: remove duplicate rows from oq_funding_events
@@ -1098,17 +1108,10 @@ export function parseAmount(amount: string | null | undefined): number {
   const num = parseFloat(match[1]);
   if (isNaN(num)) return 0;
   const unit = (match[2] ?? "").toUpperCase();
-  const multipliers: Record<string, number> = {
-    T: 1_000_000,
-    TRILLION: 1_000_000,
-    B: 1000,
-    BILLION: 1000,
-    M: 1,
-    MILLION: 1,
-    K: 0.001,
-    THOUSAND: 0.001,
-  };
-  if (unit in multipliers) return num * multipliers[unit];
+  if (unit === "T" || unit === "TRILLION") return num * 1_000_000;
+  if (unit === "B" || unit === "BILLION") return num * 1000;
+  if (unit === "M" || unit === "MILLION") return num;
+  if (unit === "K" || unit === "THOUSAND") return num * 0.001;
   // No unit: if num > 1000, assume raw dollars (e.g. "$500,000" → 0.5M)
   if (num > 1000) return num / 1_000_000;
   return num; // small numbers without unit assumed to be millions
