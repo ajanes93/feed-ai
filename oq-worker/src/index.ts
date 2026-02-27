@@ -1443,9 +1443,9 @@ function stripJsonFences(text: string): string {
 }
 
 function buildFundingPrompt(articles: string): string {
-  return `Extract ALL AI-related funding/investment events from these articles. Only include events with a specific company name and dollar amount.
+  return `Extract ALL AI-related funding, investment, and spending events from these articles. Include both funding rounds (VC/equity raises) AND corporate AI infrastructure spending (capex/buildouts). Only include events with a specific company name and dollar amount.
 
-Return JSON: { "events": [{ "company": "Name", "amount": "$XB", "round": "Series X", "valuation": "$XB", "source_url": "https://...", "date": "YYYY-MM-DD", "relevance": "AI lab funding | AI code tool | AI infrastructure" }] }
+Return JSON: { "events": [{ "company": "Name", "amount": "$XB", "round": "Series X", "valuation": "$XB", "source_url": "https://...", "date": "YYYY-MM-DD", "relevance": "AI lab funding | AI code tool | AI infrastructure | AI capex" }] }
 
 If no funding events found, return { "events": [] }. Return ONLY the JSON object.
 
@@ -1471,28 +1471,26 @@ function buildFundingVerificationPrompt(events: FundingCandidate[]): string {
     )
     .join("\n");
 
-  return `You are verifying whether each event below is an actual AI company funding/investment round.
+  return `You are verifying whether each event below is genuine AI-related spending or investment.
 
 KEEP events that are:
-- Genuine venture capital funding rounds, investment rounds, or equity raises by AI companies
-- Large-scale investment rounds led by investors/VCs into AI companies (e.g. "SoftBank leads $100B investment in OpenAI", "OpenAI raises $40B")
-- Seed, Series A/B/C/D+, or late-stage funding rounds of any size
+- Venture capital funding rounds, investment rounds, or equity raises by AI companies (any size)
+- Corporate AI infrastructure spending and capital expenditure (e.g. "Meta spending $65B on AI data centers", "Google investing $75B in AI infrastructure")
+- Any significant financial commitment to AI — funding rounds, infra buildouts, or AI-specific capex
 
 REJECT events that are:
-- Corporate capital expenditure or infrastructure spending where a company spends its OWN money (e.g. "Meta spending $65B on data centers", "Google investing $75B in AI infrastructure")
-- VC firms raising their own funds (e.g. "General Catalyst raises $5B fund")
+- VC firms raising their own funds (e.g. "General Catalyst raises $5B fund") — this is the VC fundraising, not an AI company receiving money
 - Revenue figures, contracts, or government grants
 - Acquisitions or M&A transactions
 - Stock buybacks or market cap changes
-- General financial figures mentioned in articles that are not funding rounds
-
-KEY DISTINCTION: If external investors are putting money INTO a company, that is a funding round (KEEP). If a company is spending its own money on infrastructure/capex, that is NOT a funding round (REJECT).
+- General financial figures not specifically related to AI
+- Non-AI infrastructure spending (e.g. general real estate, non-tech capex)
 
 Events to verify:
 ${eventList}
 
 Return JSON: { "verified": [1, 3, 5] }
-where the array contains the 1-based indices of events that are genuine funding rounds.
+where the array contains the 1-based indices of events that are genuine AI-related spending or investment.
 If none are valid, return { "verified": [] }. Return ONLY the JSON object.`;
 }
 

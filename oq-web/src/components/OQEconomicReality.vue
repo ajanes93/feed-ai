@@ -121,14 +121,14 @@ const isOpen = ref(false);
         <div
           class="mt-1 max-w-[140px] text-[10px] leading-tight text-muted-foreground uppercase"
         >
-          AI Funding
+          AI Spending
         </div>
         <div
           v-if="fundingCount"
           class="mt-0.5 text-[9px] text-muted-foreground/50"
           data-testid="funding-count"
         >
-          across {{ fundingCount }} round{{ fundingCount !== 1 ? "s" : "" }}
+          across {{ fundingCount }} event{{ fundingCount !== 1 ? "s" : "" }}
         </div>
         <div
           v-if="topRound"
@@ -261,14 +261,14 @@ const isOpen = ref(false);
             <p
               class="mb-1 text-[10px] tracking-widest text-muted-foreground/60 uppercase"
             >
-              Recent AI Funding
+              Recent AI Spending
             </p>
             <OQFundingList
               v-if="fundingEvents && fundingEvents.length > 0"
               :events="fundingEvents"
             />
             <p v-else class="text-muted-foreground/50">
-              No recent funding events tracked.
+              No recent spending events tracked.
             </p>
           </div>
 

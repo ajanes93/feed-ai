@@ -185,13 +185,13 @@ describe("buildScoringPrompt", () => {
         topRound: { company: "Anthropic", amount: "$1B", round: "Series E" },
       },
     });
-    expect(prompt).toContain("$2.1B across 4 round(s)");
+    expect(prompt).toContain("$2.1B across 4 event(s)");
     expect(prompt).toContain("Anthropic $1B");
   });
 
   it("omits funding line when no funding data", () => {
     const prompt = buildScoringPrompt(defaultContext);
-    expect(prompt).not.toContain("Recent AI Funding:");
+    expect(prompt).not.toContain("Recent AI Spending:");
   });
 
   it("includes SanityHarness data when provided", () => {

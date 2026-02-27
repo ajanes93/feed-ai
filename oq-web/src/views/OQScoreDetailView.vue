@@ -507,7 +507,7 @@ onMounted(async () => {
                   <div
                     class="mb-2 text-[10px] tracking-widest text-muted-foreground/60 uppercase"
                   >
-                    AI Funding ({{ data.fundingEvents.length }} event{{
+                    AI Spending ({{ data.fundingEvents.length }} event{{
                       data.fundingEvents.length !== 1 ? "s" : ""
                     }})
                   </div>

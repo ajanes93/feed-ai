@@ -450,7 +450,7 @@ test.describe("Economic Reality drill-down", () => {
     await mockPage.goto("/");
     const drillDowns = mockPage.getByText("Drill down", { exact: true });
     await drillDowns.last().click();
-    await expect(mockPage.getByText("Recent AI Funding")).toBeVisible();
+    await expect(mockPage.getByText("Recent AI Spending")).toBeVisible();
     const events = mockPage.locator("[data-testid='funding-event']");
     await expect(events).toHaveCount(2);
   });

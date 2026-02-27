@@ -110,8 +110,8 @@ describe("OQEconomicReality", () => {
     const trigger = wrapper.find("[data-slot='collapsible-trigger']");
     await trigger.trigger("click");
 
-    expect(wrapper.text()).toContain("Recent AI Funding");
-    expect(wrapper.text()).toContain("No recent funding events tracked");
+    expect(wrapper.text()).toContain("Recent AI Spending");
+    expect(wrapper.text()).toContain("No recent spending events tracked");
   });
 
   it("shows CEPR study in drill-down when expanded", async () => {
