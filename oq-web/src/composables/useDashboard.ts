@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { ref, computed } from "vue";
 
 const STORAGE_KEY = "oq_admin_key";
 
@@ -29,6 +29,7 @@ interface DashboardData {
   totalScores: number;
   totalArticles: number;
   totalSubscribers: number;
+  todayScoreExists: boolean;
 }
 
 export function useDashboard() {
@@ -40,6 +41,10 @@ export function useDashboard() {
     typeof sessionStorage !== "undefined"
       ? sessionStorage.getItem(STORAGE_KEY) || ""
       : ""
+  );
+
+  const todayScoreExists = computed(
+    () => data.value?.todayScoreExists ?? false
   );
 
   function setAdminKey(key: string) {
@@ -98,7 +103,6 @@ export function useDashboard() {
   const scoring = ref(false);
   const scoreResult = ref<string | null>(null);
   const scoreSuccess = ref(false);
-  const scoreAlreadyExists = ref(false);
 
   async function generateScore() {
     if (!adminKey.value) {
@@ -109,7 +113,6 @@ export function useDashboard() {
     scoring.value = true;
     scoreResult.value = null;
     scoreSuccess.value = false;
-    scoreAlreadyExists.value = false;
 
     try {
       const res = await fetch("/api/score", {
@@ -127,7 +130,6 @@ export function useDashboard() {
 
       if (body.alreadyExists) {
         scoreResult.value = `Score already exists for ${body.date}: ${body.score} (delta: ${body.delta})`;
-        scoreAlreadyExists.value = true;
       } else {
         scoreResult.value = `Generated score for ${body.date}: ${body.score} (delta: ${body.delta > 0 ? "+" : ""}${body.delta})`;
       }
@@ -142,19 +144,22 @@ export function useDashboard() {
     }
   }
 
-  async function rescoreScore() {
+  const deleting = ref(false);
+  const deleteResult = ref<string | null>(null);
+  const deleteSuccess = ref(false);
+
+  async function deleteScore() {
     if (!adminKey.value) {
       needsAuth.value = true;
       return;
     }
 
-    scoring.value = true;
-    scoreResult.value = null;
-    scoreSuccess.value = false;
-    scoreAlreadyExists.value = false;
+    deleting.value = true;
+    deleteResult.value = null;
+    deleteSuccess.value = false;
 
     try {
-      const res = await fetch("/api/rescore", {
+      const res = await fetch("/api/delete-score", {
         method: "POST",
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
@@ -165,16 +170,57 @@ export function useDashboard() {
       }
 
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Rescore failed");
+      if (!res.ok) throw new Error(body.error || "Delete failed");
 
-      scoreResult.value = `Regenerated score for ${body.date}: ${body.score} (delta: ${body.delta > 0 ? "+" : ""}${body.delta})`;
-      scoreSuccess.value = true;
+      deleteResult.value = body.deleted
+        ? `Deleted score for ${body.date}`
+        : body.message;
+      deleteSuccess.value = true;
       await fetchDashboard();
     } catch (err) {
-      scoreResult.value = err instanceof Error ? err.message : "Rescore failed";
-      scoreSuccess.value = false;
+      deleteResult.value = err instanceof Error ? err.message : "Delete failed";
+      deleteSuccess.value = false;
     } finally {
-      scoring.value = false;
+      deleting.value = false;
+    }
+  }
+
+  const predigesting = ref(false);
+  const predigestResult = ref<string | null>(null);
+  const predigestSuccess = ref(false);
+
+  async function runPredigest() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    predigesting.value = true;
+    predigestResult.value = null;
+    predigestSuccess.value = false;
+
+    try {
+      const res = await fetch("/api/predigest", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
+
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Predigest failed");
+
+      predigestResult.value = `Pre-digested ${body.articleCount} articles${body.preDigested ? " (summarized)" : ""}`;
+      predigestSuccess.value = true;
+    } catch (err) {
+      predigestResult.value =
+        err instanceof Error ? err.message : "Predigest failed";
+      predigestSuccess.value = false;
+    } finally {
+      predigesting.value = false;
     }
   }
 
@@ -222,12 +268,19 @@ export function useDashboard() {
     scoring,
     scoreResult,
     scoreSuccess,
-    scoreAlreadyExists,
+    todayScoreExists,
+    deleting,
+    deleteResult,
+    deleteSuccess,
+    predigesting,
+    predigestResult,
+    predigestSuccess,
     setAdminKey,
     clearAdminKey,
     fetchDashboard,
     fetchArticles,
     generateScore,
-    rescoreScore,
+    deleteScore,
+    runPredigest,
   };
 }

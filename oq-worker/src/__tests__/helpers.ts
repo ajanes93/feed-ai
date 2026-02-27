@@ -13,6 +13,7 @@ const TABLES = [
   "oq_logs",
   "oq_funding_events",
   "oq_prompt_versions",
+  "oq_predigest_cache",
 ];
 
 export async function cleanAllTables() {

@@ -74,6 +74,8 @@ async function adminAuth(
 app.use("/api/fetch", adminAuth);
 app.use("/api/score", adminAuth);
 app.use("/api/rescore", adminAuth);
+app.use("/api/delete-score", adminAuth);
+app.use("/api/predigest", adminAuth);
 app.use("/api/maintenance", adminAuth);
 app.use("/api/admin/*", adminAuth);
 app.use("/api/fetch-sanity", adminAuth);
@@ -86,18 +88,26 @@ app.get("/api/admin/dashboard", async (c) => {
   try {
     const db = c.env.DB;
 
-    const [aiRows, sourceRows, scoreCount, articleCount, subscriberCount] =
-      await db.batch([
-        db.prepare(
-          "SELECT id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, created_at FROM oq_ai_usage ORDER BY created_at DESC LIMIT 50"
-        ),
-        db.prepare(
-          "SELECT source, pillar, COUNT(*) as article_count, MAX(fetched_at) as last_fetched FROM oq_articles GROUP BY source ORDER BY source"
-        ),
-        db.prepare("SELECT COUNT(*) as count FROM oq_scores"),
-        db.prepare("SELECT COUNT(*) as count FROM oq_articles"),
-        db.prepare("SELECT COUNT(*) as count FROM oq_subscribers"),
-      ]);
+    const today = new Date().toISOString().split("T")[0];
+    const [
+      aiRows,
+      sourceRows,
+      scoreCount,
+      articleCount,
+      subscriberCount,
+      todayScore,
+    ] = await db.batch([
+      db.prepare(
+        "SELECT id, model, provider, input_tokens, output_tokens, total_tokens, latency_ms, was_fallback, error, status, created_at FROM oq_ai_usage ORDER BY created_at DESC LIMIT 50"
+      ),
+      db.prepare(
+        "SELECT source, pillar, COUNT(*) as article_count, MAX(fetched_at) as last_fetched FROM oq_articles GROUP BY source ORDER BY source"
+      ),
+      db.prepare("SELECT COUNT(*) as count FROM oq_scores"),
+      db.prepare("SELECT COUNT(*) as count FROM oq_articles"),
+      db.prepare("SELECT COUNT(*) as count FROM oq_subscribers"),
+      db.prepare("SELECT id FROM oq_scores WHERE date = ?").bind(today),
+    ]);
 
     const recentCalls = aiRows.results.map((row) => ({
       id: row.id,
@@ -131,6 +141,7 @@ app.get("/api/admin/dashboard", async (c) => {
       totalScores: (scoreCount.results[0]?.count as number) ?? 0,
       totalArticles: (articleCount.results[0]?.count as number) ?? 0,
       totalSubscribers: (subscriberCount.results[0]?.count as number) ?? 0,
+      todayScoreExists: todayScore.results.length > 0,
     });
   } catch (err) {
     try {
@@ -637,6 +648,49 @@ app.post("/api/rescore", (c) =>
     }
     return generateDailyScore(c.env, log);
   })
+);
+
+app.post("/api/delete-score", (c) =>
+  adminHandler(c, "delete-score", async (log) => {
+    const today = new Date().toISOString().split("T")[0];
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM oq_scores WHERE date = ?"
+    )
+      .bind(today)
+      .first();
+
+    if (!existing) {
+      return {
+        deleted: false,
+        date: today,
+        message: "No score exists for today",
+      };
+    }
+
+    await c.env.DB.batch([
+      c.env.DB.prepare("DELETE FROM oq_score_articles WHERE score_id = ?").bind(
+        existing.id
+      ),
+      c.env.DB.prepare(
+        "DELETE FROM oq_model_responses WHERE score_id = ?"
+      ).bind(existing.id),
+      c.env.DB.prepare("DELETE FROM oq_ai_usage WHERE score_id = ?").bind(
+        existing.id
+      ),
+      c.env.DB.prepare("DELETE FROM oq_scores WHERE id = ?").bind(existing.id),
+    ]);
+
+    await log.info("delete-score", "Deleted today's score", {
+      date: today,
+      deletedScoreId: existing.id,
+    });
+
+    return { deleted: true, date: today, deletedScoreId: existing.id };
+  })
+);
+
+app.post("/api/predigest", (c) =>
+  adminHandler(c, "predigest", (log) => runPreDigest(c.env, log))
 );
 
 app.post("/api/fetch-sanity", (c) =>
@@ -1997,6 +2051,173 @@ function formatArticleLine(a: {
   return `- ${title}${summary} (${a.source}) [${a.url}]`;
 }
 
+// --- Pre-digest: summarize articles per pillar and cache results ---
+
+async function runPreDigest(
+  env: Env,
+  log?: Logger
+): Promise<{
+  articleCount: number;
+  pillarCounts: Record<string, number>;
+  preDigested: boolean;
+  date: string;
+}> {
+  const today = new Date().toISOString().split("T")[0];
+  const pillars: OQPillar[] = [
+    "capability",
+    "labour_market",
+    "sentiment",
+    "industry",
+    "barriers",
+  ];
+
+  const articles = await env.DB.prepare(
+    "SELECT a.id, a.title, a.url, a.source, a.pillar, a.summary FROM oq_articles a LEFT JOIN oq_score_articles sa ON a.id = sa.article_id WHERE sa.article_id IS NULL ORDER BY a.published_at DESC"
+  ).all();
+
+  const pillarArticles = Object.fromEntries(
+    pillars.map((pillar) => [
+      pillar,
+      articles.results.filter((a) => a.pillar === pillar),
+    ])
+  ) as Record<OQPillar, typeof articles.results>;
+
+  const pillarCounts = Object.fromEntries(
+    pillars.map((p) => [p, pillarArticles[p].length])
+  );
+
+  const needsPreDigest = pillars.some(
+    (p) => pillarArticles[p].length > DIRECT_CAP
+  );
+
+  let articlesByPillar: Record<OQPillar, string>;
+  let preDigestPartial = false;
+  const textProviders = buildTextProviders(env);
+
+  if (needsPreDigest && textProviders.length > 0) {
+    await log?.info("predigest", "Pre-digest triggered", {
+      articleCounts: pillarCounts,
+      providers: textProviders.map((p) => p.name),
+    });
+
+    const digestedPillars: Partial<Record<OQPillar, string>> = {};
+    let batchIndex = 0;
+
+    for (const pillar of pillars) {
+      const pillarArts = pillarArticles[pillar];
+      if (pillarArts.length <= DIRECT_CAP) {
+        digestedPillars[pillar] = pillarArts.map(formatArticleLine).join("\n");
+        continue;
+      }
+
+      const batchSummaries: string[] = [];
+
+      for (let i = 0; i < pillarArts.length; i += PRE_DIGEST_BATCH) {
+        const batch = pillarArts.slice(i, i + PRE_DIGEST_BATCH);
+        const batchText = batch.map(formatArticleLine).join("\n");
+        const batchFallback = batch
+          .slice(0, DIRECT_CAP)
+          .map(formatArticleLine)
+          .join("\n");
+
+        const preDigestPrompt = `You are summarizing articles for the "${pillar}" pillar of an AI replacement tracker.
+Distill these ${batch.length} articles into 8-12 bullet points capturing the most significant signals.
+Each bullet should reference specific data points, companies, or metrics where possible.
+Include the source URL [url] for the most important signals.
+Focus on what matters for assessing whether AI will replace software engineers.
+
+Articles:
+${batchText}
+
+Return ONLY bullet points, one per line, starting with "- ".`;
+
+        let succeeded = false;
+        const startProvider = batchIndex % textProviders.length;
+        for (let attempt = 0; attempt < textProviders.length; attempt++) {
+          const provider =
+            textProviders[(startProvider + attempt) % textProviders.length];
+          try {
+            const r = await provider.call(preDigestPrompt, {
+              maxTokens: 2048,
+            });
+            if (r.text) batchSummaries.push(r.text);
+            succeeded = true;
+            break;
+          } catch (err) {
+            await log?.warn(
+              "predigest",
+              `Pre-digest ${provider.name} failed for ${pillar}`,
+              {
+                error: err instanceof Error ? err.message : String(err),
+              }
+            );
+          }
+        }
+
+        if (!succeeded) {
+          preDigestPartial = true;
+          batchSummaries.push(batchFallback);
+        }
+        batchIndex++;
+        if (i + PRE_DIGEST_BATCH < pillarArts.length) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+
+      digestedPillars[pillar] =
+        `[Pre-digested from ${pillarArts.length} articles]\n` +
+        batchSummaries.join("\n");
+    }
+
+    articlesByPillar = digestedPillars as Record<OQPillar, string>;
+  } else if (needsPreDigest) {
+    preDigestPartial = true;
+    articlesByPillar = Object.fromEntries(
+      pillars.map((pillar) => [
+        pillar,
+        pillarArticles[pillar]
+          .slice(0, DIRECT_CAP)
+          .map(formatArticleLine)
+          .join("\n"),
+      ])
+    ) as Record<OQPillar, string>;
+  } else {
+    articlesByPillar = Object.fromEntries(
+      pillars.map((pillar) => [
+        pillar,
+        pillarArticles[pillar].map(formatArticleLine).join("\n"),
+      ])
+    ) as Record<OQPillar, string>;
+  }
+
+  // Store in cache
+  await env.DB.prepare(
+    "INSERT INTO oq_predigest_cache (date, pillar_data, article_count, pre_digest_partial) VALUES (?, ?, ?, ?) ON CONFLICT(date) DO UPDATE SET pillar_data = excluded.pillar_data, article_count = excluded.article_count, pre_digest_partial = excluded.pre_digest_partial, created_at = datetime('now')"
+  )
+    .bind(
+      today,
+      JSON.stringify(articlesByPillar),
+      articles.results.length,
+      preDigestPartial ? 1 : 0
+    )
+    .run();
+
+  await log?.info("predigest", "Pre-digest complete and cached", {
+    date: today,
+    articleCount: articles.results.length,
+    pillarCounts,
+    preDigested: needsPreDigest,
+    partial: preDigestPartial,
+  });
+
+  return {
+    articleCount: articles.results.length,
+    pillarCounts,
+    preDigested: needsPreDigest,
+    date: today,
+  };
+}
+
 // --- Daily score generation ---
 
 async function generateDailyScore(
@@ -2055,18 +2276,7 @@ async function generateDailyScore(
     "barriers",
   ];
 
-  // Check if any pillar has more articles than the direct cap
-  const pillarArticles = Object.fromEntries(
-    pillars.map((pillar) => [
-      pillar,
-      articles.results.filter((a) => a.pillar === pillar),
-    ])
-  ) as Record<OQPillar, typeof articles.results>;
-
-  const needsPreDigest = pillars.some(
-    (p) => pillarArticles[p].length > DIRECT_CAP
-  );
-
+  // Check for cached pre-digest data first
   let articlesByPillar: Record<OQPillar, string>;
   let preDigestPartial = false;
 
@@ -2078,40 +2288,66 @@ async function generateDailyScore(
     outputTokens?: number;
   }[] = [];
 
-  const textProviders = buildTextProviders(env);
+  const cached = await env.DB.prepare(
+    "SELECT pillar_data, article_count, pre_digest_partial FROM oq_predigest_cache WHERE date = ?"
+  )
+    .bind(today)
+    .first();
 
-  if (needsPreDigest && textProviders.length > 0) {
-    // Map-reduce: pre-digest large article sets, round-robin across providers
-    await log?.info("score", "Pre-digest triggered", {
-      articleCounts: Object.fromEntries(
-        pillars.map((p) => [p, pillarArticles[p].length])
-      ),
-      providers: textProviders.map((p) => p.name),
-    });
+  if (cached) {
+    await log?.info("score", "Using cached pre-digest data", { date: today });
+    articlesByPillar = JSON.parse(cached.pillar_data as string);
+    preDigestPartial = cached.pre_digest_partial === 1;
+    // Clear cache after use
+    await env.DB.prepare("DELETE FROM oq_predigest_cache WHERE date = ?")
+      .bind(today)
+      .run();
+  } else {
+    // No cache — compute pre-digest inline (original path)
+    const pillarArticles = Object.fromEntries(
+      pillars.map((pillar) => [
+        pillar,
+        articles.results.filter((a) => a.pillar === pillar),
+      ])
+    ) as Record<OQPillar, typeof articles.results>;
 
-    const digestedPillars: Partial<Record<OQPillar, string>> = {};
-    let batchIndex = 0; // Global batch counter for round-robin
+    const needsPreDigest = pillars.some(
+      (p) => pillarArticles[p].length > DIRECT_CAP
+    );
 
-    for (const pillar of pillars) {
-      const pillarArts = pillarArticles[pillar];
-      if (pillarArts.length <= DIRECT_CAP) {
-        // Small enough — pass directly
-        digestedPillars[pillar] = pillarArts.map(formatArticleLine).join("\n");
-        continue;
-      }
+    const textProviders = buildTextProviders(env);
 
-      // Pre-digest in batches, then merge summaries
-      const batchSummaries: string[] = [];
+    if (needsPreDigest && textProviders.length > 0) {
+      await log?.info("score", "Pre-digest triggered (inline)", {
+        articleCounts: Object.fromEntries(
+          pillars.map((p) => [p, pillarArticles[p].length])
+        ),
+        providers: textProviders.map((p) => p.name),
+      });
 
-      for (let i = 0; i < pillarArts.length; i += PRE_DIGEST_BATCH) {
-        const batch = pillarArts.slice(i, i + PRE_DIGEST_BATCH);
-        const batchText = batch.map(formatArticleLine).join("\n");
-        const batchFallback = batch
-          .slice(0, DIRECT_CAP)
-          .map(formatArticleLine)
-          .join("\n");
+      const digestedPillars: Partial<Record<OQPillar, string>> = {};
+      let batchIndex = 0;
 
-        const preDigestPrompt = `You are summarizing articles for the "${pillar}" pillar of an AI replacement tracker.
+      for (const pillar of pillars) {
+        const pillarArts = pillarArticles[pillar];
+        if (pillarArts.length <= DIRECT_CAP) {
+          digestedPillars[pillar] = pillarArts
+            .map(formatArticleLine)
+            .join("\n");
+          continue;
+        }
+
+        const batchSummaries: string[] = [];
+
+        for (let i = 0; i < pillarArts.length; i += PRE_DIGEST_BATCH) {
+          const batch = pillarArts.slice(i, i + PRE_DIGEST_BATCH);
+          const batchText = batch.map(formatArticleLine).join("\n");
+          const batchFallback = batch
+            .slice(0, DIRECT_CAP)
+            .map(formatArticleLine)
+            .join("\n");
+
+          const preDigestPrompt = `You are summarizing articles for the "${pillar}" pillar of an AI replacement tracker.
 Distill these ${batch.length} articles into 8-12 bullet points capturing the most significant signals.
 Each bullet should reference specific data points, companies, or metrics where possible.
 Include the source URL [url] for the most important signals.
@@ -2122,83 +2358,80 @@ ${batchText}
 
 Return ONLY bullet points, one per line, starting with "- ".`;
 
-        // Round-robin across providers, fallback to next on failure
-        let succeeded = false;
-        const startProvider = batchIndex % textProviders.length;
-        for (let attempt = 0; attempt < textProviders.length; attempt++) {
-          const provider =
-            textProviders[(startProvider + attempt) % textProviders.length];
-          try {
-            const r = await provider.call(preDigestPrompt, {
-              maxTokens: 2048,
-            });
-            if (r.text) batchSummaries.push(r.text);
+          let succeeded = false;
+          const startProvider = batchIndex % textProviders.length;
+          for (let attempt = 0; attempt < textProviders.length; attempt++) {
+            const provider =
+              textProviders[(startProvider + attempt) % textProviders.length];
+            try {
+              const r = await provider.call(preDigestPrompt, {
+                maxTokens: 2048,
+              });
+              if (r.text) batchSummaries.push(r.text);
 
-            preDigestUsages.push({
-              model: provider.model,
-              provider: provider.name,
-              inputTokens: r.inputTokens,
-              outputTokens: r.outputTokens,
-            });
-            succeeded = true;
-            break;
-          } catch (err) {
-            await log?.warn(
-              "score",
-              `Pre-digest ${provider.name} failed for ${pillar}`,
-              {
-                error: err instanceof Error ? err.message : String(err),
-              }
-            );
+              preDigestUsages.push({
+                model: provider.model,
+                provider: provider.name,
+                inputTokens: r.inputTokens,
+                outputTokens: r.outputTokens,
+              });
+              succeeded = true;
+              break;
+            } catch (err) {
+              await log?.warn(
+                "score",
+                `Pre-digest ${provider.name} failed for ${pillar}`,
+                {
+                  error: err instanceof Error ? err.message : String(err),
+                }
+              );
+            }
+          }
+
+          if (!succeeded) {
+            preDigestPartial = true;
+            batchSummaries.push(batchFallback);
+          }
+          batchIndex++;
+          if (i + PRE_DIGEST_BATCH < pillarArts.length) {
+            await new Promise((r) => setTimeout(r, 1000));
           }
         }
 
-        if (!succeeded) {
-          preDigestPartial = true;
-          batchSummaries.push(batchFallback);
-        }
-        batchIndex++;
-        // Stagger between batches to avoid rate limits (1s delay)
-        if (i + PRE_DIGEST_BATCH < pillarArts.length) {
-          await new Promise((r) => setTimeout(r, 1000));
-        }
+        digestedPillars[pillar] =
+          `[Pre-digested from ${pillarArts.length} articles]\n` +
+          batchSummaries.join("\n");
       }
 
-      digestedPillars[pillar] =
-        `[Pre-digested from ${pillarArts.length} articles]\n` +
-        batchSummaries.join("\n");
+      articlesByPillar = digestedPillars as Record<OQPillar, string>;
+    } else if (needsPreDigest) {
+      await log?.warn(
+        "score",
+        "Pre-digest skipped: no API keys configured, capping at DIRECT_CAP",
+        {
+          articleCounts: Object.fromEntries(
+            pillars.map((p) => [p, pillarArticles[p].length])
+          ),
+        }
+      );
+      preDigestPartial = true;
+      articlesByPillar = Object.fromEntries(
+        pillars.map((pillar) => [
+          pillar,
+          pillarArticles[pillar]
+            .slice(0, DIRECT_CAP)
+            .map(formatArticleLine)
+            .join("\n"),
+        ])
+      ) as Record<OQPillar, string>;
+    } else {
+      articlesByPillar = Object.fromEntries(
+        pillars.map((pillar) => [
+          pillar,
+          pillarArticles[pillar].map(formatArticleLine).join("\n"),
+        ])
+      ) as Record<OQPillar, string>;
     }
-
-    articlesByPillar = digestedPillars as Record<OQPillar, string>;
-  } else if (needsPreDigest) {
-    await log?.warn(
-      "score",
-      "Pre-digest skipped: no API keys configured, capping at DIRECT_CAP",
-      {
-        articleCounts: Object.fromEntries(
-          pillars.map((p) => [p, pillarArticles[p].length])
-        ),
-      }
-    );
-    preDigestPartial = true;
-    // Fallback: cap at DIRECT_CAP per pillar
-    articlesByPillar = Object.fromEntries(
-      pillars.map((pillar) => [
-        pillar,
-        pillarArticles[pillar]
-          .slice(0, DIRECT_CAP)
-          .map(formatArticleLine)
-          .join("\n"),
-      ])
-    ) as Record<OQPillar, string>;
-  } else {
-    // Normal path: all pillars already <= DIRECT_CAP, pass directly
-    articlesByPillar = Object.fromEntries(
-      pillars.map((pillar) => [
-        pillar,
-        pillarArticles[pillar].map(formatArticleLine).join("\n"),
-      ])
-    ) as Record<OQPillar, string>;
   }
 
   const totalArticles = articles.results.length;
@@ -2581,6 +2814,7 @@ export async function findCompletedCronRun(
 export {
   fetchOQArticles,
   generateDailyScore,
+  runPreDigest,
   extractFeedItems,
   stripHtml,
   stripJsonFences,

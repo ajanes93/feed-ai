@@ -25,7 +25,14 @@ import {
   DropdownMenuSeparator,
 } from "@feed-ai/shared/components/ui/dropdown-menu";
 import { TableRow, TableCell } from "@feed-ai/shared/components/ui/table";
-import { ChevronDown, RefreshCw, Rss, Sparkles } from "lucide-vue-next";
+import {
+  ChevronDown,
+  RefreshCw,
+  Rss,
+  Sparkles,
+  Trash2,
+  ListChecks,
+} from "lucide-vue-next";
 
 const {
   data,
@@ -39,13 +46,20 @@ const {
   scoring,
   scoreResult,
   scoreSuccess,
-  scoreAlreadyExists,
+  todayScoreExists,
+  deleting,
+  deleteResult,
+  deleteSuccess,
+  predigesting,
+  predigestResult,
+  predigestSuccess,
   setAdminKey,
   clearAdminKey,
   fetchDashboard,
   fetchArticles,
   generateScore,
-  rescoreScore,
+  deleteScore,
+  runPredigest,
 } = useDashboard();
 
 useHead({ title: "Dashboard — One Question" });
@@ -92,11 +106,43 @@ onMounted(fetchDashboard);
                 </div>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem :disabled="scoring" @click="generateScore()">
+              <DropdownMenuItem :disabled="deleting" @click="deleteScore()">
+                <Trash2 class="size-4" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    deleting ? "Deleting..." : "Delete Score"
+                  }}</span>
+                  <span class="text-xs text-muted-foreground"
+                    >Remove today's score and linked data</span
+                  >
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                :disabled="predigesting"
+                @click="runPredigest()"
+              >
+                <ListChecks class="size-4" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    predigesting ? "Pre-digesting..." : "Predigest"
+                  }}</span>
+                  <span class="text-xs text-muted-foreground"
+                    >Summarize articles per pillar</span
+                  >
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                :disabled="scoring || todayScoreExists"
+                @click="generateScore()"
+              >
                 <Sparkles class="size-4" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
-                    scoring ? "Scoring..." : "Generate Score"
+                    scoring
+                      ? "Scoring..."
+                      : todayScoreExists
+                        ? "Score (delete first)"
+                        : "Score"
                   }}</span>
                   <span class="text-xs text-muted-foreground"
                     >Run multi-model AI scoring for today</span
@@ -124,27 +170,37 @@ onMounted(fetchDashboard);
         {{ fetchResult }}
       </div>
       <div
+        v-if="deleteResult"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
+        :class="
+          deleteSuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        "
+      >
+        {{ deleteResult }}
+      </div>
+      <div
+        v-if="predigestResult"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
+        :class="
+          predigestSuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        "
+      >
+        {{ predigestResult }}
+      </div>
+      <div
         v-if="scoreResult"
         class="mb-4 rounded-lg border px-4 py-3 text-sm"
         :class="
-          scoreAlreadyExists
-            ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-            : scoreSuccess
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-              : 'border-destructive/30 bg-destructive/10 text-destructive'
+          scoreSuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
         "
       >
-        <div class="flex items-center justify-between gap-3">
-          <span>{{ scoreResult }}</span>
-          <button
-            v-if="scoreAlreadyExists"
-            :disabled="scoring"
-            class="shrink-0 rounded border border-amber-700 bg-amber-900/50 px-3 py-1 text-xs font-medium text-amber-200 hover:bg-amber-800 disabled:opacity-50"
-            @click="rescoreScore()"
-          >
-            {{ scoring ? "Regenerating..." : "Force Regenerate" }}
-          </button>
-        </div>
+        {{ scoreResult }}
       </div>
 
       <!-- Auth prompt -->
