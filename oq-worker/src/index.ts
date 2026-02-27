@@ -1085,18 +1085,23 @@ async function loadFundingSummary(
   }
 }
 
-/** Parse "$2.1B", "$500M" etc. into millions (USD only).
+/** Parse "$2.1B", "$500M", "$100 billion" etc. into millions (USD only).
+ *  Handles both abbreviations (B/M/K) and spelled-out units (billion/million/thousand).
  *  Bare numbers >1000 without a unit are treated as raw dollars (e.g. "$500,000" → 0.5M). */
 export function parseAmount(amount: string | null | undefined): number {
   if (!amount) return 0;
-  const match = amount.replace(/,/g, "").match(/^\$?\s*([\d.]+)\s*([BMKbmk])?/);
+  const cleaned = amount.replace(/,/g, "");
+  // Match number + optional unit (abbreviation or spelled-out word)
+  const match = cleaned.match(
+    /^\$?\s*([\d.]+)\s*(billion|billion|million|thousand|[BMKbmk])?/i
+  );
   if (!match) return 0;
   const num = parseFloat(match[1]);
   if (isNaN(num)) return 0;
   const unit = (match[2] ?? "").toUpperCase();
-  if (unit === "B") return num * 1000;
-  if (unit === "M") return num;
-  if (unit === "K") return num / 1000;
+  if (unit === "B" || unit === "BILLION") return num * 1000;
+  if (unit === "M" || unit === "MILLION") return num;
+  if (unit === "K" || unit === "THOUSAND") return num / 1000;
   // No unit: if num > 1000, assume raw dollars (e.g. "$500,000" → 0.5M)
   if (num > 1000) return num / 1_000_000;
   return num; // small numbers without unit assumed to be millions
@@ -1468,15 +1473,20 @@ function buildFundingVerificationPrompt(events: FundingCandidate[]): string {
 
   return `You are verifying whether each event below is an actual AI company funding/investment round.
 
-KEEP only events that are genuine venture capital funding rounds, investment rounds, or equity raises by AI companies.
+KEEP events that are:
+- Genuine venture capital funding rounds, investment rounds, or equity raises by AI companies
+- Large-scale investment rounds led by investors/VCs into AI companies (e.g. "SoftBank leads $100B investment in OpenAI", "OpenAI raises $40B")
+- Seed, Series A/B/C/D+, or late-stage funding rounds of any size
 
 REJECT events that are:
-- Corporate capital expenditure or infrastructure spending (e.g. "Meta spending $100B on data centers")
+- Corporate capital expenditure or infrastructure spending where a company spends its OWN money (e.g. "Meta spending $65B on data centers", "Google investing $75B in AI infrastructure")
 - VC firms raising their own funds (e.g. "General Catalyst raises $5B fund")
 - Revenue figures, contracts, or government grants
 - Acquisitions or M&A transactions
 - Stock buybacks or market cap changes
 - General financial figures mentioned in articles that are not funding rounds
+
+KEY DISTINCTION: If external investors are putting money INTO a company, that is a funding round (KEEP). If a company is spending its own money on infrastructure/capex, that is NOT a funding round (REJECT).
 
 Events to verify:
 ${eventList}

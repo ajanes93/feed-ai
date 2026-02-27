@@ -59,6 +59,24 @@ describe("parseAmount", () => {
     expect(parseAmount("€500M")).toBe(0);
     expect(parseAmount("£200M")).toBe(0);
   });
+
+  it("parses spelled-out billion", () => {
+    expect(parseAmount("$100 billion")).toBe(100_000);
+    expect(parseAmount("$6.6 billion")).toBe(6600);
+    expect(parseAmount("100 billion")).toBe(100_000);
+    expect(parseAmount("$2.1 Billion")).toBe(2100);
+  });
+
+  it("parses spelled-out million", () => {
+    expect(parseAmount("$500 million")).toBe(500);
+    expect(parseAmount("$12.5 million")).toBe(12.5);
+    expect(parseAmount("250 Million")).toBe(250);
+  });
+
+  it("parses spelled-out thousand", () => {
+    expect(parseAmount("$800 thousand")).toBe(0.8);
+    expect(parseAmount("500 Thousand")).toBe(0.5);
+  });
 });
 
 describe("fundingDedupeKey", () => {
