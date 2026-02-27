@@ -163,15 +163,6 @@ export function useOneQuestion() {
   const subscribeStatus = ref<"idle" | "loading" | "success" | "error">("idle");
 
   async function fetchToday() {
-    // Use SSR-injected data if available (from Pages Function middleware)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    if (w.__OQ_DATA__) {
-      today.value = w.__OQ_DATA__ as TodayResponse;
-      delete w.__OQ_DATA__;
-      return;
-    }
-
     loading.value = true;
     error.value = null;
     try {

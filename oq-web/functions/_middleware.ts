@@ -10,21 +10,13 @@ interface TodayData {
   [key: string]: unknown;
 }
 
-// Cache today's data in-memory (refreshed each cold start, ~once per minute in prod)
-let cachedData: TodayData | null = null;
-let cacheTime = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
 async function getTodayData(api: Fetcher): Promise<TodayData | null> {
-  if (cachedData && Date.now() - cacheTime < CACHE_TTL) return cachedData;
   try {
     const res = await api.fetch(new Request("https://api/api/today"));
     if (!res.ok) return null;
-    cachedData = (await res.json()) as TodayData;
-    cacheTime = Date.now();
-    return cachedData;
+    return (await res.json()) as TodayData;
   } catch {
-    return cachedData; // stale is better than nothing
+    return null;
   }
 }
 
@@ -41,7 +33,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const analysisSnippet = data.analysis.slice(0, 140).replace(/[^.!?]*$/, "").trim() || data.analysis.slice(0, 100).trim() + "...";
   const ogDesc = `Three AI models read the signals daily. Technical: ${data.scoreTechnical}%. Economic: ${data.scoreEconomic}%. ${analysisSnippet}`;
 
-  return new HTMLRewriter()
+  const rewritten = new HTMLRewriter()
     .on("title", {
       element(el) {
         el.setInnerContent(
@@ -64,13 +56,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         el.setAttribute("content", ogDesc);
       },
     })
-    .on("head", {
-      element(el) {
-        el.append(
-          `<script>window.__OQ_DATA__=${JSON.stringify(data)}</script>`,
-          { html: true },
-        );
-      },
-    })
     .transform(response);
+
+  // Prevent browser/CDN from caching stale HTML with old scores
+  const fresh = new Response(rewritten.body, rewritten);
+  fresh.headers.set("Cache-Control", "no-store");
+  return fresh;
 };
