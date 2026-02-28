@@ -159,33 +159,29 @@ export async function fetchAllSources(
 ): Promise<{ items: RawItem[]; health: SourceFetchResult[] }> {
   const health: SourceFetchResult[] = [];
 
-  const results = await Promise.allSettled(
-    sources.map(async (source) => {
-      try {
-        const items = await fetchSource(source);
-        health.push({
-          sourceId: source.id,
-          success: true,
-          itemCount: items.length,
-        });
-        return items;
-      } catch (err) {
-        health.push({
-          sourceId: source.id,
-          success: false,
-          itemCount: 0,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        return [];
-      }
-    })
-  );
-
-  const allItems = results
-    .filter(
-      (r): r is PromiseFulfilledResult<RawItem[]> => r.status === "fulfilled"
+  const allItems = (
+    await Promise.all(
+      sources.map(async (source) => {
+        try {
+          const items = await fetchSource(source);
+          health.push({
+            sourceId: source.id,
+            success: true,
+            itemCount: items.length,
+          });
+          return items;
+        } catch (err) {
+          health.push({
+            sourceId: source.id,
+            success: false,
+            itemCount: 0,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return [] as RawItem[];
+        }
+      })
     )
-    .flatMap((r) => r.value);
+  ).flat();
 
   // Filter items by per-category freshness thresholds (items with no date are kept)
   const now = Date.now();

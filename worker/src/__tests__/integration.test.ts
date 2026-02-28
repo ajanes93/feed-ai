@@ -716,6 +716,13 @@ describe("fetchAndStoreArticles (fetch-only cron)", () => {
 });
 
 describe("storeRawItems edge cases", () => {
+  beforeEach(() => {
+    fetchMock.activate();
+    fetchMock.disableNetConnect();
+  });
+
+  afterEach(() => fetchMock.deactivate());
+
   it("truncates content to 500 characters", async () => {
     mockAllSources();
     mockGeminiForPipeline();
