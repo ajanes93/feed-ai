@@ -123,6 +123,7 @@ interface ConfirmAction {
 
 const confirmOpen = ref(false);
 const pendingAction = ref<ConfirmAction | null>(null);
+const predigestDialogOpen = ref(false);
 
 const confirmActions: Record<string, ConfirmAction> = {
   deleteScore: {
@@ -302,7 +303,7 @@ onMounted(fetchDashboard);
               <DropdownMenuLabel>Score Pipeline</DropdownMenuLabel>
               <DropdownMenuItem
                 :disabled="predigesting"
-                @click="runPredigest()"
+                @click="predigestDialogOpen = true"
               >
                 <ListChecks class="size-4 text-blue-400" />
                 <div class="flex flex-col">
@@ -652,6 +653,40 @@ onMounted(fetchDashboard);
             @click="executeConfirmed()"
           >
             {{ confirmLabel }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <!-- Predigest dialog with purge option -->
+    <AlertDialog v-model:open="predigestDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Run Predigest</AlertDialogTitle>
+          <AlertDialogDescription>
+            Summarize articles per pillar using AI. This uses API credits.
+            Choose "Purge &amp; Run" to clear today's cached summaries and start
+            fresh.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            class="bg-destructive text-white hover:bg-destructive/90"
+            @click="
+              predigestDialogOpen = false;
+              runPredigest(true);
+            "
+          >
+            Purge &amp; Run
+          </AlertDialogAction>
+          <AlertDialogAction
+            @click="
+              predigestDialogOpen = false;
+              runPredigest();
+            "
+          >
+            Run
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

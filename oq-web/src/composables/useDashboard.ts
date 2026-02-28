@@ -184,14 +184,17 @@ export function useDashboard() {
   const predigestResult = ref<string | null>(null);
   const predigestSuccess = ref(false);
 
-  async function runPredigest() {
+  async function runPredigest(purge?: boolean) {
+    const url = purge ? "/api/predigest?purge=true" : "/api/predigest";
     await adminPost(
-      "/api/predigest",
+      url,
       predigesting,
       predigestResult,
       predigestSuccess,
-      (body) =>
-        `Pre-digested ${body.articleCount} articles${body.preDigested ? " (summarized)" : ""}`,
+      (body) => {
+        const purged = body.cachePurged ? "Cache purged. " : "";
+        return `${purged}Pre-digested ${body.articleCount} articles${body.preDigested ? " (summarized)" : ""}`;
+      },
       "Predigest failed"
     );
   }
