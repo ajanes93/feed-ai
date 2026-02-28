@@ -179,6 +179,22 @@ const confirmDescription = computed(
 );
 const confirmLabel = computed(() => pendingAction.value?.label ?? "Confirm");
 
+// Collect all action results for display — variant "warn" shows amber, "error" shows destructive
+const actionResults = computed(() =>
+  [
+    { message: fetchResult.value, success: fetchSuccess.value, variant: "warn" as const },
+    { message: scoreResult.value, success: scoreSuccess.value, variant: "error" as const },
+    { message: deleteResult.value, success: deleteSuccess.value, variant: "error" as const },
+    { message: predigestResult.value, success: predigestSuccess.value, variant: "error" as const },
+    { message: dedupFundingResult.value, success: dedupFundingSuccess.value, variant: "error" as const },
+    { message: extractFundingResult.value, success: extractFundingSuccess.value, variant: "error" as const },
+    { message: fetchSanityResult.value, success: fetchSanitySuccess.value, variant: "error" as const },
+    { message: fetchSwebenchResult.value, success: fetchSwebenchSuccess.value, variant: "error" as const },
+    { message: purgeScoresResult.value, success: purgeScoresSuccess.value, variant: "error" as const },
+    { message: purgeFundingResult.value, success: purgeFundingSuccess.value, variant: "error" as const },
+  ].filter((r) => r.message !== null)
+);
+
 onMounted(fetchDashboard);
 </script>
 
@@ -341,7 +357,8 @@ onMounted(fetchDashboard);
                     purgingScores ? "Purging..." : "Purge Scores"
                   }}</span>
                   <span class="text-xs opacity-70"
-                    >Delete all scores, model responses, and AI usage</span
+                    >Delete all scores, model responses, funding events, and
+                    AI usage</span
                   >
                 </div>
               </DropdownMenuItem>
@@ -370,114 +387,18 @@ onMounted(fetchDashboard);
 
       <!-- Action results -->
       <div
-        v-if="fetchResult"
+        v-for="r in actionResults"
+        :key="r.message!"
         class="mb-4 rounded-lg border px-4 py-3 text-sm"
         :class="
-          fetchSuccess
+          r.success
             ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-            : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+            : r.variant === 'warn'
+              ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+              : 'border-destructive/30 bg-destructive/10 text-destructive'
         "
       >
-        {{ fetchResult }}
-      </div>
-      <div
-        v-if="deleteResult"
-        class="mb-4 rounded-lg border px-4 py-3 text-sm"
-        :class="
-          deleteSuccess
-            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-            : 'border-destructive/30 bg-destructive/10 text-destructive'
-        "
-      >
-        {{ deleteResult }}
-      </div>
-      <div
-        v-if="predigestResult"
-        class="mb-4 rounded-lg border px-4 py-3 text-sm"
-        :class="
-          predigestSuccess
-            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-            : 'border-destructive/30 bg-destructive/10 text-destructive'
-        "
-      >
-        {{ predigestResult }}
-      </div>
-      <div
-        v-if="scoreResult"
-        class="mb-4 rounded-lg border px-4 py-3 text-sm"
-        :class="
-          scoreSuccess
-            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-            : 'border-destructive/30 bg-destructive/10 text-destructive'
-        "
-      >
-        {{ scoreResult }}
-      </div>
-      <div
-        v-if="dedupFundingResult"
-        class="mb-4 rounded-lg border px-4 py-3 text-sm"
-        :class="
-          dedupFundingSuccess
-            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-            : 'border-destructive/30 bg-destructive/10 text-destructive'
-        "
-      >
-        {{ dedupFundingResult }}
-      </div>
-      <div
-        v-if="extractFundingResult"
-        class="mb-4 rounded-lg border px-4 py-3 text-sm"
-        :class="
-          extractFundingSuccess
-            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-            : 'border-destructive/30 bg-destructive/10 text-destructive'
-        "
-      >
-        {{ extractFundingResult }}
-      </div>
-      <div
-        v-if="fetchSanityResult"
-        class="mb-4 rounded-lg border px-4 py-3 text-sm"
-        :class="
-          fetchSanitySuccess
-            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-            : 'border-destructive/30 bg-destructive/10 text-destructive'
-        "
-      >
-        {{ fetchSanityResult }}
-      </div>
-      <div
-        v-if="fetchSwebenchResult"
-        class="mb-4 rounded-lg border px-4 py-3 text-sm"
-        :class="
-          fetchSwebenchSuccess
-            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-            : 'border-destructive/30 bg-destructive/10 text-destructive'
-        "
-      >
-        {{ fetchSwebenchResult }}
-      </div>
-      <div
-        v-if="purgeScoresResult"
-        class="mb-4 rounded-lg border px-4 py-3 text-sm"
-        :class="
-          purgeScoresSuccess
-            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-            : 'border-destructive/30 bg-destructive/10 text-destructive'
-        "
-      >
-        {{ purgeScoresResult }}
-      </div>
-      <div
-        v-if="purgeFundingResult"
-        class="mb-4 rounded-lg border px-4 py-3 text-sm"
-        :class="
-          purgeFundingSuccess
-            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-            : 'border-destructive/30 bg-destructive/10 text-destructive'
-        "
-      >
-        {{ purgeFundingResult }}
+        {{ r.message }}
       </div>
 
       <!-- Auth prompt -->

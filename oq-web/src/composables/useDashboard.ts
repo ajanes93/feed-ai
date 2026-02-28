@@ -61,22 +61,30 @@ export function useDashboard() {
     needsAuth.value = true;
   }
 
-  const fetching = ref(false);
-  const fetchResult = ref<string | null>(null);
-  const fetchSuccess = ref(false);
-
-  async function fetchArticles() {
+  // Shared helper: POST an admin endpoint, set result/success refs, handle 401.
+  // Returns true if the HTTP request succeeded (dashboard refresh should follow).
+  // onSuccess can return a plain string (implies success=true) or { message, success }
+  // to signal partial failures on an otherwise-200 response.
+  async function adminPost(
+    url: string,
+    loading: { value: boolean },
+    result: { value: string | null },
+    success: { value: boolean },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onSuccess: (body: any) => string | { message: string; success: boolean },
+    fallbackError: string
+  ): Promise<boolean> {
     if (!adminKey.value) {
       needsAuth.value = true;
-      return;
+      return false;
     }
 
-    fetching.value = true;
-    fetchResult.value = null;
-    fetchSuccess.value = false;
+    loading.value = true;
+    result.value = null;
+    success.value = false;
 
     try {
-      const res = await fetch("/api/fetch", {
+      const res = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${adminKey.value}` },
       });
@@ -87,28 +95,49 @@ export function useDashboard() {
       }
 
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Fetch failed");
+      if (!res.ok) throw new Error(body.error || fallbackError);
 
-      const errorDetails =
-        body.errors?.length > 0
-          ? body.errors
-              .map(
-                (e: { sourceId: string; message: string }) =>
-                  `${e.sourceId}: ${e.message}`
-              )
-              .join(", ")
-          : "";
-      fetchResult.value = errorDetails
-        ? `Fetched ${body.fetched} articles — ${body.errors.length} error(s): ${errorDetails}`
-        : `Fetched ${body.fetched} new articles`;
-      fetchSuccess.value = body.errors?.length === 0;
-      await fetchDashboard();
+      const outcome = onSuccess(body);
+      if (typeof outcome === "string") {
+        result.value = outcome;
+        success.value = true;
+      } else {
+        result.value = outcome.message;
+        success.value = outcome.success;
+      }
+      return true;
     } catch (err) {
-      fetchResult.value = err instanceof Error ? err.message : "Fetch failed";
-      fetchSuccess.value = false;
+      result.value = err instanceof Error ? err.message : fallbackError;
+      success.value = false;
+      return false;
     } finally {
-      fetching.value = false;
+      loading.value = false;
     }
+  }
+
+  const fetching = ref(false);
+  const fetchResult = ref<string | null>(null);
+  const fetchSuccess = ref(false);
+
+  async function fetchArticles() {
+    const ok = await adminPost(
+      "/api/fetch",
+      fetching,
+      fetchResult,
+      fetchSuccess,
+      (body) => {
+        const errors: { sourceId: string; message: string }[] =
+          body.errors ?? [];
+        if (errors.length === 0) return `Fetched ${body.fetched} new articles`;
+        const details = errors.map((e) => `${e.sourceId}: ${e.message}`).join(", ");
+        return {
+          message: `Fetched ${body.fetched} articles — ${errors.length} error(s): ${details}`,
+          success: false,
+        };
+      },
+      "Fetch failed"
+    );
+    if (ok) await fetchDashboard();
   }
 
   const scoring = ref(false);
@@ -116,43 +145,18 @@ export function useDashboard() {
   const scoreSuccess = ref(false);
 
   async function generateScore() {
-    if (!adminKey.value) {
-      needsAuth.value = true;
-      return;
-    }
-
-    scoring.value = true;
-    scoreResult.value = null;
-    scoreSuccess.value = false;
-
-    try {
-      const res = await fetch("/api/score", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${adminKey.value}` },
-      });
-
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
-
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Score generation failed");
-
-      if (body.alreadyExists) {
-        scoreResult.value = `Score already exists for ${body.date}: ${body.score} (delta: ${body.delta})`;
-      } else {
-        scoreResult.value = `Generated score for ${body.date}: ${body.score} (delta: ${body.delta > 0 ? "+" : ""}${body.delta})`;
-      }
-      scoreSuccess.value = true;
-      await fetchDashboard();
-    } catch (err) {
-      scoreResult.value =
-        err instanceof Error ? err.message : "Score generation failed";
-      scoreSuccess.value = false;
-    } finally {
-      scoring.value = false;
-    }
+    const ok = await adminPost(
+      "/api/score",
+      scoring,
+      scoreResult,
+      scoreSuccess,
+      (body) => {
+        const prefix = body.alreadyExists ? "Score already exists" : "Generated score";
+        return `${prefix} for ${body.date}: ${body.score} (delta: ${body.delta > 0 ? "+" : ""}${body.delta})`;
+      },
+      "Score generation failed"
+    );
+    if (ok) await fetchDashboard();
   }
 
   const deleting = ref(false);
@@ -160,40 +164,15 @@ export function useDashboard() {
   const deleteSuccess = ref(false);
 
   async function deleteScore() {
-    if (!adminKey.value) {
-      needsAuth.value = true;
-      return;
-    }
-
-    deleting.value = true;
-    deleteResult.value = null;
-    deleteSuccess.value = false;
-
-    try {
-      const res = await fetch("/api/delete-score", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${adminKey.value}` },
-      });
-
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
-
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Delete failed");
-
-      deleteResult.value = body.deleted
-        ? `Deleted score for ${body.date}`
-        : body.message;
-      deleteSuccess.value = true;
-      await fetchDashboard();
-    } catch (err) {
-      deleteResult.value = err instanceof Error ? err.message : "Delete failed";
-      deleteSuccess.value = false;
-    } finally {
-      deleting.value = false;
-    }
+    const ok = await adminPost(
+      "/api/delete-score",
+      deleting,
+      deleteResult,
+      deleteSuccess,
+      (body) => (body.deleted ? `Deleted score for ${body.date}` : body.message),
+      "Delete failed"
+    );
+    if (ok) await fetchDashboard();
   }
 
   const predigesting = ref(false);
@@ -201,38 +180,15 @@ export function useDashboard() {
   const predigestSuccess = ref(false);
 
   async function runPredigest() {
-    if (!adminKey.value) {
-      needsAuth.value = true;
-      return;
-    }
-
-    predigesting.value = true;
-    predigestResult.value = null;
-    predigestSuccess.value = false;
-
-    try {
-      const res = await fetch("/api/predigest", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${adminKey.value}` },
-      });
-
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
-
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Predigest failed");
-
-      predigestResult.value = `Pre-digested ${body.articleCount} articles${body.preDigested ? " (summarized)" : ""}`;
-      predigestSuccess.value = true;
-    } catch (err) {
-      predigestResult.value =
-        err instanceof Error ? err.message : "Predigest failed";
-      predigestSuccess.value = false;
-    } finally {
-      predigesting.value = false;
-    }
+    await adminPost(
+      "/api/predigest",
+      predigesting,
+      predigestResult,
+      predigestSuccess,
+      (body) =>
+        `Pre-digested ${body.articleCount} articles${body.preDigested ? " (summarized)" : ""}`,
+      "Predigest failed"
+    );
   }
 
   const dedupingFunding = ref(false);
@@ -240,38 +196,14 @@ export function useDashboard() {
   const dedupFundingSuccess = ref(false);
 
   async function dedupFunding() {
-    if (!adminKey.value) {
-      needsAuth.value = true;
-      return;
-    }
-
-    dedupingFunding.value = true;
-    dedupFundingResult.value = null;
-    dedupFundingSuccess.value = false;
-
-    try {
-      const res = await fetch("/api/admin/backfill?type=dedup-funding", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${adminKey.value}` },
-      });
-
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
-
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Dedup failed");
-
-      dedupFundingResult.value = `Removed ${body.deleted} duplicates, ${body.remaining} remaining`;
-      dedupFundingSuccess.value = true;
-    } catch (err) {
-      dedupFundingResult.value =
-        err instanceof Error ? err.message : "Dedup failed";
-      dedupFundingSuccess.value = false;
-    } finally {
-      dedupingFunding.value = false;
-    }
+    await adminPost(
+      "/api/admin/backfill?type=dedup-funding",
+      dedupingFunding,
+      dedupFundingResult,
+      dedupFundingSuccess,
+      (body) => `Removed ${body.deleted} duplicates, ${body.remaining} remaining`,
+      "Dedup failed"
+    );
   }
 
   const extractingFunding = ref(false);
@@ -279,38 +211,15 @@ export function useDashboard() {
   const extractFundingSuccess = ref(false);
 
   async function extractFunding() {
-    if (!adminKey.value) {
-      needsAuth.value = true;
-      return;
-    }
-
-    extractingFunding.value = true;
-    extractFundingResult.value = null;
-    extractFundingSuccess.value = false;
-
-    try {
-      const res = await fetch("/api/admin/extract-funding", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${adminKey.value}` },
-      });
-
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
-
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Extract failed");
-
-      extractFundingResult.value = `Extracted ${body.extracted ?? 0} funding events (${body.scanned ?? 0} articles scanned)`;
-      extractFundingSuccess.value = true;
-    } catch (err) {
-      extractFundingResult.value =
-        err instanceof Error ? err.message : "Extract failed";
-      extractFundingSuccess.value = false;
-    } finally {
-      extractingFunding.value = false;
-    }
+    await adminPost(
+      "/api/admin/extract-funding",
+      extractingFunding,
+      extractFundingResult,
+      extractFundingSuccess,
+      (body) =>
+        `Extracted ${body.extracted ?? 0} funding events (${body.scanned ?? 0} articles scanned)`,
+      "Extract failed"
+    );
   }
 
   const fetchingSanity = ref(false);
@@ -318,38 +227,14 @@ export function useDashboard() {
   const fetchSanitySuccess = ref(false);
 
   async function fetchSanity() {
-    if (!adminKey.value) {
-      needsAuth.value = true;
-      return;
-    }
-
-    fetchingSanity.value = true;
-    fetchSanityResult.value = null;
-    fetchSanitySuccess.value = false;
-
-    try {
-      const res = await fetch("/api/fetch-sanity", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${adminKey.value}` },
-      });
-
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
-
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Fetch failed");
-
-      fetchSanityResult.value = `Fetched Sanity Harness data (${body.stored ?? body.rows ?? "done"})`;
-      fetchSanitySuccess.value = true;
-    } catch (err) {
-      fetchSanityResult.value =
-        err instanceof Error ? err.message : "Fetch failed";
-      fetchSanitySuccess.value = false;
-    } finally {
-      fetchingSanity.value = false;
-    }
+    await adminPost(
+      "/api/fetch-sanity",
+      fetchingSanity,
+      fetchSanityResult,
+      fetchSanitySuccess,
+      (body) => `Fetched Sanity Harness data (${body.stored ?? body.rows ?? "done"})`,
+      "Fetch failed"
+    );
   }
 
   const fetchingSwebench = ref(false);
@@ -357,38 +242,14 @@ export function useDashboard() {
   const fetchSwebenchSuccess = ref(false);
 
   async function fetchSwebench() {
-    if (!adminKey.value) {
-      needsAuth.value = true;
-      return;
-    }
-
-    fetchingSwebench.value = true;
-    fetchSwebenchResult.value = null;
-    fetchSwebenchSuccess.value = false;
-
-    try {
-      const res = await fetch("/api/fetch-swebench", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${adminKey.value}` },
-      });
-
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
-
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Fetch failed");
-
-      fetchSwebenchResult.value = `Fetched SWE-bench data (${body.stored ?? body.rows ?? "done"})`;
-      fetchSwebenchSuccess.value = true;
-    } catch (err) {
-      fetchSwebenchResult.value =
-        err instanceof Error ? err.message : "Fetch failed";
-      fetchSwebenchSuccess.value = false;
-    } finally {
-      fetchingSwebench.value = false;
-    }
+    await adminPost(
+      "/api/fetch-swebench",
+      fetchingSwebench,
+      fetchSwebenchResult,
+      fetchSwebenchSuccess,
+      (body) => `Fetched SWE-bench data (${body.stored ?? body.rows ?? "done"})`,
+      "Fetch failed"
+    );
   }
 
   const purgingScores = ref(false);
@@ -396,39 +257,16 @@ export function useDashboard() {
   const purgeScoresSuccess = ref(false);
 
   async function purgeScores() {
-    if (!adminKey.value) {
-      needsAuth.value = true;
-      return;
-    }
-
-    purgingScores.value = true;
-    purgeScoresResult.value = null;
-    purgeScoresSuccess.value = false;
-
-    try {
-      const res = await fetch("/api/admin/purge-scores", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${adminKey.value}` },
-      });
-
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
-
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Purge failed");
-
-      purgeScoresResult.value = `Purged ${body.scores} scores, ${body.modelResponses} model responses, ${body.fundingEvents} funding events, ${body.aiUsage} AI usage records`;
-      purgeScoresSuccess.value = true;
-      await fetchDashboard();
-    } catch (err) {
-      purgeScoresResult.value =
-        err instanceof Error ? err.message : "Purge failed";
-      purgeScoresSuccess.value = false;
-    } finally {
-      purgingScores.value = false;
-    }
+    const ok = await adminPost(
+      "/api/admin/purge-scores",
+      purgingScores,
+      purgeScoresResult,
+      purgeScoresSuccess,
+      (body) =>
+        `Purged ${body.scores} scores, ${body.scoreArticles} score-article links, ${body.modelResponses} model responses, ${body.fundingEvents} funding events, ${body.aiUsage} AI usage records`,
+      "Purge failed"
+    );
+    if (ok) await fetchDashboard();
   }
 
   const purgingFunding = ref(false);
@@ -436,39 +274,15 @@ export function useDashboard() {
   const purgeFundingSuccess = ref(false);
 
   async function purgeFunding() {
-    if (!adminKey.value) {
-      needsAuth.value = true;
-      return;
-    }
-
-    purgingFunding.value = true;
-    purgeFundingResult.value = null;
-    purgeFundingSuccess.value = false;
-
-    try {
-      const res = await fetch("/api/admin/purge-funding", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${adminKey.value}` },
-      });
-
-      if (res.status === 401) {
-        clearAdminKey();
-        throw new Error("Invalid admin key");
-      }
-
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Purge failed");
-
-      purgeFundingResult.value = `Purged ${body.fundingEvents} funding events`;
-      purgeFundingSuccess.value = true;
-      await fetchDashboard();
-    } catch (err) {
-      purgeFundingResult.value =
-        err instanceof Error ? err.message : "Purge failed";
-      purgeFundingSuccess.value = false;
-    } finally {
-      purgingFunding.value = false;
-    }
+    const ok = await adminPost(
+      "/api/admin/purge-funding",
+      purgingFunding,
+      purgeFundingResult,
+      purgeFundingSuccess,
+      (body) => `Purged ${body.fundingEvents} funding events`,
+      "Purge failed"
+    );
+    if (ok) await fetchDashboard();
   }
 
   async function fetchDashboard() {

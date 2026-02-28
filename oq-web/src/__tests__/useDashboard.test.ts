@@ -237,6 +237,7 @@ describe("useDashboard", () => {
         expect.objectContaining({ method: "POST" })
       );
       expect(purgeScoresResult.value).toContain("Purged 5 scores");
+      expect(purgeScoresResult.value).toContain("10 score-article links");
       expect(purgeScoresResult.value).toContain("15 model responses");
       expect(purgeScoresResult.value).toContain("3 funding events");
       expect(purgeScoresResult.value).toContain("20 AI usage records");
