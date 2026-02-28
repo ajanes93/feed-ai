@@ -173,8 +173,13 @@ describe("useDashboard", () => {
 
   describe("requires auth", () => {
     it("sets needsAuth when no key provided", async () => {
-      const { dedupFunding, extractFunding, fetchSanity, fetchSwebench, needsAuth } =
-        useDashboard();
+      const {
+        dedupFunding,
+        extractFunding,
+        fetchSanity,
+        fetchSwebench,
+        needsAuth,
+      } = useDashboard();
 
       await dedupFunding();
       expect(needsAuth.value).toBe(true);

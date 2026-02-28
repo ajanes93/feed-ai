@@ -290,9 +290,7 @@ test.describe("Dashboard", () => {
     // Section labels
     await expect(page.getByText("Fetch Data")).toBeVisible();
     await expect(page.getByText("Score Pipeline")).toBeVisible();
-    await expect(
-      page.getByText("Funding", { exact: true })
-    ).toBeVisible();
+    await expect(page.getByText("Funding", { exact: true })).toBeVisible();
     // Actions
     await expect(
       page.getByText("Dedup Funding", { exact: true })
@@ -314,15 +312,11 @@ test.describe("Dashboard", () => {
     await page.getByText("Dedup Funding").click();
 
     // Confirm dialog should appear
-    await expect(
-      page.getByText("Deduplicate funding rows?")
-    ).toBeVisible();
+    await expect(page.getByText("Deduplicate funding rows?")).toBeVisible();
     await expect(page.getByText(/cannot be undone/)).toBeVisible();
 
     // Confirm the action
-    await page
-      .getByRole("button", { name: "Dedup Funding" })
-      .click();
+    await page.getByRole("button", { name: "Dedup Funding" }).click();
 
     await expect(
       page.getByText(/Removed 3 duplicates, 12 remaining/)
@@ -343,9 +337,7 @@ test.describe("Dashboard", () => {
     await expect(page.getByText(/API credits/)).toBeVisible();
 
     // Confirm the action
-    await page
-      .getByRole("button", { name: "Extract Funding" })
-      .click();
+    await page.getByRole("button", { name: "Extract Funding" }).click();
 
     await expect(
       page.getByText(/Extracted 5 funding events.*20 articles scanned/)
