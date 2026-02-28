@@ -158,6 +158,28 @@ async function mockDashboardApi(
       body: JSON.stringify({ stored: 15 }),
     });
   });
+
+  await page.route("**/api/admin/purge-scores", (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        scores: 5,
+        modelResponses: 15,
+        fundingEvents: 3,
+        aiUsage: 20,
+        scoreArticles: 10,
+      }),
+    });
+  });
+
+  await page.route("**/api/admin/purge-funding", (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ fundingEvents: 42 }),
+    });
+  });
 }
 
 /** Set admin key in sessionStorage and navigate to dashboard */
@@ -398,5 +420,83 @@ test.describe("Dashboard", () => {
     // Should show friendly network error, not raw "Type error"
     await expect(page.getByText(/Network error.*Refresh/)).toBeVisible();
     await expect(page.getByText("Type error")).not.toBeVisible();
+  });
+
+  test("shows Purge section in actions menu", async ({ page }) => {
+    await mockDashboardApi(page);
+    await gotoDashboard(page);
+
+    await page.getByText("Actions").click();
+    await expect(page.getByText("Purge", { exact: true })).toBeVisible();
+    await expect(page.getByText("Purge Scores", { exact: true })).toBeVisible();
+    await expect(page.getByText("Purge Funding", { exact: true })).toBeVisible();
+  });
+
+  test("Purge Scores shows confirm dialog and succeeds on confirm", async ({
+    page,
+  }) => {
+    await mockDashboardApi(page);
+    await gotoDashboard(page);
+
+    await page.getByText("Actions").click();
+    await page.getByText("Purge Scores", { exact: true }).click();
+
+    // Confirm dialog should appear
+    await expect(page.getByText("Purge all scores?")).toBeVisible();
+    await expect(page.getByText(/cannot be undone/)).toBeVisible();
+
+    // Confirm the action
+    await page.getByRole("button", { name: "Purge Scores" }).click();
+
+    await expect(page.getByText(/Purged 5 scores/)).toBeVisible();
+  });
+
+  test("Purge Funding shows confirm dialog and succeeds on confirm", async ({
+    page,
+  }) => {
+    await mockDashboardApi(page);
+    await gotoDashboard(page);
+
+    await page.getByText("Actions").click();
+    await page.getByText("Purge Funding", { exact: true }).click();
+
+    // Confirm dialog should appear
+    await expect(page.getByText("Purge all funding events?")).toBeVisible();
+    await expect(page.getByText(/cannot be undone/)).toBeVisible();
+
+    // Confirm the action
+    await page.getByRole("button", { name: "Purge Funding" }).click();
+
+    await expect(page.getByText(/Purged 42 funding events/)).toBeVisible();
+  });
+
+  test("Fetch Articles shows error details when sources fail", async ({
+    page,
+  }) => {
+    // Override the default /api/fetch mock to return errors
+    await mockDashboardApi(page);
+    await page.route("**/api/fetch", (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          fetched: 0,
+          errors: [
+            {
+              sourceId: "oq-openai",
+              errorType: "http_error",
+              message: "HTTP 403",
+            },
+          ],
+        }),
+      });
+    });
+    await gotoDashboard(page);
+
+    await page.getByText("Actions").click();
+    await page.getByText("Fetch Articles").click();
+
+    await expect(page.getByText(/1 error/)).toBeVisible();
+    await expect(page.getByText(/oq-openai: HTTP 403/)).toBeVisible();
   });
 });

@@ -171,6 +171,134 @@ describe("useDashboard", () => {
     });
   });
 
+  describe("fetchArticles", () => {
+    it("shows error details when sources fail", async () => {
+      mockOk({
+        fetched: 5,
+        errors: [
+          { sourceId: "oq-openai", errorType: "http_error", message: "HTTP 403" },
+          { sourceId: "oq-arxiv", errorType: "timeout", message: "Timeout" },
+        ],
+      });
+      // Mock the subsequent fetchDashboard call
+      mockOk({ ai: { recentCalls: [], totalTokens: 0 }, sources: [], totalScores: 0, totalArticles: 0, totalSubscribers: 0, todayScoreExists: false });
+      const { fetchArticles, fetchResult, fetchSuccess } = authedDashboard();
+
+      await fetchArticles();
+
+      expect(fetchResult.value).toContain("2 error(s)");
+      expect(fetchResult.value).toContain("oq-openai: HTTP 403");
+      expect(fetchResult.value).toContain("oq-arxiv: Timeout");
+      expect(fetchResult.value).toContain("Fetched 5 articles");
+      expect(fetchSuccess.value).toBe(false);
+    });
+
+    it("shows clean message when no errors", async () => {
+      mockOk({ fetched: 12, errors: [] });
+      mockOk({ ai: { recentCalls: [], totalTokens: 0 }, sources: [], totalScores: 0, totalArticles: 0, totalSubscribers: 0, todayScoreExists: false });
+      const { fetchArticles, fetchResult, fetchSuccess } = authedDashboard();
+
+      await fetchArticles();
+
+      expect(fetchResult.value).toBe("Fetched 12 new articles");
+      expect(fetchSuccess.value).toBe(true);
+    });
+
+    it("sets error on API failure", async () => {
+      mockError({ error: "Worker down" });
+      const { fetchArticles, fetchResult, fetchSuccess } = authedDashboard();
+
+      await fetchArticles();
+
+      expect(fetchResult.value).toBe("Worker down");
+      expect(fetchSuccess.value).toBe(false);
+    });
+
+    it("clears auth on 401", async () => {
+      mock401();
+      const { fetchArticles, needsAuth } = authedDashboard();
+
+      await fetchArticles();
+
+      expect(needsAuth.value).toBe(true);
+    });
+  });
+
+  describe("purgeScores", () => {
+    it("calls purge-scores endpoint and sets success result", async () => {
+      mockOk({ scores: 5, modelResponses: 15, fundingEvents: 3, aiUsage: 20, scoreArticles: 10 });
+      mockOk({ ai: { recentCalls: [], totalTokens: 0 }, sources: [], totalScores: 0, totalArticles: 0, totalSubscribers: 0, todayScoreExists: false });
+      const { purgeScores, purgeScoresResult, purgeScoresSuccess } = authedDashboard();
+
+      await purgeScores();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/admin/purge-scores",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(purgeScoresResult.value).toContain("Purged 5 scores");
+      expect(purgeScoresResult.value).toContain("15 model responses");
+      expect(purgeScoresResult.value).toContain("3 funding events");
+      expect(purgeScoresResult.value).toContain("20 AI usage records");
+      expect(purgeScoresSuccess.value).toBe(true);
+    });
+
+    it("sets error on failure", async () => {
+      mockError({ error: "DB locked" });
+      const { purgeScores, purgeScoresResult, purgeScoresSuccess } = authedDashboard();
+
+      await purgeScores();
+
+      expect(purgeScoresResult.value).toBe("DB locked");
+      expect(purgeScoresSuccess.value).toBe(false);
+    });
+
+    it("clears auth on 401", async () => {
+      mock401();
+      const { purgeScores, needsAuth } = authedDashboard();
+
+      await purgeScores();
+
+      expect(needsAuth.value).toBe(true);
+    });
+  });
+
+  describe("purgeFunding", () => {
+    it("calls purge-funding endpoint and sets success result", async () => {
+      mockOk({ fundingEvents: 42 });
+      mockOk({ ai: { recentCalls: [], totalTokens: 0 }, sources: [], totalScores: 0, totalArticles: 0, totalSubscribers: 0, todayScoreExists: false });
+      const { purgeFunding, purgeFundingResult, purgeFundingSuccess } = authedDashboard();
+
+      await purgeFunding();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/admin/purge-funding",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(purgeFundingResult.value).toBe("Purged 42 funding events");
+      expect(purgeFundingSuccess.value).toBe(true);
+    });
+
+    it("sets error on failure", async () => {
+      mockError({ error: "Timeout" });
+      const { purgeFunding, purgeFundingResult, purgeFundingSuccess } = authedDashboard();
+
+      await purgeFunding();
+
+      expect(purgeFundingResult.value).toBe("Timeout");
+      expect(purgeFundingSuccess.value).toBe(false);
+    });
+
+    it("clears auth on 401", async () => {
+      mock401();
+      const { purgeFunding, needsAuth } = authedDashboard();
+
+      await purgeFunding();
+
+      expect(needsAuth.value).toBe(true);
+    });
+  });
+
   describe("requires auth", () => {
     it("sets needsAuth when no key provided", async () => {
       const {
@@ -178,6 +306,9 @@ describe("useDashboard", () => {
         extractFunding,
         fetchSanity,
         fetchSwebench,
+        fetchArticles,
+        purgeScores,
+        purgeFunding,
         needsAuth,
       } = useDashboard();
 
@@ -194,6 +325,18 @@ describe("useDashboard", () => {
 
       needsAuth.value = false;
       await fetchSwebench();
+      expect(needsAuth.value).toBe(true);
+
+      needsAuth.value = false;
+      await fetchArticles();
+      expect(needsAuth.value).toBe(true);
+
+      needsAuth.value = false;
+      await purgeScores();
+      expect(needsAuth.value).toBe(true);
+
+      needsAuth.value = false;
+      await purgeFunding();
       expect(needsAuth.value).toBe(true);
 
       // No fetch calls should have been made

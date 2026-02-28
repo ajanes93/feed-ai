@@ -1,4 +1,5 @@
 import { env, fetchMock } from "cloudflare:test";
+import { oqSources } from "../sources";
 
 const TABLES = [
   "oq_scores",
@@ -70,4 +71,48 @@ export function mockSanityHarnessError(status = 500) {
     .get("https://sanityboard.lr7.dev")
     .intercept({ method: "GET", path: "/" })
     .reply(status, "Server Error");
+}
+
+const VALID_RSS = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Test</title>
+<item><title>Test Article</title><link>https://example.com/test-1</link>
+<pubDate>${new Date().toUTCString()}</pubDate><description>Test desc</description></item>
+</channel></rss>`;
+
+/**
+ * Mock all OQ source URLs for /api/fetch tests.
+ * - failOrigin: return HTTP error for this origin
+ * - failStatus: HTTP status to return for the failing origin (default 403)
+ * - All other origins return a valid RSS feed with one article.
+ */
+export function mockAllOQSources(opts?: {
+  failOrigin?: string;
+  failStatus?: number;
+}) {
+  fetchMock.activate();
+  fetchMock.disableNetConnect();
+
+  // Group sources by origin so we mock every path
+  const byOrigin = new Map<string, string[]>();
+  for (const source of oqSources) {
+    const url = new URL(source.url);
+    const paths = byOrigin.get(url.origin) ?? [];
+    paths.push(url.pathname + url.search);
+    byOrigin.set(url.origin, paths);
+  }
+
+  for (const [origin, paths] of byOrigin) {
+    const pool = fetchMock.get(origin);
+    for (const path of paths) {
+      if (opts?.failOrigin && origin === opts.failOrigin) {
+        pool
+          .intercept({ method: "GET", path })
+          .reply(opts.failStatus ?? 403, "Forbidden");
+      } else {
+        pool.intercept({ method: "GET", path }).reply(200, VALID_RSS, {
+          headers: { "content-type": "application/xml" },
+        });
+      }
+    }
+  }
 }
