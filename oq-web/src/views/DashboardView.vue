@@ -677,9 +677,7 @@ onMounted(fetchDashboard);
           >
             Purge &amp; Run
           </AlertDialogAction>
-          <AlertDialogAction @click="runPredigest()">
-            Run
-          </AlertDialogAction>
+          <AlertDialogAction @click="runPredigest()"> Run </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
