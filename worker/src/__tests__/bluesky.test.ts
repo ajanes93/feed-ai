@@ -122,7 +122,7 @@ describe("fetchBlueskySource", () => {
     expect(items[0].content).toBe(longText);
   });
 
-  it("returns empty array when handle resolution fails", async () => {
+  it("throws when handle resolution fails", async () => {
     fetchMock
       .get("https://bsky.social")
       .intercept({
@@ -131,12 +131,12 @@ describe("fetchBlueskySource", () => {
       })
       .reply(404, "Not found");
 
-    const items = await fetchBlueskySource(BLUESKY_SOURCE);
-
-    expect(items).toEqual([]);
+    await expect(fetchBlueskySource(BLUESKY_SOURCE)).rejects.toThrow(
+      "HTTP 404"
+    );
   });
 
-  it("returns empty array when feed fetch fails", async () => {
+  it("throws when feed fetch fails", async () => {
     fetchMock
       .get("https://bsky.social")
       .intercept({
@@ -155,9 +155,9 @@ describe("fetchBlueskySource", () => {
       })
       .reply(500, "Server error");
 
-    const items = await fetchBlueskySource(BLUESKY_SOURCE);
-
-    expect(items).toEqual([]);
+    await expect(fetchBlueskySource(BLUESKY_SOURCE)).rejects.toThrow(
+      "HTTP 500"
+    );
   });
 
   it("handles empty feed", async () => {

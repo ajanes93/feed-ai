@@ -30,8 +30,7 @@ export async function fetchRemoteOK(source: Source): Promise<RawItem[]> {
   });
 
   if (!response.ok) {
-    console.error(`HTTP ${response.status} from ${source.name}`);
-    return [];
+    throw new Error(`HTTP ${response.status} from ${source.name}`);
   }
 
   const data: unknown = await response.json();

@@ -173,15 +173,13 @@ describe("fetchArbeitnow", () => {
     expect(items[0].publishedAt).toBe(1738300800000);
   });
 
-  it("returns empty array on HTTP error", async () => {
+  it("throws on HTTP error", async () => {
     fetchMock
       .get("https://www.arbeitnow.com")
       .intercept({ method: "GET", path: "/api/job-board-api" })
       .reply(500, "Server error");
 
-    const items = await fetchArbeitnow(ARBEITNOW_SOURCE);
-
-    expect(items).toEqual([]);
+    await expect(fetchArbeitnow(ARBEITNOW_SOURCE)).rejects.toThrow("HTTP 500");
   });
 
   it("returns empty array when no data in response", async () => {

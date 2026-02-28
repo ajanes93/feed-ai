@@ -141,15 +141,13 @@ describe("fetchHimalayas", () => {
     expect(items[0].publishedAt).toBeUndefined();
   });
 
-  it("returns empty array on HTTP error", async () => {
+  it("throws on HTTP error", async () => {
     fetchMock
       .get("https://himalayas.app")
       .intercept({ method: "GET", path: /\/jobs\/api/ })
       .reply(500, "Server error");
 
-    const items = await fetchHimalayas(HIMALAYAS_SOURCE);
-
-    expect(items).toEqual([]);
+    await expect(fetchHimalayas(HIMALAYAS_SOURCE)).rejects.toThrow("HTTP 500");
   });
 
   it("returns empty array when no jobs in response", async () => {

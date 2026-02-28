@@ -121,18 +121,16 @@ describe("fetchHNHiring", () => {
     expect(items).toEqual([]);
   });
 
-  it("returns empty array on search HTTP error", async () => {
+  it("throws on search HTTP error", async () => {
     fetchMock
       .get("https://hn.algolia.com")
       .intercept({ method: "GET", path: /\/api\/v1\/search/ })
       .reply(500, "Server error");
 
-    const items = await fetchHNHiring(HN_HIRING_SOURCE);
-
-    expect(items).toEqual([]);
+    await expect(fetchHNHiring(HN_HIRING_SOURCE)).rejects.toThrow("HTTP 500");
   });
 
-  it("returns empty array on item fetch HTTP error", async () => {
+  it("throws on item fetch HTTP error", async () => {
     fetchMock
       .get("https://hn.algolia.com")
       .intercept({ method: "GET", path: /\/api\/v1\/search/ })
@@ -145,9 +143,7 @@ describe("fetchHNHiring", () => {
       .intercept({ method: "GET", path: "/api/v1/items/42002" })
       .reply(500, "Server error");
 
-    const items = await fetchHNHiring(HN_HIRING_SOURCE);
-
-    expect(items).toEqual([]);
+    await expect(fetchHNHiring(HN_HIRING_SOURCE)).rejects.toThrow("HTTP 500");
   });
 
   it("limits results to 20 items", async () => {

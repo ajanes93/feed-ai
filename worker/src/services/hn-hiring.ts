@@ -28,8 +28,7 @@ export async function fetchHNHiring(source: Source): Promise<RawItem[]> {
   });
 
   if (!searchRes.ok) {
-    console.error(`HN Algolia search failed: ${searchRes.status}`);
-    return [];
+    throw new Error(`HTTP ${searchRes.status} from ${source.name}`);
   }
 
   const { hits } = (await searchRes.json()) as AlgoliaSearchResponse;
@@ -44,8 +43,9 @@ export async function fetchHNHiring(source: Source): Promise<RawItem[]> {
   );
 
   if (!commentsRes.ok) {
-    console.error(`HN Algolia item fetch failed: ${commentsRes.status}`);
-    return [];
+    throw new Error(
+      `HTTP ${commentsRes.status} from ${source.name} (comments)`
+    );
   }
 
   const thread = (await commentsRes.json()) as AlgoliaItemResponse;

@@ -54,8 +54,7 @@ async function fetchRssFeed(source: Source): Promise<RawItem[]> {
   });
 
   if (!response.ok) {
-    console.error(`HTTP ${response.status} from ${source.name}`);
-    return [];
+    throw new Error(`HTTP ${response.status} from ${source.name}`);
   }
 
   const xml = await response.text();
@@ -101,8 +100,7 @@ async function fetchJsonApi(source: Source): Promise<RawItem[]> {
   });
 
   if (!response.ok) {
-    console.error(`HTTP ${response.status} from ${source.name}`);
-    return [];
+    throw new Error(`HTTP ${response.status} from ${source.name}`);
   }
 
   const data: JobicyResponse = await response.json();
@@ -119,38 +117,33 @@ async function fetchJsonApi(source: Source): Promise<RawItem[]> {
 }
 
 export async function fetchSource(source: Source): Promise<RawItem[]> {
-  try {
-    // Special cases: sources with custom API formats
-    if (source.id === "hn-hiring") {
-      return await fetchHNHiring(source);
-    }
-    if (source.id === "himalayas-vue") {
-      return await fetchHimalayas(source);
-    }
-    if (source.id === "remoteok-frontend") {
-      return await fetchRemoteOK(source);
-    }
-    if (source.id === "arbeitnow-remote") {
-      return await fetchArbeitnow(source);
-    }
-    if (source.id === "vuejobs") {
-      return await fetchVueJobs(source);
-    }
+  // Special cases: sources with custom API formats
+  if (source.id === "hn-hiring") {
+    return await fetchHNHiring(source);
+  }
+  if (source.id === "himalayas-vue") {
+    return await fetchHimalayas(source);
+  }
+  if (source.id === "remoteok-frontend") {
+    return await fetchRemoteOK(source);
+  }
+  if (source.id === "arbeitnow-remote") {
+    return await fetchArbeitnow(source);
+  }
+  if (source.id === "vuejobs") {
+    return await fetchVueJobs(source);
+  }
 
-    switch (source.type) {
-      case "api":
-        return await fetchJsonApi(source);
-      case "bluesky":
-        return await fetchBlueskySource(source);
-      case "scrape":
-        return await fetchScrapeSource(source);
-      default:
-        // rss, reddit, hn, github — all XML feeds
-        return await fetchRssFeed(source);
-    }
-  } catch (error) {
-    console.error(`Failed to fetch ${source.name}:`, error);
-    return [];
+  switch (source.type) {
+    case "api":
+      return await fetchJsonApi(source);
+    case "bluesky":
+      return await fetchBlueskySource(source);
+    case "scrape":
+      return await fetchScrapeSource(source);
+    default:
+      // rss, reddit, hn, github — all XML feeds
+      return await fetchRssFeed(source);
   }
 }
 
@@ -166,33 +159,29 @@ export async function fetchAllSources(
 ): Promise<{ items: RawItem[]; health: SourceFetchResult[] }> {
   const health: SourceFetchResult[] = [];
 
-  const results = await Promise.allSettled(
-    sources.map(async (source) => {
-      try {
-        const items = await fetchSource(source);
-        health.push({
-          sourceId: source.id,
-          success: true,
-          itemCount: items.length,
-        });
-        return items;
-      } catch (err) {
-        health.push({
-          sourceId: source.id,
-          success: false,
-          itemCount: 0,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        return [];
-      }
-    })
-  );
-
-  const allItems = results
-    .filter(
-      (r): r is PromiseFulfilledResult<RawItem[]> => r.status === "fulfilled"
+  const allItems = (
+    await Promise.all(
+      sources.map(async (source) => {
+        try {
+          const items = await fetchSource(source);
+          health.push({
+            sourceId: source.id,
+            success: true,
+            itemCount: items.length,
+          });
+          return items;
+        } catch (err) {
+          health.push({
+            sourceId: source.id,
+            success: false,
+            itemCount: 0,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return [] as RawItem[];
+        }
+      })
     )
-    .flatMap((r) => r.value);
+  ).flat();
 
   // Filter items by per-category freshness thresholds (items with no date are kept)
   const now = Date.now();

@@ -155,15 +155,15 @@ Markdown Content:
     expect(items[1].title).toBe("Article Two");
   });
 
-  it("returns empty array on HTTP error", async () => {
+  it("throws on HTTP error", async () => {
     const mock = fetchMock.get("https://r.jina.ai");
     mock
       .intercept({ method: "GET", path: "/https://every.to/newsletter" })
       .reply(503, "Service unavailable");
 
-    const items = await fetchScrapeSource(EVERY_TO_SOURCE);
-
-    expect(items).toEqual([]);
+    await expect(fetchScrapeSource(EVERY_TO_SOURCE)).rejects.toThrow(
+      "HTTP 503"
+    );
   });
 
   it("returns empty array on minimal content", async () => {
