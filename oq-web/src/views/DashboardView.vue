@@ -673,19 +673,11 @@ onMounted(fetchDashboard);
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
             class="bg-destructive text-white hover:bg-destructive/90"
-            @click="
-              predigestDialogOpen = false;
-              runPredigest(true);
-            "
+            @click="runPredigest(true)"
           >
             Purge &amp; Run
           </AlertDialogAction>
-          <AlertDialogAction
-            @click="
-              predigestDialogOpen = false;
-              runPredigest();
-            "
-          >
+          <AlertDialogAction @click="runPredigest()">
             Run
           </AlertDialogAction>
         </AlertDialogFooter>

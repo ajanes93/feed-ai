@@ -736,15 +736,6 @@ describe("Admin API routes", () => {
         .bind(today, '{"capability":"old data"}', 99, 0)
         .run();
 
-      // Verify cache exists
-      const before = await env.DB.prepare(
-        "SELECT * FROM oq_predigest_cache WHERE date = ?"
-      )
-        .bind(today)
-        .first();
-      expect(before).not.toBeNull();
-      expect(before!.article_count).toBe(99);
-
       // Run predigest with purge
       const res = await SELF.fetch(
         "http://localhost/api/predigest?purge=true",
@@ -758,7 +749,7 @@ describe("Admin API routes", () => {
       expect(data.cachePurged).toBe(true);
       expect(data.articleCount).toBe(0);
 
-      // Cache should be rewritten with fresh data (0 articles)
+      // Cache should be rewritten with fresh data — old stale entry gone
       const after = await env.DB.prepare(
         "SELECT * FROM oq_predigest_cache WHERE date = ?"
       )
@@ -766,6 +757,10 @@ describe("Admin API routes", () => {
         .first();
       expect(after).not.toBeNull();
       expect(after!.article_count).toBe(0);
+      expect(JSON.parse(after!.pillar_data as string)).not.toHaveProperty(
+        "capability",
+        "old data"
+      );
     });
   });
 

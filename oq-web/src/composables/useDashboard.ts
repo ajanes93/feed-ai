@@ -184,10 +184,9 @@ export function useDashboard() {
   const predigestResult = ref<string | null>(null);
   const predigestSuccess = ref(false);
 
-  async function runPredigest(purge?: boolean) {
-    const url = purge ? "/api/predigest?purge=true" : "/api/predigest";
+  async function runPredigest(purge = false) {
     await adminPost(
-      url,
+      purge ? "/api/predigest?purge=true" : "/api/predigest",
       predigesting,
       predigestResult,
       predigestSuccess,
