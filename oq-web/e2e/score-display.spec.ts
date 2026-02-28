@@ -37,10 +37,10 @@ test.describe("Score display", () => {
 
   test("displays the capability gap section", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await expect(mockPage.getByText("The Capability Gap")).toBeVisible();
     await expect(
-      mockPage.getByText("SWE-bench Verified").first()
+      mockPage.getByText("Can AI actually do the job?")
     ).toBeVisible();
+    await expect(mockPage.getByTestId("pro-score")).toBeVisible();
   });
 });
 
@@ -88,14 +88,20 @@ test.describe("Subscribe", () => {
   test("renders subscribe section", async ({ mockPage }) => {
     await mockPage.goto("/");
     await expect(mockPage.getByText("Get the daily take")).toBeVisible();
-    await expect(mockPage.getByPlaceholder("your@email.com")).toBeVisible();
+    const card = mockPage.locator("section", {
+      hasText: "Get the daily take",
+    });
+    await expect(card.getByPlaceholder("your@email.com")).toBeVisible();
   });
 
   test("submits subscription email", async ({ mockPage }) => {
     await mockPage.goto("/");
-    await mockPage.getByPlaceholder("your@email.com").fill("test@example.com");
-    await mockPage.getByRole("button", { name: "Subscribe" }).click();
-    await expect(mockPage.getByText(/Subscribed/)).toBeVisible();
+    const card = mockPage.locator("section", {
+      hasText: "Get the daily take",
+    });
+    await card.getByPlaceholder("your@email.com").fill("test@example.com");
+    await card.getByRole("button", { name: "Subscribe" }).click();
+    await expect(mockPage.getByText(/Subscribed/).first()).toBeVisible();
   });
 });
 

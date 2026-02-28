@@ -11,33 +11,31 @@ describe("OQSanityHarness", () => {
     languageBreakdown: "go: 95%, rust: 80%, python: 72%, dart: 30%",
   };
 
-  const global = { stubs: { OQExplainer: true } };
-
-  it("renders section header", () => {
-    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
-    expect(wrapper.text()).toContain("AI Agent Reality Check");
+  it("renders top agent label", () => {
+    const wrapper = mount(OQSanityHarness, { props: defaultProps });
+    expect(wrapper.text()).toContain("Top Agent");
   });
 
   it("displays top agent pass rate", () => {
-    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
+    const wrapper = mount(OQSanityHarness, { props: defaultProps });
     expect(wrapper.text()).toContain("72.5");
     expect(wrapper.text()).toContain("Top Agent");
   });
 
   it("displays top agent and model names", () => {
-    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
+    const wrapper = mount(OQSanityHarness, { props: defaultProps });
     expect(wrapper.text()).toContain("Agentless");
     expect(wrapper.text()).toContain("Claude 3.5");
   });
 
   it("displays median pass rate", () => {
-    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
+    const wrapper = mount(OQSanityHarness, { props: defaultProps });
     expect(wrapper.text()).toContain("45");
     expect(wrapper.text()).toContain("Median Agent");
   });
 
   it("renders language breakdown chips", () => {
-    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
+    const wrapper = mount(OQSanityHarness, { props: defaultProps });
     expect(wrapper.text()).toContain("go");
     expect(wrapper.text()).toContain("95%");
     expect(wrapper.text()).toContain("rust");
@@ -49,7 +47,7 @@ describe("OQSanityHarness", () => {
   });
 
   it("sorts languages by pass rate descending", () => {
-    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
+    const wrapper = mount(OQSanityHarness, { props: defaultProps });
     const chips = wrapper.findAll("[data-testid='lang-chip']");
     // go (95%) should come first, dart (30%) last
     expect(chips[0].text()).toContain("go");
@@ -57,7 +55,7 @@ describe("OQSanityHarness", () => {
   });
 
   it("applies emerald color for high pass rates (>=80)", () => {
-    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
+    const wrapper = mount(OQSanityHarness, { props: defaultProps });
     const goChip = wrapper.findAll("[data-testid='lang-pct']").find((el) => {
       return el.text().includes("95%");
     });
@@ -65,7 +63,7 @@ describe("OQSanityHarness", () => {
   });
 
   it("applies yellow color for medium pass rates (50-79)", () => {
-    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
+    const wrapper = mount(OQSanityHarness, { props: defaultProps });
     const pythonChip = wrapper
       .findAll("[data-testid='lang-pct']")
       .find((el) => {
@@ -75,7 +73,7 @@ describe("OQSanityHarness", () => {
   });
 
   it("applies red color for low pass rates (<50)", () => {
-    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
+    const wrapper = mount(OQSanityHarness, { props: defaultProps });
     const dartChip = wrapper.findAll("[data-testid='lang-pct']").find((el) => {
       return el.text().includes("30%");
     });
@@ -85,13 +83,12 @@ describe("OQSanityHarness", () => {
   it("hides language breakdown when empty string", () => {
     const wrapper = mount(OQSanityHarness, {
       props: { ...defaultProps, languageBreakdown: "" },
-      global,
     });
     expect(wrapper.text()).not.toContain("Language spread");
   });
 
   it("renders source link to SanityHarness", () => {
-    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
+    const wrapper = mount(OQSanityHarness, { props: defaultProps });
     const link = wrapper.find('a[href="https://sanityboard.lr7.dev"]');
     expect(link.exists()).toBe(true);
     expect(link.text()).toContain("SanityHarness");
@@ -104,7 +101,6 @@ describe("OQSanityHarness", () => {
         ...defaultProps,
         note: "Top agent improved 3% this week in Go.",
       },
-      global,
     });
     const noteEl = wrapper.find("[data-testid='sanity-harness-note']");
     expect(noteEl.exists()).toBe(true);
@@ -112,7 +108,7 @@ describe("OQSanityHarness", () => {
   });
 
   it("hides note when not provided", () => {
-    const wrapper = mount(OQSanityHarness, { props: defaultProps, global });
+    const wrapper = mount(OQSanityHarness, { props: defaultProps });
     const noteEl = wrapper.find("[data-testid='sanity-harness-note']");
     expect(noteEl.exists()).toBe(false);
   });

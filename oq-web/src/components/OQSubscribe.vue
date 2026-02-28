@@ -6,6 +6,7 @@ import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
 
 defineProps<{
   status: "idle" | "loading" | "success" | "error";
+  inline?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -23,7 +24,43 @@ function onSubmit() {
 </script>
 
 <template>
-  <Card class="relative overflow-hidden border-border bg-card py-0 text-center">
+  <!-- Inline compact CTA -->
+  <div v-if="inline" class="text-center">
+    <form
+      v-if="status !== 'success'"
+      class="mx-auto flex max-w-sm items-center gap-2"
+      @submit.prevent="onSubmit"
+    >
+      <span class="shrink-0 text-xs text-muted-foreground"
+        >Get this in your inbox</span
+      >
+      <Input
+        v-model="email"
+        type="email"
+        placeholder="your@email.com"
+        class="h-8 flex-1 border-border bg-secondary text-xs text-foreground placeholder:text-muted-foreground focus-visible:ring-orange-500"
+        :disabled="status === 'loading'"
+      />
+      <Button
+        type="submit"
+        size="sm"
+        class="h-8 bg-orange-500 text-xs text-white hover:bg-orange-600"
+        :disabled="status === 'loading'"
+      >
+        {{ status === "loading" ? "..." : "Subscribe" }}
+      </Button>
+    </form>
+    <div v-else class="text-xs text-emerald-400">Subscribed!</div>
+    <div v-if="status === 'error'" class="mt-1 text-xs text-destructive">
+      Something went wrong.
+    </div>
+  </div>
+
+  <!-- Full card CTA -->
+  <Card
+    v-else
+    class="relative overflow-hidden border-border bg-card py-0 text-center"
+  >
     <!-- Bottom accent line -->
     <div
       class="absolute right-0 bottom-0 left-0 h-px"

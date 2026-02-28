@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseAmount, fundingDedupeKey } from "../index";
+import { parseAmount, fundingDedupeKey, bucketAmount } from "../index";
 
 describe("parseAmount", () => {
   it("parses dollar billions", () => {
@@ -133,5 +133,84 @@ describe("fundingDedupeKey", () => {
   it("falls back to lowercased string for unparseable amounts", () => {
     expect(fundingDedupeKey("Acme", "undisclosed")).toBe("acme|undisclosed");
     expect(fundingDedupeKey("Acme", "N/A")).toBe("acme|n/a");
+  });
+
+  it("strips 'more than' prefix from amount", () => {
+    expect(fundingDedupeKey("OpenAI", "more than $100 billion")).toBe(
+      "openai|100000"
+    );
+  });
+
+  it("strips 'at least' prefix from amount", () => {
+    expect(fundingDedupeKey("Acme", "at least $500M")).toBe("acme|500");
+  });
+
+  it("strips 'approximately' prefix from amount", () => {
+    expect(fundingDedupeKey("Acme", "approximately $2B")).toBe("acme|2000");
+  });
+
+  it("strips 'nearly' and 'almost' prefixes", () => {
+    expect(fundingDedupeKey("Acme", "nearly $1B")).toBe("acme|1000");
+    expect(fundingDedupeKey("Acme", "almost $1B")).toBe("acme|1000");
+  });
+
+  it("strips 'over' and 'around' and 'about' prefixes", () => {
+    expect(fundingDedupeKey("Acme", "over $500M")).toBe("acme|500");
+    expect(fundingDedupeKey("Acme", "around $500M")).toBe("acme|500");
+    expect(fundingDedupeKey("Acme", "about $500M")).toBe("acme|500");
+  });
+
+  it("strips 'roughly' prefix from amount", () => {
+    expect(fundingDedupeKey("Acme", "roughly $2.5B")).toBe("acme|2500");
+  });
+
+  it("deduplicates 'more than $100 billion' vs '$100B'", () => {
+    const a = fundingDedupeKey("OpenAI", "more than $100 billion");
+    const b = fundingDedupeKey("OpenAI", "$100B");
+    expect(a).toBe(b);
+  });
+});
+
+describe("bucketAmount", () => {
+  it("returns 0 for zero or negative", () => {
+    expect(bucketAmount(0)).toBe(0);
+    expect(bucketAmount(-5)).toBe(0);
+  });
+
+  it("rounds small amounts (<10M) to nearest integer", () => {
+    expect(bucketAmount(7.3)).toBe(7);
+    expect(bucketAmount(1.5)).toBe(2);
+    expect(bucketAmount(0.8)).toBe(1);
+  });
+
+  it("rounds 10-100M to nearest 5", () => {
+    expect(bucketAmount(12)).toBe(10);
+    expect(bucketAmount(13)).toBe(15);
+    expect(bucketAmount(50)).toBe(50);
+    expect(bucketAmount(73)).toBe(75);
+  });
+
+  it("rounds 100-1000M to nearest 25", () => {
+    expect(bucketAmount(500)).toBe(500);
+    expect(bucketAmount(112)).toBe(100);
+    expect(bucketAmount(113)).toBe(125);
+    expect(bucketAmount(988)).toBe(1000);
+  });
+
+  it("rounds 1B-10B (1000-10000M) to nearest 250", () => {
+    expect(bucketAmount(2100)).toBe(2000);
+    expect(bucketAmount(2200)).toBe(2250);
+    expect(bucketAmount(6500)).toBe(6500);
+    expect(bucketAmount(6600)).toBe(6500);
+  });
+
+  it("rounds >=10B (10000M+) to nearest 1000", () => {
+    expect(bucketAmount(100_000)).toBe(100_000);
+    expect(bucketAmount(105_000)).toBe(105_000);
+    expect(bucketAmount(10_500)).toBe(11_000);
+  });
+
+  it("buckets $6.5B and $6.6B together", () => {
+    expect(bucketAmount(6500)).toBe(bucketAmount(6600));
   });
 });

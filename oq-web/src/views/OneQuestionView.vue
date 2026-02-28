@@ -91,8 +91,8 @@ onMounted(async () => {
         <p
           class="mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted-foreground"
         >
-          AI tracks the signals daily. Reads the research, watches the market,
-          and gives its honest assessment.
+          Three AI models independently score today's articles against coding
+          benchmarks, job market data, and funding signals.
         </p>
       </motion.section>
 
@@ -210,6 +210,14 @@ onMounted(async () => {
                 </p>
               </div>
 
+              <!-- Inline subscribe CTA -->
+              <OQSubscribe
+                :status="subscribeStatus"
+                inline
+                class="mt-6"
+                @subscribe="subscribe"
+              />
+
               <!-- Signals -->
               <OQSignalList
                 v-if="today.signals.length > 0"
@@ -230,7 +238,7 @@ onMounted(async () => {
 
         <!-- ═══ TREND CHART ═══ -->
         <motion.section
-          v-if="history.length > 1"
+          v-if="history.length >= 7"
           class="mt-6"
           :initial="{ opacity: 0, y: 20 }"
           :animate="{ opacity: 1, y: 0 }"
@@ -263,38 +271,61 @@ onMounted(async () => {
               Technical: {{ today.scoreTechnical }}%
             </Badge>
           </div>
-          <OQCapabilityGap
-            :verified="methodology?.capabilityGap?.verified ?? '~77%'"
-            :pro="methodology?.capabilityGap?.pro ?? '~46%'"
-            :verified-source="methodology?.capabilityGap?.verifiedSource"
-            :pro-source="methodology?.capabilityGap?.proSource"
-            :pro-private="methodology?.capabilityGap?.proPrivate"
-            :pro-private-source="methodology?.capabilityGap?.proPrivateSource"
-            :note="today.capabilityGap"
-            :last-updated="methodology?.lastUpdated?.sweBench"
-            :verified-delta="methodology?.deltas?.sweBench?.verifiedDelta"
-            :pro-delta="methodology?.deltas?.sweBench?.proDelta"
-            :pro-private-delta="methodology?.deltas?.sweBench?.proPrivateDelta"
-            :previous-date="methodology?.deltas?.sweBench?.previousDate"
-          />
-          <OQSanityHarness
-            v-if="methodology?.sanityHarness"
-            :top-pass-rate="methodology.sanityHarness.topPassRate"
-            :top-agent="methodology.sanityHarness.topAgent"
-            :top-model="methodology.sanityHarness.topModel"
-            :median-pass-rate="methodology.sanityHarness.medianPassRate"
-            :language-breakdown="methodology.sanityHarness.languageBreakdown"
-            :note="today.sanityHarnessNote"
-            :last-updated="methodology?.lastUpdated?.sanityHarness"
-            :top-pass-rate-delta="
-              methodology?.deltas?.sanityHarness?.topPassRateDelta
-            "
-            :median-pass-rate-delta="
-              methodology?.deltas?.sanityHarness?.medianPassRateDelta
-            "
-            :previous-date="methodology?.deltas?.sanityHarness?.previousDate"
-            class="mt-4"
-          />
+          <Card class="border-border bg-card py-0">
+            <CardContent class="p-6 sm:p-8">
+              <div
+                class="mb-4 text-[10px] tracking-widest text-muted-foreground uppercase"
+              >
+                The Capability Gap
+              </div>
+              <OQCapabilityGap
+                :verified="methodology?.capabilityGap?.verified ?? '~77%'"
+                :pro="methodology?.capabilityGap?.pro ?? '~46%'"
+                :verified-source="methodology?.capabilityGap?.verifiedSource"
+                :pro-source="methodology?.capabilityGap?.proSource"
+                :pro-private="methodology?.capabilityGap?.proPrivate"
+                :pro-private-source="
+                  methodology?.capabilityGap?.proPrivateSource
+                "
+                :note="today.capabilityGap"
+                :last-updated="methodology?.lastUpdated?.sweBench"
+                :verified-delta="methodology?.deltas?.sweBench?.verifiedDelta"
+                :pro-delta="methodology?.deltas?.sweBench?.proDelta"
+                :pro-private-delta="
+                  methodology?.deltas?.sweBench?.proPrivateDelta
+                "
+                :previous-date="methodology?.deltas?.sweBench?.previousDate"
+              />
+              <template v-if="methodology?.sanityHarness">
+                <Separator class="my-6 bg-border" />
+                <div
+                  class="mb-4 text-[10px] tracking-widest text-muted-foreground uppercase"
+                >
+                  AI Agent Reality Check
+                </div>
+                <OQSanityHarness
+                  :top-pass-rate="methodology.sanityHarness.topPassRate"
+                  :top-agent="methodology.sanityHarness.topAgent"
+                  :top-model="methodology.sanityHarness.topModel"
+                  :median-pass-rate="methodology.sanityHarness.medianPassRate"
+                  :language-breakdown="
+                    methodology.sanityHarness.languageBreakdown
+                  "
+                  :note="today.sanityHarnessNote"
+                  :last-updated="methodology?.lastUpdated?.sanityHarness"
+                  :top-pass-rate-delta="
+                    methodology?.deltas?.sanityHarness?.topPassRateDelta
+                  "
+                  :median-pass-rate-delta="
+                    methodology?.deltas?.sanityHarness?.medianPassRateDelta
+                  "
+                  :previous-date="
+                    methodology?.deltas?.sanityHarness?.previousDate
+                  "
+                />
+              </template>
+            </CardContent>
+          </Card>
         </motion.section>
 
         <!-- ═══ ECONOMIC REALITY ═══ -->
