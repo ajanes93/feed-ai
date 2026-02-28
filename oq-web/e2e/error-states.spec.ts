@@ -132,8 +132,9 @@ base.describe("Subscribe error", () => {
   base("shows error state on subscribe failure", async ({ page }) => {
     await mockApiWith(page, { signals: [] }, { subscribeStatus: 500 });
     await page.goto("/");
-    await page.getByPlaceholder("your@email.com").fill("test@example.com");
-    await page.getByRole("button", { name: "Subscribe" }).click();
+    const card = page.locator("section", { hasText: "Get the daily take" });
+    await card.getByPlaceholder("your@email.com").fill("test@example.com");
+    await card.getByRole("button", { name: "Subscribe" }).click();
     await expect(page.getByText(/error|failed|try again/i)).toBeVisible();
   });
 });
