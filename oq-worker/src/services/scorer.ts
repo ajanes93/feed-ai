@@ -278,6 +278,147 @@ function mergeSignals(scores: OQModelScore[]): OQSignal[] {
   return signals.sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
 }
 
+// --- AI-powered signal deduplication ---
+
+function buildSignalDedupPrompt(
+  signals: Array<{ index: number; signal: OQSignal }>
+): string {
+  const formatted = signals
+    .map(({ index, signal }) => {
+      const dir =
+        signal.direction === "up"
+          ? "▲"
+          : signal.direction === "down"
+            ? "▼"
+            : "●";
+      return `[${index}] ${dir} "${signal.text}" (impact: ${signal.impact}, source: ${signal.source})`;
+    })
+    .join("\n");
+
+  return `You are deduplicating analysis signals from multiple AI models that all analyzed the same news.
+
+Signals:
+${formatted}
+
+Group signals that describe the SAME event or data point. From each group, keep the ONE with the clearest, most concrete wording.
+
+RULES:
+- Signals with DIFFERENT directions (▲/▼/●) about the same event are intentionally distinct — do NOT group them
+- Only group signals that genuinely cover the same specific fact
+- Prefer signals with specific numbers and concrete details
+
+Return JSON: { "keep": [0, 2, 5] }
+where the array contains the 0-based indices of signals to keep (one per group).`;
+}
+
+async function callGeminiSignalDedup(
+  prompt: string,
+  apiKey: string
+): Promise<number[]> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 256,
+          responseMimeType: "application/json",
+        },
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(`Gemini dedup error: ${(await res.text()).slice(0, 200)}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini dedup: empty response");
+
+  const parsed = JSON.parse(
+    text
+      .replace(/```(?:json)?\s*/g, "")
+      .replace(/```\s*$/g, "")
+      .trim()
+  );
+  if (!Array.isArray(parsed?.keep)) {
+    throw new Error("Gemini dedup: missing keep array");
+  }
+
+  return parsed.keep;
+}
+
+async function deduplicateSignals(
+  scores: OQModelScore[],
+  geminiApiKey?: string
+): Promise<{ signals: OQSignal[]; dedupUsage?: AIUsageEntry }> {
+  // Step 1: Collect all signals from all models
+  const allSignals: OQSignal[] = [];
+  for (const score of scores) {
+    allSignals.push(...score.top_signals);
+  }
+
+  if (allSignals.length === 0) return { signals: [] };
+
+  // Step 2: Exact dedup (fast path — catches identical phrasings)
+  const seen = new Set<string>();
+  const preDeduped: OQSignal[] = [];
+  for (const signal of allSignals) {
+    const key = normaliseSignalText(signal.text);
+    if (!seen.has(key)) {
+      seen.add(key);
+      preDeduped.push(signal);
+    }
+  }
+
+  // Step 3: AI dedup if Gemini key available and signals remain to dedup
+  if (geminiApiKey && preDeduped.length > 3) {
+    const start = Date.now();
+    try {
+      const indexed = preDeduped.map((signal, i) => ({ index: i, signal }));
+      const prompt = buildSignalDedupPrompt(indexed);
+      const keepIndices = await callGeminiSignalDedup(prompt, geminiApiKey);
+      const latencyMs = Date.now() - start;
+
+      // Validate: indices must be in range, must keep at least 2 signals
+      const valid = [
+        ...new Set(
+          keepIndices.filter(
+            (i) => typeof i === "number" && i >= 0 && i < preDeduped.length
+          )
+        ),
+      ];
+
+      if (valid.length >= 2) {
+        return {
+          signals: valid
+            .map((i) => preDeduped[i])
+            .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact)),
+          dedupUsage: {
+            model: "gemini-2.0-flash",
+            provider: "gemini",
+            latencyMs,
+            wasFallback: false,
+            status: "success",
+          },
+        };
+      }
+    } catch {
+      // Fall through to heuristic result
+    }
+  }
+
+  // Fallback: return exact-deduped signals sorted by impact
+  return {
+    signals: preDeduped.sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact)),
+  };
+}
+
 function mergePillarScores(scores: OQModelScore[]): OQPillarScores {
   const pillars: OQPillar[] = [
     "capability",
@@ -328,6 +469,7 @@ export {
   calculateConsensusDelta,
   calculateModelAgreement,
   mergeSignals,
+  deduplicateSignals,
   mergePillarScores,
   synthesizeAnalysis,
 };
@@ -582,7 +724,11 @@ export async function runScoring(
   const newEconomic = clampScore(input.previousEconomic, econDelta);
 
   const { agreement, spread } = calculateModelAgreement(scores);
-  const signals = mergeSignals(scores);
+  const { signals, dedupUsage } = await deduplicateSignals(
+    scores,
+    input.apiKeys.gemini
+  );
+  if (dedupUsage) aiUsages.push(dedupUsage);
   const pillarScores = mergePillarScores(scores);
   const analysis = synthesizeAnalysis(scores, agreement);
 

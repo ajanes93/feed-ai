@@ -1,9 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   parseModelResponse,
   calculateConsensusDelta,
   calculateModelAgreement,
   mergeSignals,
+  deduplicateSignals,
   mergePillarScores,
   synthesizeAnalysis,
 } from "../services/scorer";
@@ -746,5 +747,317 @@ describe("delta explanation in consensus", () => {
       scores.find((s) => s.delta_explanation)?.delta_explanation;
 
     expect(deltaExplanation).toBeUndefined();
+  });
+});
+
+describe("deduplicateSignals", () => {
+  const originalFetch = globalThis.fetch;
+
+  function mockGeminiResponse(keepIndices: number[]) {
+    return vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: JSON.stringify({ keep: keepIndices }) }],
+              },
+            },
+          ],
+        }),
+    });
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("uses Gemini to deduplicate cross-model signals with different wording", async () => {
+    // Three models all describing the same event with different verbs
+    globalThis.fetch = mockGeminiResponse([0]);
+
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "SanityHarness: top agent pass rate at 73.1%",
+            direction: "up",
+            impact: 3,
+          }),
+          oqSignalFactory.build({
+            text: "Block cuts nearly 40% of workforce",
+            direction: "up",
+            impact: 4,
+          }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "SanityHarness top agent rate reaches 73.1%",
+            direction: "up",
+            impact: 2,
+          }),
+          oqSignalFactory.build({
+            text: "Block lays off 4,000 employees citing AI",
+            direction: "up",
+            impact: 3,
+          }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "SanityHarness top pass rate jumps to 73.1%",
+            direction: "up",
+            impact: 2,
+          }),
+          oqSignalFactory.build({
+            text: "Indeed software postings up 4.1%",
+            direction: "down",
+            impact: -2,
+          }),
+        ],
+      }),
+    ];
+
+    // Gemini says: keep indices 0 (SanityHarness), 1 (Block), 5 (Indeed)
+    globalThis.fetch = mockGeminiResponse([0, 1, 5]);
+
+    const { signals, dedupUsage } = await deduplicateSignals(
+      scores,
+      "fake-gemini-key"
+    );
+
+    expect(signals).toHaveLength(3);
+    expect(dedupUsage).toBeDefined();
+    expect(dedupUsage!.provider).toBe("gemini");
+    // Verify Gemini was called
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("falls back to exact dedup when no Gemini key provided", async () => {
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "SanityHarness top pass rate at 73.1%",
+            direction: "up",
+            impact: 3,
+          }),
+          oqSignalFactory.build({
+            text: "Block cuts 40% workforce",
+            direction: "up",
+            impact: 4,
+          }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "SanityHarness top pass rate reaches 73.1%",
+            direction: "up",
+            impact: 2,
+          }),
+          oqSignalFactory.build({
+            text: "Indeed postings up 4.1%",
+            direction: "down",
+            impact: -2,
+          }),
+        ],
+      }),
+    ];
+
+    const { signals, dedupUsage } = await deduplicateSignals(scores);
+
+    // No AI dedup — all 4 signals pass exact dedup (different normalized keys)
+    expect(signals).toHaveLength(4);
+    expect(dedupUsage).toBeUndefined();
+  });
+
+  it("falls back to exact dedup when Gemini call fails", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "Signal A from model 1",
+            impact: 3,
+          }),
+          oqSignalFactory.build({
+            text: "Signal B from model 1",
+            impact: 2,
+          }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "Signal C from model 2",
+            impact: 4,
+          }),
+          oqSignalFactory.build({
+            text: "Signal D from model 2",
+            impact: 1,
+          }),
+        ],
+      }),
+    ];
+
+    const { signals, dedupUsage } = await deduplicateSignals(
+      scores,
+      "fake-key"
+    );
+
+    // Falls back to exact dedup — all 4 distinct signals kept
+    expect(signals).toHaveLength(4);
+    expect(dedupUsage).toBeUndefined();
+  });
+
+  it("still applies exact dedup before AI call", async () => {
+    // Two models return the identical signal text — exact dedup catches it
+    // Only 3 unique signals pass to AI, but 3 is the threshold
+    globalThis.fetch = mockGeminiResponse([0, 1, 2]);
+
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "Identical signal text",
+            impact: 3,
+          }),
+          oqSignalFactory.build({
+            text: "Another unique signal",
+            impact: 2,
+          }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "Identical signal text",
+            impact: 1,
+          }),
+          oqSignalFactory.build({
+            text: "Third unique signal",
+            impact: 4,
+          }),
+        ],
+      }),
+    ];
+
+    const { signals } = await deduplicateSignals(scores, "fake-key");
+
+    // Exact dedup removes one "Identical signal text" → 3 signals remain
+    // 3 is not > 3, so AI is skipped
+    expect(signals).toHaveLength(3);
+  });
+
+  it("returns empty array when no signals", async () => {
+    const scores = [oqModelScoreFactory.build({ top_signals: [] })];
+    const { signals } = await deduplicateSignals(scores, "fake-key");
+    expect(signals).toEqual([]);
+  });
+
+  it("falls back when Gemini returns invalid response", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: JSON.stringify({ wrong_field: true }) }],
+              },
+            },
+          ],
+        }),
+    });
+
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({ text: "Signal A", impact: 3 }),
+          oqSignalFactory.build({ text: "Signal B", impact: 2 }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({ text: "Signal C", impact: 4 }),
+          oqSignalFactory.build({ text: "Signal D", impact: 1 }),
+        ],
+      }),
+    ];
+
+    const { signals, dedupUsage } = await deduplicateSignals(
+      scores,
+      "fake-key"
+    );
+
+    // Falls back — all 4 signals kept
+    expect(signals).toHaveLength(4);
+    expect(dedupUsage).toBeUndefined();
+  });
+
+  it("falls back when Gemini keeps fewer than 2 signals", async () => {
+    globalThis.fetch = mockGeminiResponse([0]);
+
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({ text: "Signal A", impact: 3 }),
+          oqSignalFactory.build({ text: "Signal B", impact: 2 }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({ text: "Signal C", impact: 4 }),
+          oqSignalFactory.build({ text: "Signal D", impact: 1 }),
+        ],
+      }),
+    ];
+
+    const { signals, dedupUsage } = await deduplicateSignals(
+      scores,
+      "fake-key"
+    );
+
+    // AI returned only 1 signal — falls back to exact dedup
+    expect(signals).toHaveLength(4);
+    expect(dedupUsage).toBeUndefined();
+  });
+
+  it("sorts results by absolute impact descending", async () => {
+    globalThis.fetch = mockGeminiResponse([0, 1, 2]);
+
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({ text: "Low impact", impact: 1 }),
+          oqSignalFactory.build({ text: "Negative high", impact: -4 }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({ text: "Medium impact", impact: 2 }),
+          oqSignalFactory.build({ text: "Highest impact", impact: 5 }),
+        ],
+      }),
+    ];
+
+    // Gemini keeps indices 0, 1, 3
+    globalThis.fetch = mockGeminiResponse([0, 1, 3]);
+
+    const { signals } = await deduplicateSignals(scores, "fake-key");
+
+    expect(signals[0].text).toBe("Highest impact");
+    expect(signals[1].text).toBe("Negative high");
+    expect(signals[2].text).toBe("Low impact");
   });
 });
