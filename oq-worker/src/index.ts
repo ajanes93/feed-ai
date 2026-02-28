@@ -1981,6 +1981,25 @@ async function dedupFundingEvents(
 
 // --- Article fetching ---
 
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
+
+async function fetchWithRetry(
+  url: string,
+  maxRetries = 2
+): Promise<Response> {
+  for (let i = 0; i <= maxRetries; i++) {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "FeedAI-OQ/1.0" },
+    });
+    if (res.ok || !RETRYABLE_STATUS.has(res.status) || i === maxRetries) {
+      return res;
+    }
+    await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+  }
+  // unreachable, but satisfies TypeScript
+  throw new Error("fetchWithRetry: exhausted retries");
+}
+
 async function fetchOQArticles(
   db: D1Database,
   log: Logger
@@ -1996,9 +2015,7 @@ async function fetchOQArticles(
 
   for (const source of oqSources) {
     try {
-      const res = await fetch(source.url, {
-        headers: { "User-Agent": "FeedAI-OQ/1.0" },
-      });
+      const res = await fetchWithRetry(source.url);
       if (!res.ok) {
         errors.push({
           sourceId: source.id,

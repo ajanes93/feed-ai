@@ -105,9 +105,14 @@ export function mockAllOQSources(opts?: {
     const pool = fetchMock.get(origin);
     for (const path of paths) {
       if (opts?.failOrigin && origin === opts.failOrigin) {
-        pool
-          .intercept({ method: "GET", path })
-          .reply(opts.failStatus ?? 403, "Forbidden");
+        const status = opts.failStatus ?? 403;
+        // Retryable statuses (502/503/504) need extra interceptors for retries
+        const count = [502, 503, 504].includes(status) ? 3 : 1;
+        for (let i = 0; i < count; i++) {
+          pool
+            .intercept({ method: "GET", path })
+            .reply(status, "Forbidden");
+        }
       } else {
         pool.intercept({ method: "GET", path }).reply(200, VALID_RSS, {
           headers: { "content-type": "application/xml" },
