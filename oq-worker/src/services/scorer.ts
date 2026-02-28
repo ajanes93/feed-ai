@@ -260,22 +260,35 @@ function normaliseSignalText(text: string): string {
     .slice(0, 60);
 }
 
+function shortModelLabel(model: string): string {
+  if (model.includes("claude")) return "Claude";
+  if (model.includes("gpt")) return "GPT-4o";
+  if (model.includes("gemini")) return "Gemini";
+  return model;
+}
+
 function mergeSignals(scores: OQModelScore[]): OQSignal[] {
-  const seen = new Set<string>();
-  const signals: OQSignal[] = [];
+  const kept = new Map<string, { signal: OQSignal; models: Set<string> }>();
 
   for (const score of scores) {
+    const label = shortModelLabel(score.model);
     for (const signal of score.top_signals) {
       const key = normaliseSignalText(signal.text);
-      if (!seen.has(key)) {
-        seen.add(key);
-        signals.push(signal);
+      const existing = kept.get(key);
+      if (existing) {
+        existing.models.add(label);
+      } else {
+        kept.set(key, { signal, models: new Set([label]) });
       }
     }
   }
 
-  // Sort by absolute impact
-  return signals.sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+  return [...kept.values()]
+    .map(({ signal, models }) => ({
+      ...signal,
+      models: [...models],
+    }))
+    .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
 }
 
 // --- AI-powered signal deduplication ---
@@ -284,6 +297,8 @@ const DIRECTION_SYMBOL: Record<string, string> = { up: "▲", down: "▼" };
 
 interface SignalDedupResult {
   keep: number[];
+  /** Groups of indices — first in each group is the keeper. Used to merge model attribution. */
+  groups?: number[][];
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
@@ -312,8 +327,8 @@ RULES:
 - Only group signals that genuinely cover the same specific fact
 - Prefer signals with specific numbers and concrete details
 
-Return JSON: { "keep": [0, 2, 5] }
-where the array contains the 0-based indices of signals to keep (one per group).`;
+Return JSON: { "groups": [[0, 2], [1, 4], [3], [5]] }
+Each sub-array is a group of duplicate indices. The FIRST index in each group is the one to keep. Singletons (unique signals) are a group of one.`;
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
@@ -346,17 +361,30 @@ where the array contains the 0-based indices of signals to keep (one per group).
       .replace(/```\s*$/g, "")
       .trim()
   );
-  if (!Array.isArray(parsed?.keep)) {
-    throw new Error("Gemini dedup: missing keep array");
+  const tokenMeta = data?.usageMetadata;
+
+  // Support both response formats: { groups: [[0,2],[1]] } or legacy { keep: [0,1] }
+  if (Array.isArray(parsed?.groups)) {
+    const groups: number[][] = parsed.groups;
+    return {
+      keep: groups.map((g: number[]) => g[0]),
+      groups,
+      inputTokens: tokenMeta?.promptTokenCount,
+      outputTokens: tokenMeta?.candidatesTokenCount,
+      totalTokens: tokenMeta?.totalTokenCount,
+    };
   }
 
-  const tokenMeta = data?.usageMetadata;
-  return {
-    keep: parsed.keep,
-    inputTokens: tokenMeta?.promptTokenCount,
-    outputTokens: tokenMeta?.candidatesTokenCount,
-    totalTokens: tokenMeta?.totalTokenCount,
-  };
+  if (Array.isArray(parsed?.keep)) {
+    return {
+      keep: parsed.keep,
+      inputTokens: tokenMeta?.promptTokenCount,
+      outputTokens: tokenMeta?.candidatesTokenCount,
+      totalTokens: tokenMeta?.totalTokenCount,
+    };
+  }
+
+  throw new Error("Gemini dedup: missing groups/keep array");
 }
 
 async function deduplicateSignals(
@@ -386,10 +414,27 @@ async function deduplicateSignals(
 
       // Guard: if AI returns fewer than 2, assume hallucination and fall back
       if (valid.length >= 2) {
+        // Merge model attribution from grouped (dropped) signals into keepers
+        const keptSignals = valid.map((i) => {
+          const signal = { ...preDeduped[i] };
+          if (result.groups) {
+            const group = result.groups.find((g) => g[0] === i);
+            if (group && group.length > 1) {
+              const allModels = new Set(signal.models ?? []);
+              for (const j of group.slice(1)) {
+                if (j >= 0 && j < preDeduped.length) {
+                  for (const m of preDeduped[j].models ?? []) allModels.add(m);
+                }
+              }
+              signal.models = [...allModels];
+            }
+          }
+          return signal;
+        });
         return {
-          signals: valid
-            .map((i) => preDeduped[i])
-            .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact)),
+          signals: keptSignals.sort(
+            (a, b) => Math.abs(b.impact) - Math.abs(a.impact)
+          ),
           dedupUsage: {
             model: "gemini-2.0-flash",
             provider: "gemini",

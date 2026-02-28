@@ -200,7 +200,7 @@ describe("parseModelResponse", () => {
 });
 
 describe("mergeSignals", () => {
-  it("deduplicates signals with identical text", () => {
+  it("deduplicates signals with identical text and tracks models", () => {
     const s1 = oqSignalFactory.build({
       text: "AI benchmark improved significantly",
       impact: 3,
@@ -210,12 +210,16 @@ describe("mergeSignals", () => {
       impact: 1,
     });
     const scores = [
-      oqModelScoreFactory.build({ top_signals: [s1] }),
-      oqModelScoreFactory.build({ top_signals: [s2] }),
+      oqModelScoreFactory.build({
+        model: "claude-sonnet-4-5-20250929",
+        top_signals: [s1],
+      }),
+      oqModelScoreFactory.build({ model: "gpt-4o", top_signals: [s2] }),
     ];
     const result = mergeSignals(scores);
     expect(result).toHaveLength(1);
     expect(result[0].impact).toBe(3); // keeps the first occurrence
+    expect(result[0].models).toEqual(["Claude", "GPT-4o"]);
   });
 
   it("sorts by absolute impact descending", () => {
@@ -234,15 +238,27 @@ describe("mergeSignals", () => {
     expect(result[2].text).toBe("Low impact");
   });
 
-  it("merges signals from multiple models", () => {
+  it("merges signals from multiple models with per-signal attribution", () => {
     const s1 = oqSignalFactory.build({ text: "Signal A", impact: 2 });
     const s2 = oqSignalFactory.build({ text: "Signal B", impact: 3 });
     const scores = [
-      oqModelScoreFactory.build({ top_signals: [s1] }),
-      oqModelScoreFactory.build({ top_signals: [s2] }),
+      oqModelScoreFactory.build({
+        model: "claude-sonnet-4-5-20250929",
+        top_signals: [s1],
+      }),
+      oqModelScoreFactory.build({
+        model: "gemini-2.0-flash",
+        top_signals: [s2],
+      }),
     ];
     const result = mergeSignals(scores);
     expect(result).toHaveLength(2);
+    expect(result.find((s) => s.text === "Signal A")!.models).toEqual([
+      "Claude",
+    ]);
+    expect(result.find((s) => s.text === "Signal B")!.models).toEqual([
+      "Gemini",
+    ]);
   });
 
   it("returns empty array when no signals", () => {
@@ -687,7 +703,7 @@ describe("preferClaude", () => {
 describe("deduplicateSignals", () => {
   const originalFetch = globalThis.fetch;
 
-  function mockGeminiResponse(keepIndices: number[]) {
+  function mockGeminiResponse(groups: number[][]) {
     return vi.fn().mockResolvedValue({
       ok: true,
       json: () =>
@@ -695,7 +711,7 @@ describe("deduplicateSignals", () => {
           candidates: [
             {
               content: {
-                parts: [{ text: JSON.stringify({ keep: keepIndices }) }],
+                parts: [{ text: JSON.stringify({ groups }) }],
               },
             },
           ],
@@ -707,9 +723,10 @@ describe("deduplicateSignals", () => {
     globalThis.fetch = originalFetch;
   });
 
-  it("uses Gemini to deduplicate cross-model signals with different wording", async () => {
+  it("uses Gemini to deduplicate cross-model signals and merges model attribution", async () => {
     const scores = [
       oqModelScoreFactory.build({
+        model: "claude-sonnet-4-5-20250929",
         top_signals: [
           oqSignalFactory.build({
             text: "SanityHarness: top agent pass rate at 73.1%",
@@ -724,6 +741,7 @@ describe("deduplicateSignals", () => {
         ],
       }),
       oqModelScoreFactory.build({
+        model: "gpt-4o",
         top_signals: [
           oqSignalFactory.build({
             text: "SanityHarness top agent rate reaches 73.1%",
@@ -738,6 +756,7 @@ describe("deduplicateSignals", () => {
         ],
       }),
       oqModelScoreFactory.build({
+        model: "gemini-2.0-flash",
         top_signals: [
           oqSignalFactory.build({
             text: "SanityHarness top pass rate jumps to 73.1%",
@@ -753,8 +772,9 @@ describe("deduplicateSignals", () => {
       }),
     ];
 
-    // Gemini says: keep indices 0 (SanityHarness), 1 (Block), 5 (Indeed)
-    globalThis.fetch = mockGeminiResponse([0, 1, 5]);
+    // After sort by |impact|: 0=Block(Claude,4), 1=SH(Claude,3), 2=Block(GPT,3), 3=SH(GPT,2), 4=SH(Gemini,2), 5=Indeed(Gemini,-2)
+    // Groups: [1,3,4] = SanityHarness variants (keep 1), [0,2] = Block variants (keep 0), [5] = Indeed
+    globalThis.fetch = mockGeminiResponse([[1, 3, 4], [0, 2], [5]]);
 
     const { signals, dedupUsage } = await deduplicateSignals(
       scores,
@@ -764,8 +784,23 @@ describe("deduplicateSignals", () => {
     expect(signals).toHaveLength(3);
     expect(dedupUsage).toBeDefined();
     expect(dedupUsage!.provider).toBe("gemini");
-    // Verify Gemini was called
     expect(globalThis.fetch).toHaveBeenCalledOnce();
+
+    // SanityHarness signal should have all 3 models merged
+    const shSignal = signals.find((s) => s.text.includes("SanityHarness:"));
+    expect(shSignal!.models).toEqual(
+      expect.arrayContaining(["Claude", "GPT-4o", "Gemini"])
+    );
+
+    // Block signal should have Claude + GPT-4o merged
+    const blockSignal = signals.find((s) => s.text.includes("Block"));
+    expect(blockSignal!.models).toEqual(
+      expect.arrayContaining(["Claude", "GPT-4o"])
+    );
+
+    // Indeed signal only from Gemini
+    const indeedSignal = signals.find((s) => s.text.includes("Indeed"));
+    expect(indeedSignal!.models).toEqual(["Gemini"]);
   });
 
   it("falls back to exact dedup when no Gemini key provided", async () => {
@@ -934,7 +969,7 @@ describe("deduplicateSignals", () => {
   });
 
   it("falls back when Gemini keeps fewer than 2 signals", async () => {
-    globalThis.fetch = mockGeminiResponse([0]);
+    globalThis.fetch = mockGeminiResponse([[0, 1, 2, 3]]);
 
     const scores = [
       oqModelScoreFactory.build({
@@ -977,7 +1012,7 @@ describe("deduplicateSignals", () => {
       }),
     ];
 
-    globalThis.fetch = mockGeminiResponse([0, 1, 3]);
+    globalThis.fetch = mockGeminiResponse([[0], [1], [3]]);
 
     const { signals } = await deduplicateSignals(scores, "fake-key");
 

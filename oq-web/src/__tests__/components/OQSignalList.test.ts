@@ -70,4 +70,28 @@ describe("OQSignalList", () => {
     expect(wrapper.text()).toContain("▼");
     expect(wrapper.text()).toContain("●");
   });
+
+  it("shows model count when models array is present", () => {
+    const signalsWithModels: OQSignal[] = [
+      {
+        text: "Signal from two models",
+        direction: "up",
+        source: "Test",
+        impact: 3,
+        models: ["Claude", "GPT-4o"],
+      },
+      {
+        text: "Signal from all models",
+        direction: "down",
+        source: "Test",
+        impact: -2,
+        models: ["Claude", "GPT-4o", "Gemini"],
+      },
+    ];
+    const wrapper = mount(OQSignalList, {
+      props: { signals: signalsWithModels },
+    });
+    expect(wrapper.text()).toContain("2/3");
+    expect(wrapper.text()).toContain("3/3");
+  });
 });
