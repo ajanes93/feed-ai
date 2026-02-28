@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { app, fetchAndStoreArticles } from "../index";
 import { sources } from "../sources";
@@ -260,6 +260,8 @@ describe("POST /api/generate (end-to-end)", () => {
     fetchMock.disableNetConnect();
   });
 
+  afterEach(() => fetchMock.deactivate());
+
   it("generates a full digest and saves to D1", async () => {
     const today = new Date().toISOString().split("T")[0];
 
@@ -358,41 +360,8 @@ describe("POST /api/generate (end-to-end)", () => {
     expect(text).toContain("already exists");
   });
 
-  it("returns 500 when all sources fail", async () => {
-    // Mock every source URL to return errors
-    const byOrigin = new Map<string, string[]>();
-    for (const source of sources) {
-      if (source.type === "bluesky") continue;
-      if (source.type === "scrape") continue;
-      if (source.id === "hn-hiring") continue;
-      const url = new URL(source.url);
-      const paths = byOrigin.get(url.origin) || [];
-      paths.push(url.pathname + url.search);
-      byOrigin.set(url.origin, paths);
-    }
-    for (const [origin, paths] of byOrigin) {
-      const mock = fetchMock.get(origin);
-      for (const path of paths) {
-        mock.intercept({ method: "GET", path }).reply(500, "Server Error");
-      }
-    }
-    // Mock Bluesky to fail
-    fetchMock
-      .get("https://bsky.social")
-      .intercept({ method: "GET", path: /.*/ })
-      .reply(500, "Server Error")
-      .persist();
-    // Mock Jina Reader (scrape sources) to fail
-    fetchMock
-      .get("https://r.jina.ai")
-      .intercept({ method: "GET", path: /.*/ })
-      .reply(500, "Server Error");
-    // Mock HN Algolia to fail
-    fetchMock
-      .get("https://hn.algolia.com")
-      .intercept({ method: "GET", path: /.*/ })
-      .reply(500, "Server Error");
-
+  it("returns 500 when no raw items exist", async () => {
+    // No raw_items seeded — pipeline loads 0 items and aborts
     const res = await app.request(
       "/api/generate",
       { method: "POST", headers: AUTH_HEADERS },
@@ -416,6 +385,8 @@ describe("POST /api/fetch (end-to-end)", () => {
     fetchMock.activate();
     fetchMock.disableNetConnect();
   });
+
+  afterEach(() => fetchMock.deactivate());
 
   it("fetches all sources and returns health summary", async () => {
     mockAllSources();
@@ -453,6 +424,8 @@ describe("POST /api/rebuild (end-to-end)", () => {
     fetchMock.activate();
     fetchMock.disableNetConnect();
   });
+
+  afterEach(() => fetchMock.deactivate());
 
   it("deletes existing digest and regenerates", async () => {
     const today = new Date().toISOString().split("T")[0];
@@ -524,6 +497,8 @@ describe("Raw items accumulation", () => {
     fetchMock.activate();
     fetchMock.disableNetConnect();
   });
+
+  afterEach(() => fetchMock.deactivate());
 
   it("fetch endpoint stores articles in raw_items table", async () => {
     mockAllSources();
@@ -682,6 +657,8 @@ describe("fetchAndStoreArticles (fetch-only cron)", () => {
     fetchMock.disableNetConnect();
   });
 
+  afterEach(() => fetchMock.deactivate());
+
   it("stores fetched articles without generating a digest", async () => {
     mockAllSources();
 
@@ -769,6 +746,8 @@ describe("POST /api/enrich-comments", () => {
     fetchMock.activate();
     fetchMock.disableNetConnect();
   });
+
+  afterEach(() => fetchMock.deactivate());
 
   it("enriches Reddit/HN items and updates DB", async () => {
     // Seed a digest with one Reddit item and one HN item (unenriched)
@@ -995,6 +974,8 @@ describe("POST /api/summarize (incremental)", () => {
     fetchMock.activate();
     fetchMock.disableNetConnect();
   });
+
+  afterEach(() => fetchMock.deactivate());
 
   it("creates a new digest from unsummarized items", async () => {
     await seedRawItems(env.DB, [

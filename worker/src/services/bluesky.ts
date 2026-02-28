@@ -29,10 +29,9 @@ export async function fetchBlueskySource(source: Source): Promise<RawItem[]> {
   );
 
   if (!didRes.ok) {
-    console.error(
-      `Failed to resolve Bluesky handle ${handle}: ${didRes.status}`
+    throw new Error(
+      `HTTP ${didRes.status} from ${source.name} (resolve handle)`
     );
-    return [];
   }
 
   const { did } = (await didRes.json()) as ResolveHandleResponse;
@@ -43,10 +42,7 @@ export async function fetchBlueskySource(source: Source): Promise<RawItem[]> {
   );
 
   if (!feedRes.ok) {
-    console.error(
-      `Failed to fetch Bluesky feed for ${handle}: ${feedRes.status}`
-    );
-    return [];
+    throw new Error(`HTTP ${feedRes.status} from ${source.name} (feed)`);
   }
 
   const { feed } = (await feedRes.json()) as BlueskyFeedResponse;

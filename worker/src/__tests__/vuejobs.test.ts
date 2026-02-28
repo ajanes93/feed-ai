@@ -103,15 +103,13 @@ describe("fetchVueJobs", () => {
     expect(items).toHaveLength(3);
   });
 
-  it("returns empty array on HTTP error", async () => {
+  it("throws on HTTP error", async () => {
     fetchMock
       .get("https://app.vuejobs.com")
       .intercept({ method: "GET", path: "/feed/posts" })
       .reply(500, "Server error");
 
-    const items = await fetchVueJobs(VUEJOBS_SOURCE);
-
-    expect(items).toEqual([]);
+    await expect(fetchVueJobs(VUEJOBS_SOURCE)).rejects.toThrow("HTTP 500");
   });
 
   it("returns empty array when feed has no items", async () => {

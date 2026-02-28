@@ -84,23 +84,19 @@ describe("fetchSource", () => {
     expect(items[0].sourceId).toBe("test-api");
   });
 
-  it("returns empty array on HTTP error", async () => {
+  it("throws on HTTP error", async () => {
     mockFetchResponse("https://example.com", "/feed.xml", "Not found", 404);
 
-    const items = await fetchSource(RSS_SOURCE);
-
-    expect(items).toEqual([]);
+    await expect(fetchSource(RSS_SOURCE)).rejects.toThrow("HTTP 404");
   });
 
-  it("returns empty array on network error", async () => {
+  it("throws on network error", async () => {
     const mock = fetchMock.get("https://example.com");
     mock
       .intercept({ method: "GET", path: "/feed.xml" })
       .replyWithError(new Error("Network failure"));
 
-    const items = await fetchSource(RSS_SOURCE);
-
-    expect(items).toEqual([]);
+    await expect(fetchSource(RSS_SOURCE)).rejects.toThrow("Network failure");
   });
 
   it("handles empty RSS feed", async () => {
@@ -262,7 +258,7 @@ describe("fetchAllSources", () => {
     expect(items[0].title).toBe("No Date");
   });
 
-  it("reports health for each source", async () => {
+  it("reports health for each source including failures", async () => {
     mockFetchResponse("https://example.com", "/feed.xml", RSS_FEED);
     mockFetchResponse("https://example2.com", "/feed2.xml", "error", 500);
 
@@ -274,9 +270,10 @@ describe("fetchAllSources", () => {
 
     expect(health).toHaveLength(2);
     const successfulSource = health.find((h) => h.sourceId === "test-rss");
-    const emptySource = health.find((h) => h.sourceId === "test-rss-2");
+    const failedSource = health.find((h) => h.sourceId === "test-rss-2");
     expect(successfulSource?.success).toBe(true);
-    expect(emptySource?.success).toBe(true);
-    expect(emptySource?.itemCount).toBe(0);
+    expect(failedSource?.success).toBe(false);
+    expect(failedSource?.itemCount).toBe(0);
+    expect(failedSource?.error).toContain("HTTP 500");
   });
 });

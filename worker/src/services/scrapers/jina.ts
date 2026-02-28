@@ -30,8 +30,7 @@ export async function fetchJinaScrape(
   });
 
   if (!response.ok) {
-    console.error(`Jina scrape failed for ${url}: ${response.status}`);
-    return [];
+    throw new Error(`HTTP ${response.status} from Jina scrape (${url})`);
   }
 
   const markdown = await response.text();
