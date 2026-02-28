@@ -47,6 +47,7 @@ import {
   DollarSign,
   FlaskConical,
   Activity,
+  Eraser,
 } from "lucide-vue-next";
 
 const {
@@ -80,6 +81,12 @@ const {
   fetchingSwebench,
   fetchSwebenchResult,
   fetchSwebenchSuccess,
+  purgingScores,
+  purgeScoresResult,
+  purgeScoresSuccess,
+  purgingFunding,
+  purgeFundingResult,
+  purgeFundingSuccess,
   setAdminKey,
   clearAdminKey,
   fetchDashboard,
@@ -91,6 +98,8 @@ const {
   extractFunding,
   fetchSanity,
   fetchSwebench,
+  purgeScores,
+  purgeFunding,
 } = useDashboard();
 
 useHead({ title: "Dashboard — One Question" });
@@ -136,6 +145,20 @@ const confirmActions: Record<string, ConfirmAction> = {
       "This scans all articles and extracts funding events using AI. It will consume API credits.",
     label: "Extract Funding",
     action: extractFunding,
+  },
+  purgeScores: {
+    title: "Purge all scores?",
+    description:
+      "This permanently deletes ALL scores, model responses, funding events, and AI usage records. Articles are preserved. This cannot be undone.",
+    label: "Purge Scores",
+    action: purgeScores,
+  },
+  purgeFunding: {
+    title: "Purge all funding events?",
+    description:
+      "This permanently deletes ALL funding events including scan sentinels. Extract Funding will need to re-scan all articles. This cannot be undone.",
+    label: "Purge Funding",
+    action: purgeFunding,
   },
 };
 
@@ -303,6 +326,40 @@ onMounted(fetchDashboard);
                   >
                 </div>
               </DropdownMenuItem>
+
+              <!-- Purge -->
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Purge</DropdownMenuLabel>
+              <DropdownMenuItem
+                variant="destructive"
+                :disabled="purgingScores"
+                @click="requestConfirm('purgeScores')"
+              >
+                <Eraser class="size-4" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    purgingScores ? "Purging..." : "Purge Scores"
+                  }}</span>
+                  <span class="text-xs opacity-70"
+                    >Delete all scores, model responses, and AI usage</span
+                  >
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                :disabled="purgingFunding"
+                @click="requestConfirm('purgeFunding')"
+              >
+                <Eraser class="size-4" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    purgingFunding ? "Purging..." : "Purge Funding"
+                  }}</span>
+                  <span class="text-xs opacity-70"
+                    >Delete all funding events and scan sentinels</span
+                  >
+                </div>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <router-link to="/">
@@ -399,6 +456,28 @@ onMounted(fetchDashboard);
         "
       >
         {{ fetchSwebenchResult }}
+      </div>
+      <div
+        v-if="purgeScoresResult"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
+        :class="
+          purgeScoresSuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        "
+      >
+        {{ purgeScoresResult }}
+      </div>
+      <div
+        v-if="purgeFundingResult"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
+        :class="
+          purgeFundingSuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        "
+      >
+        {{ purgeFundingResult }}
       </div>
 
       <!-- Auth prompt -->

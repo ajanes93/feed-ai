@@ -611,7 +611,7 @@ async function adminHandler(
 }
 
 app.post("/api/fetch", (c) =>
-  adminHandler(c, "fetch", () => fetchOQArticles(c.env.DB))
+  adminHandler(c, "fetch", (log) => fetchOQArticles(c.env.DB, log))
 );
 
 app.post("/api/score", (c) =>
@@ -1966,7 +1966,8 @@ async function dedupFundingEvents(
 // --- Article fetching ---
 
 async function fetchOQArticles(
-  db: D1Database
+  db: D1Database,
+  log: Logger
 ): Promise<{ fetched: number; errors: FetchError[] }> {
   const parser = new XMLParser({
     ignoreAttributes: false,
@@ -2026,6 +2027,38 @@ async function fetchOQArticles(
         message,
       });
     }
+  }
+
+  // Persist fetch errors to oq_fetch_errors and log them
+  if (errors.length > 0) {
+    const errorInserts = errors.map((e) =>
+      db
+        .prepare(
+          "INSERT INTO oq_fetch_errors (id, source_id, error_type, error_message, http_status) VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(
+          crypto.randomUUID(),
+          e.sourceId,
+          e.errorType,
+          e.message,
+          e.httpStatus ?? null
+        )
+    );
+    try {
+      await db.batch(errorInserts);
+    } catch {
+      // Best-effort — don't fail the fetch response over logging
+    }
+
+    const sourceName = (id: string) =>
+      oqSources.find((s) => s.id === id)?.name ?? id;
+    await log.warn("fetch", `${errors.length} source(s) failed`, {
+      errors: errors.map((e) => ({
+        source: sourceName(e.sourceId),
+        type: e.errorType,
+        message: e.message,
+      })),
+    });
   }
 
   return { fetched, errors };

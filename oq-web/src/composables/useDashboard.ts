@@ -89,8 +89,19 @@ export function useDashboard() {
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || "Fetch failed");
 
-      fetchResult.value = `Fetched ${body.fetched} new articles${body.errors?.length ? ` (${body.errors.length} errors)` : ""}`;
-      fetchSuccess.value = true;
+      const errorDetails =
+        body.errors?.length > 0
+          ? body.errors
+              .map(
+                (e: { sourceId: string; message: string }) =>
+                  `${e.sourceId}: ${e.message}`
+              )
+              .join(", ")
+          : "";
+      fetchResult.value = errorDetails
+        ? `Fetched ${body.fetched} articles — ${body.errors.length} error(s): ${errorDetails}`
+        : `Fetched ${body.fetched} new articles`;
+      fetchSuccess.value = body.errors?.length === 0;
       await fetchDashboard();
     } catch (err) {
       fetchResult.value = err instanceof Error ? err.message : "Fetch failed";
@@ -380,6 +391,86 @@ export function useDashboard() {
     }
   }
 
+  const purgingScores = ref(false);
+  const purgeScoresResult = ref<string | null>(null);
+  const purgeScoresSuccess = ref(false);
+
+  async function purgeScores() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    purgingScores.value = true;
+    purgeScoresResult.value = null;
+    purgeScoresSuccess.value = false;
+
+    try {
+      const res = await fetch("/api/admin/purge-scores", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
+
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Purge failed");
+
+      purgeScoresResult.value = `Purged ${body.scores} scores, ${body.modelResponses} model responses, ${body.fundingEvents} funding events, ${body.aiUsage} AI usage records`;
+      purgeScoresSuccess.value = true;
+      await fetchDashboard();
+    } catch (err) {
+      purgeScoresResult.value =
+        err instanceof Error ? err.message : "Purge failed";
+      purgeScoresSuccess.value = false;
+    } finally {
+      purgingScores.value = false;
+    }
+  }
+
+  const purgingFunding = ref(false);
+  const purgeFundingResult = ref<string | null>(null);
+  const purgeFundingSuccess = ref(false);
+
+  async function purgeFunding() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    purgingFunding.value = true;
+    purgeFundingResult.value = null;
+    purgeFundingSuccess.value = false;
+
+    try {
+      const res = await fetch("/api/admin/purge-funding", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
+
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Purge failed");
+
+      purgeFundingResult.value = `Purged ${body.fundingEvents} funding events`;
+      purgeFundingSuccess.value = true;
+      await fetchDashboard();
+    } catch (err) {
+      purgeFundingResult.value =
+        err instanceof Error ? err.message : "Purge failed";
+      purgeFundingSuccess.value = false;
+    } finally {
+      purgingFunding.value = false;
+    }
+  }
+
   async function fetchDashboard() {
     if (!adminKey.value) {
       needsAuth.value = true;
@@ -443,6 +534,12 @@ export function useDashboard() {
     fetchingSwebench,
     fetchSwebenchResult,
     fetchSwebenchSuccess,
+    purgingScores,
+    purgeScoresResult,
+    purgeScoresSuccess,
+    purgingFunding,
+    purgeFundingResult,
+    purgeFundingSuccess,
     setAdminKey,
     clearAdminKey,
     fetchDashboard,
@@ -454,5 +551,7 @@ export function useDashboard() {
     extractFunding,
     fetchSanity,
     fetchSwebench,
+    purgeScores,
+    purgeFunding,
   };
 }
