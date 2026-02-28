@@ -126,6 +126,38 @@ async function mockDashboardApi(
       }),
     });
   });
+
+  await page.route("**/api/admin/backfill?type=dedup-funding", (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ deleted: 3, remaining: 12 }),
+    });
+  });
+
+  await page.route("**/api/admin/extract-funding", (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ extracted: 5, scanned: 20 }),
+    });
+  });
+
+  await page.route("**/api/fetch-sanity", (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ stored: 8 }),
+    });
+  });
+
+  await page.route("**/api/fetch-swebench", (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ stored: 15 }),
+    });
+  });
 }
 
 /** Set admin key in sessionStorage and navigate to dashboard */
@@ -239,6 +271,61 @@ test.describe("Dashboard", () => {
     await page.getByText("Predigest").click();
 
     await expect(page.getByText(/Pre-digested 42 articles/)).toBeVisible();
+  });
+
+  test("shows new data actions in actions menu", async ({ page }) => {
+    await mockDashboardApi(page);
+    await gotoDashboard(page);
+
+    await page.getByText("Actions").click();
+    await expect(page.getByText("Dedup Funding")).toBeVisible();
+    await expect(page.getByText("Extract Funding")).toBeVisible();
+    await expect(page.getByText("Fetch Sanity")).toBeVisible();
+    await expect(page.getByText("Fetch SWE-bench")).toBeVisible();
+  });
+
+  test("Dedup Funding shows success result", async ({ page }) => {
+    await mockDashboardApi(page);
+    await gotoDashboard(page);
+
+    await page.getByText("Actions").click();
+    await page.getByText("Dedup Funding").click();
+
+    await expect(
+      page.getByText(/Removed 3 duplicates, 12 remaining/)
+    ).toBeVisible();
+  });
+
+  test("Extract Funding shows success result", async ({ page }) => {
+    await mockDashboardApi(page);
+    await gotoDashboard(page);
+
+    await page.getByText("Actions").click();
+    await page.getByText("Extract Funding").click();
+
+    await expect(
+      page.getByText(/Extracted 5 funding events.*20 articles scanned/)
+    ).toBeVisible();
+  });
+
+  test("Fetch Sanity shows success result", async ({ page }) => {
+    await mockDashboardApi(page);
+    await gotoDashboard(page);
+
+    await page.getByText("Actions").click();
+    await page.getByText("Fetch Sanity").click();
+
+    await expect(page.getByText(/Fetched Sanity Harness data/)).toBeVisible();
+  });
+
+  test("Fetch SWE-bench shows success result", async ({ page }) => {
+    await mockDashboardApi(page);
+    await gotoDashboard(page);
+
+    await page.getByText("Actions").click();
+    await page.getByText("Fetch SWE-bench").click();
+
+    await expect(page.getByText(/Fetched SWE-bench data/)).toBeVisible();
   });
 
   test("shows friendly error when dashboard API network fails", async ({

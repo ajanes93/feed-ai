@@ -32,6 +32,10 @@ import {
   Sparkles,
   Trash2,
   ListChecks,
+  Copy,
+  DollarSign,
+  FlaskConical,
+  Activity,
 } from "lucide-vue-next";
 
 const {
@@ -53,6 +57,18 @@ const {
   predigesting,
   predigestResult,
   predigestSuccess,
+  dedupingFunding,
+  dedupFundingResult,
+  dedupFundingSuccess,
+  extractingFunding,
+  extractFundingResult,
+  extractFundingSuccess,
+  fetchingSanity,
+  fetchSanityResult,
+  fetchSanitySuccess,
+  fetchingSwebench,
+  fetchSwebenchResult,
+  fetchSwebenchSuccess,
   setAdminKey,
   clearAdminKey,
   fetchDashboard,
@@ -60,6 +76,10 @@ const {
   generateScore,
   deleteScore,
   runPredigest,
+  dedupFunding,
+  extractFunding,
+  fetchSanity,
+  fetchSwebench,
 } = useDashboard();
 
 useHead({ title: "Dashboard — One Question" });
@@ -149,6 +169,64 @@ onMounted(fetchDashboard);
                   >
                 </div>
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                :disabled="dedupingFunding"
+                @click="dedupFunding()"
+              >
+                <Copy class="size-4" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    dedupingFunding ? "Deduping..." : "Dedup Funding"
+                  }}</span>
+                  <span class="text-xs text-muted-foreground"
+                    >Remove duplicate funding rows in DB</span
+                  >
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                :disabled="extractingFunding"
+                @click="extractFunding()"
+              >
+                <DollarSign class="size-4" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    extractingFunding ? "Extracting..." : "Extract Funding"
+                  }}</span>
+                  <span class="text-xs text-muted-foreground"
+                    >AI-extract funding events from articles</span
+                  >
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                :disabled="fetchingSanity"
+                @click="fetchSanity()"
+              >
+                <Activity class="size-4" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    fetchingSanity ? "Fetching..." : "Fetch Sanity"
+                  }}</span>
+                  <span class="text-xs text-muted-foreground"
+                    >Pull latest Sanity Harness data</span
+                  >
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                :disabled="fetchingSwebench"
+                @click="fetchSwebench()"
+              >
+                <FlaskConical class="size-4" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    fetchingSwebench ? "Fetching..." : "Fetch SWE-bench"
+                  }}</span>
+                  <span class="text-xs text-muted-foreground"
+                    >Pull latest SWE-bench scores</span
+                  >
+                </div>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <router-link to="/">
@@ -201,6 +279,50 @@ onMounted(fetchDashboard);
         "
       >
         {{ scoreResult }}
+      </div>
+      <div
+        v-if="dedupFundingResult"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
+        :class="
+          dedupFundingSuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        "
+      >
+        {{ dedupFundingResult }}
+      </div>
+      <div
+        v-if="extractFundingResult"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
+        :class="
+          extractFundingSuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        "
+      >
+        {{ extractFundingResult }}
+      </div>
+      <div
+        v-if="fetchSanityResult"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
+        :class="
+          fetchSanitySuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        "
+      >
+        {{ fetchSanityResult }}
+      </div>
+      <div
+        v-if="fetchSwebenchResult"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
+        :class="
+          fetchSwebenchSuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        "
+      >
+        {{ fetchSwebenchResult }}
       </div>
 
       <!-- Auth prompt -->
