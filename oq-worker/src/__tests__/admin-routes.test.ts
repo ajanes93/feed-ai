@@ -725,6 +725,43 @@ describe("Admin API routes", () => {
       const data = await res.json();
       expect(data.articleCount).toBe(0);
     });
+
+    it("purges today's cache when purge=true", async () => {
+      const today = new Date().toISOString().split("T")[0];
+
+      // Seed a stale cache entry for today
+      await env.DB.prepare(
+        "INSERT INTO oq_predigest_cache (date, pillar_data, article_count, pre_digest_partial) VALUES (?, ?, ?, ?)"
+      )
+        .bind(today, '{"capability":"old data"}', 99, 0)
+        .run();
+
+      // Run predigest with purge
+      const res = await SELF.fetch(
+        "http://localhost/api/predigest?purge=true",
+        {
+          method: "POST",
+          headers: AUTH_HEADERS,
+        }
+      );
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.cachePurged).toBe(true);
+      expect(data.articleCount).toBe(0);
+
+      // Cache should be rewritten with fresh data — old stale entry gone
+      const after = await env.DB.prepare(
+        "SELECT * FROM oq_predigest_cache WHERE date = ?"
+      )
+        .bind(today)
+        .first();
+      expect(after).not.toBeNull();
+      expect(after!.article_count).toBe(0);
+      expect(JSON.parse(after!.pillar_data as string)).not.toHaveProperty(
+        "capability",
+        "old data"
+      );
+    });
   });
 
   // --- POST /api/fetch: error persistence ---

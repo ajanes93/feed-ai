@@ -720,7 +720,24 @@ app.post("/api/delete-score", (c) =>
 );
 
 app.post("/api/predigest", (c) =>
-  adminHandler(c, "predigest", (log) => runPreDigest(c.env, log))
+  adminHandler(c, "predigest", async (log) => {
+    let cachePurged = false;
+    if (c.req.query("purge") === "true") {
+      const today = new Date().toISOString().split("T")[0];
+      const del = await c.env.DB.prepare(
+        "DELETE FROM oq_predigest_cache WHERE date = ?"
+      )
+        .bind(today)
+        .run();
+      cachePurged = del.meta.changes > 0;
+      await log.info("predigest", "Cache purged for today", {
+        date: today,
+        rowsDeleted: del.meta.changes,
+      });
+    }
+    const result = await runPreDigest(c.env, log);
+    return { ...result, cachePurged };
+  })
 );
 
 app.post("/api/fetch-sanity", (c) =>

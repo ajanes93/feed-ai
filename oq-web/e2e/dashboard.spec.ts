@@ -301,6 +301,10 @@ test.describe("Dashboard", () => {
     await page.getByText("Actions").click();
     await page.getByText("Predigest").click();
 
+    // Dialog should appear with Run and Purge options
+    await expect(page.getByText("Run Predigest")).toBeVisible();
+    await page.getByRole("button", { name: "Run", exact: true }).click();
+
     await expect(page.getByText(/Pre-digested 42 articles/)).toBeVisible();
   });
 
