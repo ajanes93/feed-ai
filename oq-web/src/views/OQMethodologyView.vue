@@ -333,6 +333,103 @@ onMounted(async () => {
           </div>
         </section>
 
+        <!-- Data Processing Pipeline -->
+        <section v-if="methodology.dataProcessing" class="mt-10">
+          <h2
+            class="mb-4 text-[10px] tracking-widest text-muted-foreground uppercase"
+          >
+            Data Processing Pipeline
+          </h2>
+          <div class="space-y-3">
+            <Card
+              v-if="methodology.dataProcessing.preDigest"
+              class="border-border bg-card py-0"
+            >
+              <CardContent class="p-5">
+                <div
+                  class="mb-2 text-[10px] font-semibold tracking-wide text-orange-500 uppercase"
+                >
+                  Pre-Digest
+                </div>
+                <p class="text-sm leading-relaxed text-muted-foreground">
+                  {{ methodology.dataProcessing.preDigest.description }}
+                </p>
+                <div class="mt-3 flex gap-4 text-xs text-muted-foreground/60">
+                  <span
+                    >Model:
+                    {{ methodology.dataProcessing.preDigest.model }}</span
+                  >
+                  <span
+                    >Batch:
+                    {{ methodology.dataProcessing.preDigest.batchSize }}</span
+                  >
+                </div>
+              </CardContent>
+            </Card>
+            <Card
+              v-if="methodology.dataProcessing.fundingExtraction"
+              class="border-border bg-card py-0"
+            >
+              <CardContent class="p-5">
+                <div
+                  class="mb-2 text-[10px] font-semibold tracking-wide text-orange-500 uppercase"
+                >
+                  Funding Extraction
+                </div>
+                <p class="text-sm leading-relaxed text-muted-foreground">
+                  {{ methodology.dataProcessing.fundingExtraction.description }}
+                </p>
+                <div class="mt-3 flex gap-4 text-xs text-muted-foreground/60">
+                  <span
+                    >Model:
+                    {{
+                      methodology.dataProcessing.fundingExtraction.model
+                    }}</span
+                  >
+                  <span
+                    >Dedup:
+                    {{
+                      methodology.dataProcessing.fundingExtraction.deduplication
+                    }}</span
+                  >
+                </div>
+              </CardContent>
+            </Card>
+            <Card
+              v-if="methodology.dataProcessing.signalDeduplication"
+              class="border-border bg-card py-0"
+            >
+              <CardContent class="p-5">
+                <div
+                  class="mb-2 text-[10px] font-semibold tracking-wide text-orange-500 uppercase"
+                >
+                  Signal Deduplication
+                </div>
+                <p class="text-sm leading-relaxed text-muted-foreground">
+                  {{
+                    methodology.dataProcessing.signalDeduplication.description
+                  }}
+                </p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <Badge
+                    v-for="layer in methodology.dataProcessing
+                      .signalDeduplication.layers"
+                    :key="layer"
+                    variant="outline"
+                    class="text-[10px]"
+                  >
+                    {{ layer }}
+                  </Badge>
+                </div>
+                <div class="mt-2 text-xs text-muted-foreground/60">
+                  Judge model:
+                  {{ methodology.dataProcessing.signalDeduplication.model }}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
         <!-- Prompt Audit Trail -->
         <section id="prompt-audit" class="mt-10 pb-16">
           <h2

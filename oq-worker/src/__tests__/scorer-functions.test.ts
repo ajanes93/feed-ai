@@ -1,11 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   parseModelResponse,
   calculateConsensusDelta,
   calculateModelAgreement,
   mergeSignals,
+  deduplicateSignals,
   mergePillarScores,
   synthesizeAnalysis,
+  preferClaude,
 } from "../services/scorer";
 import {
   oqModelScoreFactory,
@@ -198,7 +200,7 @@ describe("parseModelResponse", () => {
 });
 
 describe("mergeSignals", () => {
-  it("deduplicates signals with identical text", () => {
+  it("deduplicates signals with identical text and tracks models", () => {
     const s1 = oqSignalFactory.build({
       text: "AI benchmark improved significantly",
       impact: 3,
@@ -208,12 +210,16 @@ describe("mergeSignals", () => {
       impact: 1,
     });
     const scores = [
-      oqModelScoreFactory.build({ top_signals: [s1] }),
-      oqModelScoreFactory.build({ top_signals: [s2] }),
+      oqModelScoreFactory.build({
+        model: "claude-sonnet-4-5-20250929",
+        top_signals: [s1],
+      }),
+      oqModelScoreFactory.build({ model: "gpt-4o", top_signals: [s2] }),
     ];
     const result = mergeSignals(scores);
     expect(result).toHaveLength(1);
     expect(result[0].impact).toBe(3); // keeps the first occurrence
+    expect(result[0].models).toEqual(["Claude", "GPT-4o"]);
   });
 
   it("sorts by absolute impact descending", () => {
@@ -232,15 +238,27 @@ describe("mergeSignals", () => {
     expect(result[2].text).toBe("Low impact");
   });
 
-  it("merges signals from multiple models", () => {
+  it("merges signals from multiple models with per-signal attribution", () => {
     const s1 = oqSignalFactory.build({ text: "Signal A", impact: 2 });
     const s2 = oqSignalFactory.build({ text: "Signal B", impact: 3 });
     const scores = [
-      oqModelScoreFactory.build({ top_signals: [s1] }),
-      oqModelScoreFactory.build({ top_signals: [s2] }),
+      oqModelScoreFactory.build({
+        model: "claude-sonnet-4-5-20250929",
+        top_signals: [s1],
+      }),
+      oqModelScoreFactory.build({
+        model: "gemini-2.0-flash",
+        top_signals: [s2],
+      }),
     ];
     const result = mergeSignals(scores);
     expect(result).toHaveLength(2);
+    expect(result.find((s) => s.text === "Signal A")!.models).toEqual([
+      "Claude",
+    ]);
+    expect(result.find((s) => s.text === "Signal B")!.models).toEqual([
+      "Gemini",
+    ]);
   });
 
   it("returns empty array when no signals", () => {
@@ -634,8 +652,8 @@ describe("parseModelResponse — model_summary", () => {
   });
 });
 
-describe("section notes merge logic", () => {
-  it("prefers Claude's sanity_harness_note over other models", () => {
+describe("preferClaude", () => {
+  it("prefers Claude's value over other models", () => {
     const scores = [
       oqModelScoreFactory.build({
         model: "claude-sonnet-4-5-20250929",
@@ -646,30 +664,12 @@ describe("section notes merge logic", () => {
         sanity_harness_note: "GPT's SH note",
       }),
     ];
-    const note =
-      scores.find((s) => s.model.includes("claude"))?.sanity_harness_note ??
-      scores.find((s) => s.sanity_harness_note)?.sanity_harness_note;
-    expect(note).toBe("Claude's SH note");
+    expect(preferClaude(scores, "sanity_harness_note")).toBe(
+      "Claude's SH note"
+    );
   });
 
-  it("prefers Claude's economic_note over other models", () => {
-    const scores = [
-      oqModelScoreFactory.build({
-        model: "gpt-4o",
-        economic_note: "GPT's econ note",
-      }),
-      oqModelScoreFactory.build({
-        model: "claude-sonnet-4-5-20250929",
-        economic_note: "Claude's econ note",
-      }),
-    ];
-    const note =
-      scores.find((s) => s.model.includes("claude"))?.economic_note ??
-      scores.find((s) => s.economic_note)?.economic_note;
-    expect(note).toBe("Claude's econ note");
-  });
-
-  it("falls back to first available note when no Claude", () => {
+  it("falls back to first available value when no Claude", () => {
     const scores = [
       oqModelScoreFactory.build({ model: "gpt-4o" }),
       oqModelScoreFactory.build({
@@ -677,74 +677,348 @@ describe("section notes merge logic", () => {
         sanity_harness_note: "Gemini's note",
       }),
     ];
-    const note =
-      scores.find((s) => s.model.includes("claude"))?.sanity_harness_note ??
-      scores.find((s) => s.sanity_harness_note)?.sanity_harness_note;
-    expect(note).toBe("Gemini's note");
+    expect(preferClaude(scores, "sanity_harness_note")).toBe("Gemini's note");
   });
 
-  it("returns undefined when no model provides notes", () => {
+  it("returns undefined when no model provides the field", () => {
     const scores = [
       oqModelScoreFactory.build({ model: "gpt-4o" }),
       oqModelScoreFactory.build({ model: "gemini-2.0-flash" }),
     ];
-    const note =
-      scores.find((s) => s.model.includes("claude"))?.sanity_harness_note ??
-      scores.find((s) => s.sanity_harness_note)?.sanity_harness_note;
-    expect(note).toBeUndefined();
+    expect(preferClaude(scores, "sanity_harness_note")).toBeUndefined();
+  });
+
+  it("works for delta_explanation field", () => {
+    const scores = [
+      oqModelScoreFactory.build({
+        model: "gpt-4o",
+        delta_explanation: "GPT's explanation",
+      }),
+      oqModelScoreFactory.build({ model: "gemini-2.0-flash" }),
+    ];
+    expect(preferClaude(scores, "delta_explanation")).toBe("GPT's explanation");
   });
 });
 
-describe("delta explanation in consensus", () => {
-  it("prefers Claude's delta_explanation over other models", () => {
-    const claudeScore = oqModelScoreFactory.build({
-      model: "claude-sonnet-4-5-20250929",
-      delta_explanation: "Claude's explanation",
-    });
-    const gptScore = oqModelScoreFactory.build({
-      model: "gpt-4o",
-      delta_explanation: "GPT's explanation",
-    });
-    const geminiScore = oqModelScoreFactory.build({
-      model: "gemini-2.0-flash",
-      delta_explanation: "Gemini's explanation",
-    });
+describe("deduplicateSignals", () => {
+  const originalFetch = globalThis.fetch;
 
-    const scores = [claudeScore, gptScore, geminiScore];
-    // Replicate the logic from runScoring
-    const deltaExplanation =
-      scores.find((s) => s.model.includes("claude"))?.delta_explanation ??
-      scores.find((s) => s.delta_explanation)?.delta_explanation;
+  function mockGeminiResponse(groups: number[][]) {
+    return vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: JSON.stringify({ groups }) }],
+              },
+            },
+          ],
+        }),
+    });
+  }
 
-    expect(deltaExplanation).toBe("Claude's explanation");
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
   });
 
-  it("falls back to first available delta_explanation when no Claude", () => {
-    const gptScore = oqModelScoreFactory.build({
-      model: "gpt-4o",
-      delta_explanation: "GPT's explanation",
-    });
-    const geminiScore = oqModelScoreFactory.build({
-      model: "gemini-2.0-flash",
-    });
-
-    const scores = [gptScore, geminiScore];
-    const deltaExplanation =
-      scores.find((s) => s.model.includes("claude"))?.delta_explanation ??
-      scores.find((s) => s.delta_explanation)?.delta_explanation;
-
-    expect(deltaExplanation).toBe("GPT's explanation");
-  });
-
-  it("returns undefined when no model provides delta_explanation", () => {
+  it("uses Gemini to deduplicate cross-model signals and merges model attribution", async () => {
     const scores = [
-      oqModelScoreFactory.build({ model: "gpt-4o" }),
-      oqModelScoreFactory.build({ model: "gemini-2.0-flash" }),
+      oqModelScoreFactory.build({
+        model: "claude-sonnet-4-5-20250929",
+        top_signals: [
+          oqSignalFactory.build({
+            text: "SanityHarness: top agent pass rate at 73.1%",
+            direction: "up",
+            impact: 3,
+          }),
+          oqSignalFactory.build({
+            text: "Block cuts nearly 40% of workforce",
+            direction: "up",
+            impact: 4,
+          }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        model: "gpt-4o",
+        top_signals: [
+          oqSignalFactory.build({
+            text: "SanityHarness top agent rate reaches 73.1%",
+            direction: "up",
+            impact: 2,
+          }),
+          oqSignalFactory.build({
+            text: "Block lays off 4,000 employees citing AI",
+            direction: "up",
+            impact: 3,
+          }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        model: "gemini-2.0-flash",
+        top_signals: [
+          oqSignalFactory.build({
+            text: "SanityHarness top pass rate jumps to 73.1%",
+            direction: "up",
+            impact: 2,
+          }),
+          oqSignalFactory.build({
+            text: "Indeed software postings up 4.1%",
+            direction: "down",
+            impact: -2,
+          }),
+        ],
+      }),
     ];
-    const deltaExplanation =
-      scores.find((s) => s.model.includes("claude"))?.delta_explanation ??
-      scores.find((s) => s.delta_explanation)?.delta_explanation;
 
-    expect(deltaExplanation).toBeUndefined();
+    // After sort by |impact|: 0=Block(Claude,4), 1=SH(Claude,3), 2=Block(GPT,3), 3=SH(GPT,2), 4=SH(Gemini,2), 5=Indeed(Gemini,-2)
+    // Groups: [1,3,4] = SanityHarness variants (keep 1), [0,2] = Block variants (keep 0), [5] = Indeed
+    globalThis.fetch = mockGeminiResponse([[1, 3, 4], [0, 2], [5]]);
+
+    const { signals, dedupUsage } = await deduplicateSignals(
+      scores,
+      "fake-gemini-key"
+    );
+
+    expect(signals).toHaveLength(3);
+    expect(dedupUsage).toBeDefined();
+    expect(dedupUsage!.provider).toBe("gemini");
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+
+    // SanityHarness signal should have all 3 models merged
+    const shSignal = signals.find((s) => s.text.includes("SanityHarness:"));
+    expect(shSignal!.models).toEqual(
+      expect.arrayContaining(["Claude", "GPT-4o", "Gemini"])
+    );
+
+    // Block signal should have exactly Claude + GPT-4o merged
+    const blockSignal = signals.find((s) => s.text.includes("Block"));
+    expect(blockSignal!.models).toHaveLength(2);
+    expect(blockSignal!.models).toEqual(
+      expect.arrayContaining(["Claude", "GPT-4o"])
+    );
+
+    // Indeed signal only from Gemini
+    const indeedSignal = signals.find((s) => s.text.includes("Indeed"));
+    expect(indeedSignal!.models).toEqual(["Gemini"]);
+  });
+
+  it("falls back to exact dedup when no Gemini key provided", async () => {
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "SanityHarness top pass rate at 73.1%",
+            direction: "up",
+            impact: 3,
+          }),
+          oqSignalFactory.build({
+            text: "Block cuts 40% workforce",
+            direction: "up",
+            impact: 4,
+          }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "SanityHarness top pass rate reaches 73.1%",
+            direction: "up",
+            impact: 2,
+          }),
+          oqSignalFactory.build({
+            text: "Indeed postings up 4.1%",
+            direction: "down",
+            impact: -2,
+          }),
+        ],
+      }),
+    ];
+
+    const { signals, dedupUsage } = await deduplicateSignals(scores);
+
+    // No AI dedup — all 4 signals pass exact dedup (different normalized keys)
+    expect(signals).toHaveLength(4);
+    expect(dedupUsage).toBeUndefined();
+  });
+
+  it("falls back to exact dedup when Gemini call fails", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "Signal A from model 1",
+            impact: 3,
+          }),
+          oqSignalFactory.build({
+            text: "Signal B from model 1",
+            impact: 2,
+          }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "Signal C from model 2",
+            impact: 4,
+          }),
+          oqSignalFactory.build({
+            text: "Signal D from model 2",
+            impact: 1,
+          }),
+        ],
+      }),
+    ];
+
+    const { signals, dedupUsage } = await deduplicateSignals(
+      scores,
+      "fake-key"
+    );
+
+    // Falls back to exact dedup — all 4 distinct signals kept
+    expect(signals).toHaveLength(4);
+    expect(dedupUsage).toBeUndefined();
+  });
+
+  it("still applies exact dedup before AI call", async () => {
+    // Two models return the identical signal text — exact dedup catches it
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy;
+
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "Identical signal text",
+            impact: 3,
+          }),
+          oqSignalFactory.build({
+            text: "Another unique signal",
+            impact: 2,
+          }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({
+            text: "Identical signal text",
+            impact: 1,
+          }),
+          oqSignalFactory.build({
+            text: "Third unique signal",
+            impact: 4,
+          }),
+        ],
+      }),
+    ];
+
+    const { signals } = await deduplicateSignals(scores, "fake-key");
+
+    // Exact dedup removes one "Identical signal text" → 3 signals remain
+    // 3 is not > 3, so AI call is skipped
+    expect(signals).toHaveLength(3);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns empty array when no signals", async () => {
+    const scores = [oqModelScoreFactory.build({ top_signals: [] })];
+    const { signals } = await deduplicateSignals(scores, "fake-key");
+    expect(signals).toEqual([]);
+  });
+
+  it("falls back when Gemini returns invalid response", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: JSON.stringify({ wrong_field: true }) }],
+              },
+            },
+          ],
+        }),
+    });
+
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({ text: "Signal A", impact: 3 }),
+          oqSignalFactory.build({ text: "Signal B", impact: 2 }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({ text: "Signal C", impact: 4 }),
+          oqSignalFactory.build({ text: "Signal D", impact: 1 }),
+        ],
+      }),
+    ];
+
+    const { signals, dedupUsage } = await deduplicateSignals(
+      scores,
+      "fake-key"
+    );
+
+    // Falls back — all 4 signals kept
+    expect(signals).toHaveLength(4);
+    expect(dedupUsage).toBeUndefined();
+  });
+
+  it("falls back when Gemini keeps fewer than 2 signals", async () => {
+    globalThis.fetch = mockGeminiResponse([[0, 1, 2, 3]]);
+
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({ text: "Signal A", impact: 3 }),
+          oqSignalFactory.build({ text: "Signal B", impact: 2 }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({ text: "Signal C", impact: 4 }),
+          oqSignalFactory.build({ text: "Signal D", impact: 1 }),
+        ],
+      }),
+    ];
+
+    const { signals, dedupUsage } = await deduplicateSignals(
+      scores,
+      "fake-key"
+    );
+
+    // AI returned only 1 signal — falls back to exact dedup
+    expect(signals).toHaveLength(4);
+    expect(dedupUsage).toBeUndefined();
+  });
+
+  it("sorts results by absolute impact descending", async () => {
+    const scores = [
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({ text: "Low impact", impact: 1 }),
+          oqSignalFactory.build({ text: "Negative high", impact: -4 }),
+        ],
+      }),
+      oqModelScoreFactory.build({
+        top_signals: [
+          oqSignalFactory.build({ text: "Medium impact", impact: 2 }),
+          oqSignalFactory.build({ text: "Highest impact", impact: 5 }),
+        ],
+      }),
+    ];
+
+    globalThis.fetch = mockGeminiResponse([[0], [1], [3]]);
+
+    const { signals } = await deduplicateSignals(scores, "fake-key");
+
+    expect(signals[0].text).toBe("Highest impact");
+    expect(signals[1].text).toBe("Negative high");
+    expect(signals[2].text).toBe("Low impact");
   });
 });

@@ -18,6 +18,13 @@ const props = withDefaults(
 
 const isOpen = ref(false);
 const hiddenCount = computed(() => props.signals.length - props.initialCount);
+const modelCount = computed(() => {
+  const all = new Set<string>();
+  for (const s of props.signals) {
+    for (const m of s.models ?? []) all.add(m);
+  }
+  return all.size;
+});
 </script>
 
 <template>
@@ -52,6 +59,13 @@ const hiddenCount = computed(() => props.signals.length - props.initialCount);
         <span v-else>●</span>
       </Badge>
       <span class="flex-1">{{ signal.text }}</span>
+      <span
+        v-if="signal.models?.length"
+        class="shrink-0 font-mono text-[10px] text-muted-foreground/40"
+        :title="signal.models.join(', ')"
+      >
+        {{ signal.models.length }}/{{ modelCount }}
+      </span>
       <span
         v-if="signal.url"
         class="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground/60"

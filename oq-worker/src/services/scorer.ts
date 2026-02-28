@@ -260,22 +260,199 @@ function normaliseSignalText(text: string): string {
     .slice(0, 60);
 }
 
+function shortModelLabel(model: string): string {
+  if (model.includes("claude")) return "Claude";
+  if (model.includes("gpt")) return "GPT-4o";
+  if (model.includes("gemini")) return "Gemini";
+  return model;
+}
+
 function mergeSignals(scores: OQModelScore[]): OQSignal[] {
-  const seen = new Set<string>();
-  const signals: OQSignal[] = [];
+  const kept = new Map<string, { signal: OQSignal; models: Set<string> }>();
 
   for (const score of scores) {
+    const label = shortModelLabel(score.model);
     for (const signal of score.top_signals) {
       const key = normaliseSignalText(signal.text);
-      if (!seen.has(key)) {
-        seen.add(key);
-        signals.push(signal);
+      const existing = kept.get(key);
+      if (existing) {
+        existing.models.add(label);
+      } else {
+        kept.set(key, { signal, models: new Set([label]) });
       }
     }
   }
 
-  // Sort by absolute impact
-  return signals.sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+  return [...kept.values()]
+    .map(({ signal, models }) => ({
+      ...signal,
+      models: [...models],
+    }))
+    .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+}
+
+// --- AI-powered signal deduplication ---
+
+const DIRECTION_SYMBOL: Record<string, string> = { up: "▲", down: "▼" };
+
+interface SignalDedupResult {
+  keep: number[];
+  /** Groups of indices — first in each group is the keeper. Used to merge model attribution. */
+  groups?: number[][];
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+async function callGeminiSignalDedup(
+  signals: OQSignal[],
+  apiKey: string
+): Promise<SignalDedupResult> {
+  const formatted = signals
+    .map(
+      (s, i) =>
+        `[${i}] ${DIRECTION_SYMBOL[s.direction] ?? "●"} "${s.text}" (impact: ${s.impact}, source: ${s.source})`
+    )
+    .join("\n");
+
+  const prompt = `You are deduplicating analysis signals from multiple AI models that all analyzed the same news.
+
+Signals:
+${formatted}
+
+Group signals that describe the SAME event or data point. From each group, keep the ONE with the clearest, most concrete wording.
+
+RULES:
+- Signals with DIFFERENT directions (▲/▼/●) about the same event are intentionally distinct — do NOT group them
+- Only group signals that genuinely cover the same specific fact
+- Prefer signals with specific numbers and concrete details
+
+Return JSON: { "groups": [[0, 2], [1, 4], [3], [5]] }
+Each sub-array is a group of duplicate indices. The FIRST index in each group is the one to keep. Singletons (unique signals) are a group of one.`;
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 256,
+          responseMimeType: "application/json",
+        },
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(`Gemini dedup error: ${(await res.text()).slice(0, 200)}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini dedup: empty response");
+
+  const parsed = JSON.parse(
+    text
+      .replace(/```(?:json)?\s*/g, "")
+      .replace(/```\s*$/g, "")
+      .trim()
+  );
+  const tokenMeta = data?.usageMetadata;
+
+  // Support both response formats: { groups: [[0,2],[1]] } or legacy { keep: [0,1] }
+  if (Array.isArray(parsed?.groups)) {
+    const groups: number[][] = parsed.groups;
+    return {
+      keep: groups.map((g: number[]) => g[0]),
+      groups,
+      inputTokens: tokenMeta?.promptTokenCount,
+      outputTokens: tokenMeta?.candidatesTokenCount,
+      totalTokens: tokenMeta?.totalTokenCount,
+    };
+  }
+
+  if (Array.isArray(parsed?.keep)) {
+    return {
+      keep: parsed.keep,
+      inputTokens: tokenMeta?.promptTokenCount,
+      outputTokens: tokenMeta?.candidatesTokenCount,
+      totalTokens: tokenMeta?.totalTokenCount,
+    };
+  }
+
+  throw new Error("Gemini dedup: missing groups/keep array");
+}
+
+async function deduplicateSignals(
+  scores: OQModelScore[],
+  geminiApiKey?: string
+): Promise<{ signals: OQSignal[]; dedupUsage?: AIUsageEntry }> {
+  // Exact dedup first (fast path — catches identical phrasings)
+  const preDeduped = mergeSignals(scores);
+
+  if (preDeduped.length === 0) return { signals: [] };
+
+  // AI dedup if Gemini key available and enough signals to be worth it
+  if (geminiApiKey && preDeduped.length > 3) {
+    const start = Date.now();
+    try {
+      const result = await callGeminiSignalDedup(preDeduped, geminiApiKey);
+      const latencyMs = Date.now() - start;
+
+      // Validate: indices must be in range and unique
+      const valid = result.keep.filter(
+        (i, pos, arr) =>
+          typeof i === "number" &&
+          i >= 0 &&
+          i < preDeduped.length &&
+          arr.indexOf(i) === pos
+      );
+
+      // Guard: if AI returns fewer than 2, assume hallucination and fall back
+      if (valid.length >= 2) {
+        // Merge model attribution from grouped (dropped) signals into keepers
+        const keptSignals = valid.map((i) => {
+          const signal = { ...preDeduped[i] };
+          if (result.groups) {
+            const group = result.groups.find((g) => g[0] === i);
+            if (group && group.length > 1) {
+              const allModels = new Set(signal.models ?? []);
+              for (const j of group.slice(1)) {
+                if (j >= 0 && j < preDeduped.length) {
+                  for (const m of preDeduped[j].models ?? []) allModels.add(m);
+                }
+              }
+              signal.models = [...allModels];
+            }
+          }
+          return signal;
+        });
+        return {
+          signals: keptSignals.sort(
+            (a, b) => Math.abs(b.impact) - Math.abs(a.impact)
+          ),
+          dedupUsage: {
+            model: "gemini-2.0-flash",
+            provider: "gemini",
+            inputTokens: result.inputTokens,
+            outputTokens: result.outputTokens,
+            totalTokens: result.totalTokens,
+            latencyMs,
+            wasFallback: false,
+            status: "success",
+          },
+        };
+      }
+    } catch {
+      // Fall through to exact-deduped result
+    }
+  }
+
+  return { signals: preDeduped };
 }
 
 function mergePillarScores(scores: OQModelScore[]): OQPillarScores {
@@ -323,13 +500,26 @@ function synthesizeAnalysis(
   return claude?.analysis ?? scores[0].analysis;
 }
 
+// Prefer Claude's value for a field, fall back to first model that has one
+function preferClaude<K extends keyof OQModelScore>(
+  scores: OQModelScore[],
+  field: K
+): OQModelScore[K] | undefined {
+  return (
+    scores.find((s) => s.model.includes("claude"))?.[field] ??
+    scores.find((s) => s[field])?.[field]
+  );
+}
+
 export {
   parseModelResponse,
   calculateConsensusDelta,
   calculateModelAgreement,
   mergeSignals,
+  deduplicateSignals,
   mergePillarScores,
   synthesizeAnalysis,
+  preferClaude,
 };
 
 // --- Main scoring pipeline ---
@@ -582,14 +772,13 @@ export async function runScoring(
   const newEconomic = clampScore(input.previousEconomic, econDelta);
 
   const { agreement, spread } = calculateModelAgreement(scores);
-  const signals = mergeSignals(scores);
+  const { signals, dedupUsage } = await deduplicateSignals(
+    scores,
+    input.apiKeys.gemini
+  );
+  if (dedupUsage) aiUsages.push(dedupUsage);
   const pillarScores = mergePillarScores(scores);
   const analysis = synthesizeAnalysis(scores, agreement);
-
-  // Prefer Claude's value for a field, fall back to first model that has one
-  const preferClaude = <K extends keyof OQModelScore>(field: K) =>
-    scores.find((s) => s.model.includes("claude"))?.[field] ??
-    scores.find((s) => s[field])?.[field];
 
   // Merge capability gap notes
   const gapNotes = scores
@@ -598,12 +787,12 @@ export async function runScoring(
     .join(" ")
     .slice(0, 500);
 
-  const sanityHarnessNote = preferClaude("sanity_harness_note");
-  const economicNote = preferClaude("economic_note");
-  const labourNote = preferClaude("labour_note");
+  const sanityHarnessNote = preferClaude(scores, "sanity_harness_note");
+  const economicNote = preferClaude(scores, "economic_note");
+  const labourNote = preferClaude(scores, "labour_note");
 
-  const deltaExplanation = preferClaude("delta_explanation");
-  const modelSummary = preferClaude("model_summary");
+  const deltaExplanation = preferClaude(scores, "delta_explanation");
+  const modelSummary = preferClaude(scores, "model_summary");
 
   return {
     score: newScore,

@@ -17,6 +17,8 @@ export interface OQSignal {
   source: string;
   impact: number;
   url?: string;
+  /** Short labels of models that produced this signal (e.g. ["Claude", "GPT-4o"]) */
+  models?: string[];
 }
 
 export interface OQPillarScores {
