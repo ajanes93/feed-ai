@@ -129,7 +129,9 @@ export function useDashboard() {
         const errors: { sourceId: string; message: string }[] =
           body.errors ?? [];
         if (errors.length === 0) return `Fetched ${body.fetched} new articles`;
-        const details = errors.map((e) => `${e.sourceId}: ${e.message}`).join(", ");
+        const details = errors
+          .map((e) => `${e.sourceId}: ${e.message}`)
+          .join(", ");
         return {
           message: `Fetched ${body.fetched} articles — ${errors.length} error(s): ${details}`,
           success: false,
@@ -151,7 +153,9 @@ export function useDashboard() {
       scoreResult,
       scoreSuccess,
       (body) => {
-        const prefix = body.alreadyExists ? "Score already exists" : "Generated score";
+        const prefix = body.alreadyExists
+          ? "Score already exists"
+          : "Generated score";
         return `${prefix} for ${body.date}: ${body.score} (delta: ${body.delta > 0 ? "+" : ""}${body.delta})`;
       },
       "Score generation failed"
@@ -169,7 +173,8 @@ export function useDashboard() {
       deleting,
       deleteResult,
       deleteSuccess,
-      (body) => (body.deleted ? `Deleted score for ${body.date}` : body.message),
+      (body) =>
+        body.deleted ? `Deleted score for ${body.date}` : body.message,
       "Delete failed"
     );
     if (ok) await fetchDashboard();
@@ -201,7 +206,8 @@ export function useDashboard() {
       dedupingFunding,
       dedupFundingResult,
       dedupFundingSuccess,
-      (body) => `Removed ${body.deleted} duplicates, ${body.remaining} remaining`,
+      (body) =>
+        `Removed ${body.deleted} duplicates, ${body.remaining} remaining`,
       "Dedup failed"
     );
   }
@@ -232,7 +238,8 @@ export function useDashboard() {
       fetchingSanity,
       fetchSanityResult,
       fetchSanitySuccess,
-      (body) => `Fetched Sanity Harness data (${body.stored ?? body.rows ?? "done"})`,
+      (body) =>
+        `Fetched Sanity Harness data (${body.stored ?? body.rows ?? "done"})`,
       "Fetch failed"
     );
   }
@@ -247,7 +254,8 @@ export function useDashboard() {
       fetchingSwebench,
       fetchSwebenchResult,
       fetchSwebenchSuccess,
-      (body) => `Fetched SWE-bench data (${body.stored ?? body.rows ?? "done"})`,
+      (body) =>
+        `Fetched SWE-bench data (${body.stored ?? body.rows ?? "done"})`,
       "Fetch failed"
     );
   }

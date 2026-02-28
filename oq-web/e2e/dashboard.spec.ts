@@ -429,7 +429,9 @@ test.describe("Dashboard", () => {
     await page.getByText("Actions").click();
     await expect(page.getByText("Purge", { exact: true })).toBeVisible();
     await expect(page.getByText("Purge Scores", { exact: true })).toBeVisible();
-    await expect(page.getByText("Purge Funding", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Purge Funding", { exact: true })
+    ).toBeVisible();
   });
 
   test("Purge Scores shows confirm dialog and succeeds on confirm", async ({

@@ -913,7 +913,14 @@ describe("Admin API routes", () => {
       await env.DB.prepare(
         "INSERT INTO oq_funding_events (id, company, amount, round, source_url, date) VALUES (?, ?, ?, ?, ?, ?)"
       )
-        .bind("f1", "TestCo", "$1M", "Series A", "https://example.com", "2025-01-01")
+        .bind(
+          "f1",
+          "TestCo",
+          "$1M",
+          "Series A",
+          "https://example.com",
+          "2025-01-01"
+        )
         .run();
 
       const res = await SELF.fetch("http://localhost/api/admin/purge-funding", {

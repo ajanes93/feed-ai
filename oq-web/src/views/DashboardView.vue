@@ -182,16 +182,56 @@ const confirmLabel = computed(() => pendingAction.value?.label ?? "Confirm");
 // Collect all action results for display — variant "warn" shows amber, "error" shows destructive
 const actionResults = computed(() =>
   [
-    { message: fetchResult.value, success: fetchSuccess.value, variant: "warn" as const },
-    { message: scoreResult.value, success: scoreSuccess.value, variant: "error" as const },
-    { message: deleteResult.value, success: deleteSuccess.value, variant: "error" as const },
-    { message: predigestResult.value, success: predigestSuccess.value, variant: "error" as const },
-    { message: dedupFundingResult.value, success: dedupFundingSuccess.value, variant: "error" as const },
-    { message: extractFundingResult.value, success: extractFundingSuccess.value, variant: "error" as const },
-    { message: fetchSanityResult.value, success: fetchSanitySuccess.value, variant: "error" as const },
-    { message: fetchSwebenchResult.value, success: fetchSwebenchSuccess.value, variant: "error" as const },
-    { message: purgeScoresResult.value, success: purgeScoresSuccess.value, variant: "error" as const },
-    { message: purgeFundingResult.value, success: purgeFundingSuccess.value, variant: "error" as const },
+    {
+      message: fetchResult.value,
+      success: fetchSuccess.value,
+      variant: "warn" as const,
+    },
+    {
+      message: scoreResult.value,
+      success: scoreSuccess.value,
+      variant: "error" as const,
+    },
+    {
+      message: deleteResult.value,
+      success: deleteSuccess.value,
+      variant: "error" as const,
+    },
+    {
+      message: predigestResult.value,
+      success: predigestSuccess.value,
+      variant: "error" as const,
+    },
+    {
+      message: dedupFundingResult.value,
+      success: dedupFundingSuccess.value,
+      variant: "error" as const,
+    },
+    {
+      message: extractFundingResult.value,
+      success: extractFundingSuccess.value,
+      variant: "error" as const,
+    },
+    {
+      message: fetchSanityResult.value,
+      success: fetchSanitySuccess.value,
+      variant: "error" as const,
+    },
+    {
+      message: fetchSwebenchResult.value,
+      success: fetchSwebenchSuccess.value,
+      variant: "error" as const,
+    },
+    {
+      message: purgeScoresResult.value,
+      success: purgeScoresSuccess.value,
+      variant: "error" as const,
+    },
+    {
+      message: purgeFundingResult.value,
+      success: purgeFundingSuccess.value,
+      variant: "error" as const,
+    },
   ].filter((r) => r.message !== null)
 );
 
@@ -357,8 +397,8 @@ onMounted(fetchDashboard);
                     purgingScores ? "Purging..." : "Purge Scores"
                   }}</span>
                   <span class="text-xs opacity-70"
-                    >Delete all scores, model responses, funding events, and
-                    AI usage</span
+                    >Delete all scores, model responses, funding events, and AI
+                    usage</span
                   >
                 </div>
               </DropdownMenuItem>

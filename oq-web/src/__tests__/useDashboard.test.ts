@@ -176,12 +176,23 @@ describe("useDashboard", () => {
       mockOk({
         fetched: 5,
         errors: [
-          { sourceId: "oq-openai", errorType: "http_error", message: "HTTP 403" },
+          {
+            sourceId: "oq-openai",
+            errorType: "http_error",
+            message: "HTTP 403",
+          },
           { sourceId: "oq-arxiv", errorType: "timeout", message: "Timeout" },
         ],
       });
       // Mock the subsequent fetchDashboard call
-      mockOk({ ai: { recentCalls: [], totalTokens: 0 }, sources: [], totalScores: 0, totalArticles: 0, totalSubscribers: 0, todayScoreExists: false });
+      mockOk({
+        ai: { recentCalls: [], totalTokens: 0 },
+        sources: [],
+        totalScores: 0,
+        totalArticles: 0,
+        totalSubscribers: 0,
+        todayScoreExists: false,
+      });
       const { fetchArticles, fetchResult, fetchSuccess } = authedDashboard();
 
       await fetchArticles();
@@ -195,7 +206,14 @@ describe("useDashboard", () => {
 
     it("shows clean message when no errors", async () => {
       mockOk({ fetched: 12, errors: [] });
-      mockOk({ ai: { recentCalls: [], totalTokens: 0 }, sources: [], totalScores: 0, totalArticles: 0, totalSubscribers: 0, todayScoreExists: false });
+      mockOk({
+        ai: { recentCalls: [], totalTokens: 0 },
+        sources: [],
+        totalScores: 0,
+        totalArticles: 0,
+        totalSubscribers: 0,
+        todayScoreExists: false,
+      });
       const { fetchArticles, fetchResult, fetchSuccess } = authedDashboard();
 
       await fetchArticles();
@@ -226,9 +244,23 @@ describe("useDashboard", () => {
 
   describe("purgeScores", () => {
     it("calls purge-scores endpoint and sets success result", async () => {
-      mockOk({ scores: 5, modelResponses: 15, fundingEvents: 3, aiUsage: 20, scoreArticles: 10 });
-      mockOk({ ai: { recentCalls: [], totalTokens: 0 }, sources: [], totalScores: 0, totalArticles: 0, totalSubscribers: 0, todayScoreExists: false });
-      const { purgeScores, purgeScoresResult, purgeScoresSuccess } = authedDashboard();
+      mockOk({
+        scores: 5,
+        modelResponses: 15,
+        fundingEvents: 3,
+        aiUsage: 20,
+        scoreArticles: 10,
+      });
+      mockOk({
+        ai: { recentCalls: [], totalTokens: 0 },
+        sources: [],
+        totalScores: 0,
+        totalArticles: 0,
+        totalSubscribers: 0,
+        todayScoreExists: false,
+      });
+      const { purgeScores, purgeScoresResult, purgeScoresSuccess } =
+        authedDashboard();
 
       await purgeScores();
 
@@ -246,7 +278,8 @@ describe("useDashboard", () => {
 
     it("sets error on failure", async () => {
       mockError({ error: "DB locked" });
-      const { purgeScores, purgeScoresResult, purgeScoresSuccess } = authedDashboard();
+      const { purgeScores, purgeScoresResult, purgeScoresSuccess } =
+        authedDashboard();
 
       await purgeScores();
 
@@ -267,8 +300,16 @@ describe("useDashboard", () => {
   describe("purgeFunding", () => {
     it("calls purge-funding endpoint and sets success result", async () => {
       mockOk({ fundingEvents: 42 });
-      mockOk({ ai: { recentCalls: [], totalTokens: 0 }, sources: [], totalScores: 0, totalArticles: 0, totalSubscribers: 0, todayScoreExists: false });
-      const { purgeFunding, purgeFundingResult, purgeFundingSuccess } = authedDashboard();
+      mockOk({
+        ai: { recentCalls: [], totalTokens: 0 },
+        sources: [],
+        totalScores: 0,
+        totalArticles: 0,
+        totalSubscribers: 0,
+        todayScoreExists: false,
+      });
+      const { purgeFunding, purgeFundingResult, purgeFundingSuccess } =
+        authedDashboard();
 
       await purgeFunding();
 
@@ -282,7 +323,8 @@ describe("useDashboard", () => {
 
     it("sets error on failure", async () => {
       mockError({ error: "Timeout" });
-      const { purgeFunding, purgeFundingResult, purgeFundingSuccess } = authedDashboard();
+      const { purgeFunding, purgeFundingResult, purgeFundingSuccess } =
+        authedDashboard();
 
       await purgeFunding();
 
