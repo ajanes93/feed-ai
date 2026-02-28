@@ -303,28 +303,27 @@ onMounted(async () => {
                 >
                   AI Agent Reality Check
                 </div>
+                <OQSanityHarness
+                  :top-pass-rate="methodology.sanityHarness.topPassRate"
+                  :top-agent="methodology.sanityHarness.topAgent"
+                  :top-model="methodology.sanityHarness.topModel"
+                  :median-pass-rate="methodology.sanityHarness.medianPassRate"
+                  :language-breakdown="
+                    methodology.sanityHarness.languageBreakdown
+                  "
+                  :note="today.sanityHarnessNote"
+                  :last-updated="methodology?.lastUpdated?.sanityHarness"
+                  :top-pass-rate-delta="
+                    methodology?.deltas?.sanityHarness?.topPassRateDelta
+                  "
+                  :median-pass-rate-delta="
+                    methodology?.deltas?.sanityHarness?.medianPassRateDelta
+                  "
+                  :previous-date="
+                    methodology?.deltas?.sanityHarness?.previousDate
+                  "
+                />
               </template>
-              <OQSanityHarness
-                v-if="methodology?.sanityHarness"
-                :top-pass-rate="methodology.sanityHarness.topPassRate"
-                :top-agent="methodology.sanityHarness.topAgent"
-                :top-model="methodology.sanityHarness.topModel"
-                :median-pass-rate="methodology.sanityHarness.medianPassRate"
-                :language-breakdown="
-                  methodology.sanityHarness.languageBreakdown
-                "
-                :note="today.sanityHarnessNote"
-                :last-updated="methodology?.lastUpdated?.sanityHarness"
-                :top-pass-rate-delta="
-                  methodology?.deltas?.sanityHarness?.topPassRateDelta
-                "
-                :median-pass-rate-delta="
-                  methodology?.deltas?.sanityHarness?.medianPassRateDelta
-                "
-                :previous-date="
-                  methodology?.deltas?.sanityHarness?.previousDate
-                "
-              />
             </CardContent>
           </Card>
         </motion.section>
