@@ -161,12 +161,7 @@ async function callOpenAI(
 // --- Parsing ---
 
 function truncateStr(value: unknown, maxLen: number): string | undefined {
-  if (typeof value !== "string") return undefined;
-  if (value.length <= maxLen) return value;
-  // Avoid cutting mid-word: find last space before limit
-  const trimmed = value.slice(0, maxLen);
-  const lastSpace = trimmed.lastIndexOf(" ");
-  return lastSpace > maxLen * 0.6 ? trimmed.slice(0, lastSpace) : trimmed;
+  return typeof value === "string" ? value.slice(0, maxLen) : undefined;
 }
 
 function parseModelResponse(text: string, model: string): OQModelScore {

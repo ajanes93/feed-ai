@@ -4,7 +4,7 @@ import { Button } from "@feed-ai/shared/components/ui/button";
 import { Input } from "@feed-ai/shared/components/ui/input";
 import { Card, CardContent } from "@feed-ai/shared/components/ui/card";
 
-const props = defineProps<{
+defineProps<{
   status: "idle" | "loading" | "success" | "error";
   inline?: boolean;
 }>();
@@ -25,7 +25,7 @@ function onSubmit() {
 
 <template>
   <!-- Inline compact CTA -->
-  <div v-if="props.inline" class="text-center">
+  <div v-if="inline" class="text-center">
     <form
       v-if="status !== 'success'"
       class="mx-auto flex max-w-sm items-center gap-2"
