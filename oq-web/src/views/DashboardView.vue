@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useHead } from "@unhead/vue";
 import { motion } from "motion-v";
 import { useDashboard } from "../composables/useDashboard";
@@ -22,8 +22,19 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@feed-ai/shared/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@feed-ai/shared/components/ui/alert-dialog";
 import { TableRow, TableCell } from "@feed-ai/shared/components/ui/table";
 import {
   ChevronDown,
@@ -32,6 +43,10 @@ import {
   Sparkles,
   Trash2,
   ListChecks,
+  Copy,
+  DollarSign,
+  FlaskConical,
+  Activity,
 } from "lucide-vue-next";
 
 const {
@@ -53,6 +68,18 @@ const {
   predigesting,
   predigestResult,
   predigestSuccess,
+  dedupingFunding,
+  dedupFundingResult,
+  dedupFundingSuccess,
+  extractingFunding,
+  extractFundingResult,
+  extractFundingSuccess,
+  fetchingSanity,
+  fetchSanityResult,
+  fetchSanitySuccess,
+  fetchingSwebench,
+  fetchSwebenchResult,
+  fetchSwebenchSuccess,
   setAdminKey,
   clearAdminKey,
   fetchDashboard,
@@ -60,6 +87,10 @@ const {
   generateScore,
   deleteScore,
   runPredigest,
+  dedupFunding,
+  extractFunding,
+  fetchSanity,
+  fetchSwebench,
 } = useDashboard();
 
 useHead({ title: "Dashboard — One Question" });
@@ -73,6 +104,57 @@ function submitKey() {
   keyInput.value = "";
   fetchDashboard();
 }
+
+interface ConfirmAction {
+  title: string;
+  description: string;
+  label: string;
+  action: () => void;
+}
+
+const confirmOpen = ref(false);
+const pendingAction = ref<ConfirmAction | null>(null);
+
+const confirmActions: Record<string, ConfirmAction> = {
+  deleteScore: {
+    title: "Delete today's score?",
+    description:
+      "This removes today's score and all linked data. You'll need to re-run Predigest + Score to regenerate.",
+    label: "Delete Score",
+    action: deleteScore,
+  },
+  dedupFunding: {
+    title: "Deduplicate funding rows?",
+    description:
+      "This permanently removes duplicate funding rows from the database. The operation cannot be undone.",
+    label: "Dedup Funding",
+    action: dedupFunding,
+  },
+  extractFunding: {
+    title: "Extract funding events?",
+    description:
+      "This scans all articles and extracts funding events using AI. It will consume API credits.",
+    label: "Extract Funding",
+    action: extractFunding,
+  },
+};
+
+function requestConfirm(key: string) {
+  pendingAction.value = confirmActions[key];
+  confirmOpen.value = true;
+}
+
+function executeConfirmed() {
+  pendingAction.value?.action();
+  confirmOpen.value = false;
+  pendingAction.value = null;
+}
+
+const confirmTitle = computed(() => pendingAction.value?.title ?? "");
+const confirmDescription = computed(
+  () => pendingAction.value?.description ?? ""
+);
+const confirmLabel = computed(() => pendingAction.value?.label ?? "Confirm");
 
 onMounted(fetchDashboard);
 </script>
@@ -93,9 +175,11 @@ onMounted(fetchDashboard);
                 <ChevronDown class="size-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent class="w-64">
+            <DropdownMenuContent class="w-72">
+              <!-- Fetch data (safe) -->
+              <DropdownMenuLabel>Fetch Data</DropdownMenuLabel>
               <DropdownMenuItem :disabled="fetching" @click="fetchArticles()">
-                <Rss class="size-4" />
+                <Rss class="size-4 text-emerald-400" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
                     fetching ? "Fetching..." : "Fetch Articles"
@@ -105,29 +189,49 @@ onMounted(fetchDashboard);
                   >
                 </div>
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem :disabled="deleting" @click="deleteScore()">
-                <Trash2 class="size-4" />
+              <DropdownMenuItem
+                :disabled="fetchingSanity"
+                @click="fetchSanity()"
+              >
+                <Activity class="size-4 text-emerald-400" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
-                    deleting ? "Deleting..." : "Delete Score"
+                    fetchingSanity ? "Fetching..." : "Fetch Sanity"
                   }}</span>
                   <span class="text-xs text-muted-foreground"
-                    >Remove today's score and linked data</span
+                    >Pull latest Sanity Harness data</span
                   >
                 </div>
               </DropdownMenuItem>
               <DropdownMenuItem
+                :disabled="fetchingSwebench"
+                @click="fetchSwebench()"
+              >
+                <FlaskConical class="size-4 text-emerald-400" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    fetchingSwebench ? "Fetching..." : "Fetch SWE-bench"
+                  }}</span>
+                  <span class="text-xs text-muted-foreground"
+                    >Pull latest SWE-bench scores</span
+                  >
+                </div>
+              </DropdownMenuItem>
+
+              <!-- Score pipeline -->
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Score Pipeline</DropdownMenuLabel>
+              <DropdownMenuItem
                 :disabled="predigesting"
                 @click="runPredigest()"
               >
-                <ListChecks class="size-4" />
+                <ListChecks class="size-4 text-blue-400" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
                     predigesting ? "Pre-digesting..." : "Predigest"
                   }}</span>
                   <span class="text-xs text-muted-foreground"
-                    >Summarize articles per pillar</span
+                    >Summarize articles per pillar (uses AI credits)</span
                   >
                 </div>
               </DropdownMenuItem>
@@ -135,7 +239,7 @@ onMounted(fetchDashboard);
                 :disabled="scoring || todayScoreExists"
                 @click="generateScore()"
               >
-                <Sparkles class="size-4" />
+                <Sparkles class="size-4 text-blue-400" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
                     scoring
@@ -145,7 +249,57 @@ onMounted(fetchDashboard);
                         : "Score"
                   }}</span>
                   <span class="text-xs text-muted-foreground"
-                    >Run multi-model AI scoring for today</span
+                    >Run multi-model AI scoring for today (uses AI
+                    credits)</span
+                  >
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                :disabled="deleting"
+                @click="requestConfirm('deleteScore')"
+              >
+                <Trash2 class="size-4" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    deleting ? "Deleting..." : "Delete Score"
+                  }}</span>
+                  <span class="text-xs opacity-70"
+                    >Remove today's score and linked data</span
+                  >
+                </div>
+              </DropdownMenuItem>
+
+              <!-- Funding tools -->
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Funding</DropdownMenuLabel>
+              <DropdownMenuItem
+                :disabled="extractingFunding"
+                @click="requestConfirm('extractFunding')"
+              >
+                <DollarSign class="size-4 text-amber-400" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    extractingFunding ? "Extracting..." : "Extract Funding"
+                  }}</span>
+                  <span class="text-xs text-muted-foreground"
+                    >AI-extract funding events from articles (uses AI
+                    credits)</span
+                  >
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                :disabled="dedupingFunding"
+                @click="requestConfirm('dedupFunding')"
+              >
+                <Copy class="size-4" />
+                <div class="flex flex-col">
+                  <span class="font-medium">{{
+                    dedupingFunding ? "Deduping..." : "Dedup Funding"
+                  }}</span>
+                  <span class="text-xs opacity-70"
+                    >Remove duplicate funding rows from DB</span
                   >
                 </div>
               </DropdownMenuItem>
@@ -201,6 +355,50 @@ onMounted(fetchDashboard);
         "
       >
         {{ scoreResult }}
+      </div>
+      <div
+        v-if="dedupFundingResult"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
+        :class="
+          dedupFundingSuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        "
+      >
+        {{ dedupFundingResult }}
+      </div>
+      <div
+        v-if="extractFundingResult"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
+        :class="
+          extractFundingSuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        "
+      >
+        {{ extractFundingResult }}
+      </div>
+      <div
+        v-if="fetchSanityResult"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
+        :class="
+          fetchSanitySuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        "
+      >
+        {{ fetchSanityResult }}
+      </div>
+      <div
+        v-if="fetchSwebenchResult"
+        class="mb-4 rounded-lg border px-4 py-3 text-sm"
+        :class="
+          fetchSwebenchSuccess
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        "
+      >
+        {{ fetchSwebenchResult }}
       </div>
 
       <!-- Auth prompt -->
@@ -397,5 +595,26 @@ onMounted(fetchDashboard);
         </div>
       </template>
     </div>
+
+    <!-- Confirm dialog for destructive actions -->
+    <AlertDialog v-model:open="confirmOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ confirmTitle }}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {{ confirmDescription }}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            class="bg-destructive text-white hover:bg-destructive/90"
+            @click="executeConfirmed()"
+          >
+            {{ confirmLabel }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

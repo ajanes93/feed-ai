@@ -224,6 +224,162 @@ export function useDashboard() {
     }
   }
 
+  const dedupingFunding = ref(false);
+  const dedupFundingResult = ref<string | null>(null);
+  const dedupFundingSuccess = ref(false);
+
+  async function dedupFunding() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    dedupingFunding.value = true;
+    dedupFundingResult.value = null;
+    dedupFundingSuccess.value = false;
+
+    try {
+      const res = await fetch("/api/admin/backfill?type=dedup-funding", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
+
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Dedup failed");
+
+      dedupFundingResult.value = `Removed ${body.deleted} duplicates, ${body.remaining} remaining`;
+      dedupFundingSuccess.value = true;
+    } catch (err) {
+      dedupFundingResult.value =
+        err instanceof Error ? err.message : "Dedup failed";
+      dedupFundingSuccess.value = false;
+    } finally {
+      dedupingFunding.value = false;
+    }
+  }
+
+  const extractingFunding = ref(false);
+  const extractFundingResult = ref<string | null>(null);
+  const extractFundingSuccess = ref(false);
+
+  async function extractFunding() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    extractingFunding.value = true;
+    extractFundingResult.value = null;
+    extractFundingSuccess.value = false;
+
+    try {
+      const res = await fetch("/api/admin/extract-funding", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
+
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Extract failed");
+
+      extractFundingResult.value = `Extracted ${body.extracted ?? 0} funding events (${body.scanned ?? 0} articles scanned)`;
+      extractFundingSuccess.value = true;
+    } catch (err) {
+      extractFundingResult.value =
+        err instanceof Error ? err.message : "Extract failed";
+      extractFundingSuccess.value = false;
+    } finally {
+      extractingFunding.value = false;
+    }
+  }
+
+  const fetchingSanity = ref(false);
+  const fetchSanityResult = ref<string | null>(null);
+  const fetchSanitySuccess = ref(false);
+
+  async function fetchSanity() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    fetchingSanity.value = true;
+    fetchSanityResult.value = null;
+    fetchSanitySuccess.value = false;
+
+    try {
+      const res = await fetch("/api/fetch-sanity", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
+
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Fetch failed");
+
+      fetchSanityResult.value = `Fetched Sanity Harness data (${body.stored ?? body.rows ?? "done"})`;
+      fetchSanitySuccess.value = true;
+    } catch (err) {
+      fetchSanityResult.value =
+        err instanceof Error ? err.message : "Fetch failed";
+      fetchSanitySuccess.value = false;
+    } finally {
+      fetchingSanity.value = false;
+    }
+  }
+
+  const fetchingSwebench = ref(false);
+  const fetchSwebenchResult = ref<string | null>(null);
+  const fetchSwebenchSuccess = ref(false);
+
+  async function fetchSwebench() {
+    if (!adminKey.value) {
+      needsAuth.value = true;
+      return;
+    }
+
+    fetchingSwebench.value = true;
+    fetchSwebenchResult.value = null;
+    fetchSwebenchSuccess.value = false;
+
+    try {
+      const res = await fetch("/api/fetch-swebench", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey.value}` },
+      });
+
+      if (res.status === 401) {
+        clearAdminKey();
+        throw new Error("Invalid admin key");
+      }
+
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Fetch failed");
+
+      fetchSwebenchResult.value = `Fetched SWE-bench data (${body.stored ?? body.rows ?? "done"})`;
+      fetchSwebenchSuccess.value = true;
+    } catch (err) {
+      fetchSwebenchResult.value =
+        err instanceof Error ? err.message : "Fetch failed";
+      fetchSwebenchSuccess.value = false;
+    } finally {
+      fetchingSwebench.value = false;
+    }
+  }
+
   async function fetchDashboard() {
     if (!adminKey.value) {
       needsAuth.value = true;
@@ -275,6 +431,18 @@ export function useDashboard() {
     predigesting,
     predigestResult,
     predigestSuccess,
+    dedupingFunding,
+    dedupFundingResult,
+    dedupFundingSuccess,
+    extractingFunding,
+    extractFundingResult,
+    extractFundingSuccess,
+    fetchingSanity,
+    fetchSanityResult,
+    fetchSanitySuccess,
+    fetchingSwebench,
+    fetchSwebenchResult,
+    fetchSwebenchSuccess,
     setAdminKey,
     clearAdminKey,
     fetchDashboard,
@@ -282,5 +450,9 @@ export function useDashboard() {
     generateScore,
     deleteScore,
     runPredigest,
+    dedupFunding,
+    extractFunding,
+    fetchSanity,
+    fetchSwebench,
   };
 }
