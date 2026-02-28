@@ -5,6 +5,7 @@ import {
   buildSanityHtml,
   mockSanityHarness,
   mockSanityHarnessError,
+  mockAllOQSources,
 } from "./helpers";
 
 const AUTH_HEADERS = {
@@ -723,6 +724,217 @@ describe("Admin API routes", () => {
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.articleCount).toBe(0);
+    });
+  });
+
+  // --- POST /api/fetch: error persistence ---
+
+  describe("POST /api/fetch", () => {
+    it("persists fetch errors to oq_fetch_errors table", async () => {
+      mockAllOQSources({
+        failOrigin: "https://openai.com",
+        failStatus: 403,
+      });
+
+      const res = await SELF.fetch("http://localhost/api/fetch", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.errors.length).toBeGreaterThanOrEqual(1);
+
+      // Check the oq_fetch_errors table has the HTTP error
+      const errors = await env.DB.prepare(
+        "SELECT * FROM oq_fetch_errors WHERE source_id = 'oq-openai'"
+      ).all();
+      expect(errors.results).toHaveLength(1);
+      expect(errors.results[0].error_type).toBe("http_error");
+      expect(errors.results[0].error_message).toBe("HTTP 403");
+      expect(errors.results[0].http_status).toBe(403);
+    });
+
+    it("logs fetch errors to oq_logs with category fetch", async () => {
+      mockAllOQSources({
+        failOrigin: "https://openai.com",
+        failStatus: 500,
+      });
+
+      await SELF.fetch("http://localhost/api/fetch", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+
+      const logs = await env.DB.prepare(
+        "SELECT * FROM oq_logs WHERE category = 'fetch' AND level = 'warn'"
+      ).all();
+      expect(logs.results.length).toBeGreaterThanOrEqual(1);
+      expect(logs.results[0].message).toContain("source(s) failed");
+    });
+
+    it("returns fetched count and errors array in response", async () => {
+      mockAllOQSources({
+        failOrigin: "https://openai.com",
+        failStatus: 503,
+      });
+
+      const res = await SELF.fetch("http://localhost/api/fetch", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      const data = await res.json();
+
+      expect(typeof data.fetched).toBe("number");
+      expect(Array.isArray(data.errors)).toBe(true);
+
+      const openaiError = data.errors.find(
+        (e: { sourceId: string }) => e.sourceId === "oq-openai"
+      );
+      expect(openaiError).toBeDefined();
+      expect(openaiError.errorType).toBe("http_error");
+      expect(openaiError.message).toBe("HTTP 503");
+    });
+
+    it("returns zero errors when all sources succeed", async () => {
+      mockAllOQSources();
+
+      const res = await SELF.fetch("http://localhost/api/fetch", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      const data = await res.json();
+
+      expect(data.errors).toEqual([]);
+      expect(data.fetched).toBeGreaterThanOrEqual(0);
+
+      // No fetch errors should be in DB
+      const errors = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM oq_fetch_errors"
+      ).first();
+      expect(errors!.cnt).toBe(0);
+    });
+  });
+
+  // --- fetch-sanity / fetch-swebench logger integration ---
+
+  describe("POST /api/fetch-sanity logger integration", () => {
+    it("logs validation error to oq_logs when passRate is invalid", async () => {
+      // Build HTML with passRate > 100 → triggers validation in fetchAndStoreSanityHarness
+      const html = buildSanityHtml([
+        {
+          rank: 1,
+          agent: "Agent1",
+          model: "GPT-4",
+          score: 45,
+          passRate: 150,
+        },
+      ]);
+      mockSanityHarness(html);
+
+      const res = await SELF.fetch("http://localhost/api/fetch-sanity", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      expect(res.status).toBe(500);
+
+      // Check that validation error was logged to oq_logs by our code
+      const logs = await env.DB.prepare(
+        "SELECT * FROM oq_logs WHERE category = 'external' AND level = 'error'"
+      ).all();
+      expect(logs.results.length).toBeGreaterThanOrEqual(1);
+      expect(
+        logs.results.some((l) =>
+          String(l.message).includes("invalid topPassRate")
+        )
+      ).toBe(true);
+    });
+  });
+
+  // --- Purge endpoints ---
+
+  describe("POST /api/admin/purge-scores", () => {
+    it("deletes all scores and linked data", async () => {
+      // Seed data
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO oq_scores (id, date, score, score_technical, score_economic, delta, analysis, signals, pillar_scores, model_scores, model_agreement, model_spread, prompt_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(
+          "ps1",
+          "2025-01-01",
+          35,
+          28,
+          40,
+          0.5,
+          "Analysis",
+          "[]",
+          "{}",
+          "[]",
+          "partial",
+          0.3,
+          "hash"
+        ),
+        env.DB.prepare(
+          "INSERT INTO oq_model_responses (id, score_id, model, provider, raw_response, pillar_scores, technical_delta, economic_delta, suggested_delta, analysis, top_signals) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(
+          "mr1",
+          "ps1",
+          "claude",
+          "anthropic",
+          "{}",
+          "{}",
+          0,
+          0,
+          0,
+          "a",
+          "[]"
+        ),
+        env.DB.prepare(
+          "INSERT INTO oq_ai_usage (id, model, provider, status) VALUES (?, ?, ?, ?)"
+        ).bind("au1", "claude", "anthropic", "success"),
+      ]);
+
+      const res = await SELF.fetch("http://localhost/api/admin/purge-scores", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.scores).toBeGreaterThanOrEqual(1);
+
+      const remaining = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM oq_scores"
+      ).first();
+      expect(remaining!.cnt).toBe(0);
+    });
+  });
+
+  describe("POST /api/admin/purge-funding", () => {
+    it("deletes all funding events", async () => {
+      await env.DB.prepare(
+        "INSERT INTO oq_funding_events (id, company, amount, round, source_url, date) VALUES (?, ?, ?, ?, ?, ?)"
+      )
+        .bind(
+          "f1",
+          "TestCo",
+          "$1M",
+          "Series A",
+          "https://example.com",
+          "2025-01-01"
+        )
+        .run();
+
+      const res = await SELF.fetch("http://localhost/api/admin/purge-funding", {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.fundingEvents).toBe(1);
+
+      const remaining = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM oq_funding_events"
+      ).first();
+      expect(remaining!.cnt).toBe(0);
     });
   });
 

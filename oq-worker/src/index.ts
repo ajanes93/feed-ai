@@ -611,7 +611,7 @@ async function adminHandler(
 }
 
 app.post("/api/fetch", (c) =>
-  adminHandler(c, "fetch", () => fetchOQArticles(c.env.DB))
+  adminHandler(c, "fetch", (log) => fetchOQArticles(c.env.DB, log))
 );
 
 app.post("/api/score", (c) =>
@@ -694,11 +694,15 @@ app.post("/api/predigest", (c) =>
 );
 
 app.post("/api/fetch-sanity", (c) =>
-  adminHandler(c, "fetch-sanity", () => fetchAndStoreSanityHarness(c.env.DB))
+  adminHandler(c, "fetch-sanity", (log) =>
+    fetchAndStoreSanityHarness(c.env.DB, log)
+  )
 );
 
 app.post("/api/fetch-swebench", (c) =>
-  adminHandler(c, "fetch-swebench", () => fetchAndStoreSWEBench(c.env.DB))
+  adminHandler(c, "fetch-swebench", (log) =>
+    fetchAndStoreSWEBench(c.env.DB, log)
+  )
 );
 
 app.post("/api/fetch-fred", (c) => {
@@ -1260,7 +1264,8 @@ async function storeExternalData(
 }
 
 async function fetchAndStoreSanityHarness(
-  db: D1Database
+  db: D1Database,
+  log?: Logger
 ): Promise<{ stored: boolean; topPassRate: number }> {
   const data = await fetchSanityHarness();
 
@@ -1270,10 +1275,14 @@ async function fetchAndStoreSanityHarness(
     data.topPassRate < 0 ||
     data.topPassRate > 100
   ) {
-    throw new Error(`SanityHarness: invalid topPassRate ${data.topPassRate}`);
+    const msg = `SanityHarness: invalid topPassRate ${data.topPassRate}`;
+    await log?.error("external", msg);
+    throw new Error(msg);
   }
   if (!data.topAgent || !data.topModel) {
-    throw new Error("SanityHarness: missing topAgent or topModel");
+    const msg = "SanityHarness: missing topAgent or topModel";
+    await log?.error("external", msg);
+    throw new Error(msg);
   }
 
   const summary = buildSanityHarnessArticleSummary(data);
@@ -1299,7 +1308,10 @@ async function fetchAndStoreSanityHarness(
   return { stored: true, topPassRate: data.topPassRate };
 }
 
-async function fetchAndStoreSWEBench(db: D1Database): Promise<{
+async function fetchAndStoreSWEBench(
+  db: D1Database,
+  log?: Logger
+): Promise<{
   stored: boolean;
   verified: number;
   bashOnly: number;
@@ -1314,18 +1326,22 @@ async function fetchAndStoreSWEBench(db: D1Database): Promise<{
     data.topVerified < 0 ||
     data.topVerified > 100
   ) {
-    throw new Error(`SWE-bench: invalid topVerified ${data.topVerified}`);
+    const msg = `SWE-bench: invalid topVerified ${data.topVerified}`;
+    await log?.error("external", msg);
+    throw new Error(msg);
   }
 
   // Warn if Pro scores look suspicious (above Verified), but still store them
   if (data.topPro > data.topVerified && data.topVerified > 0) {
-    console.warn(
-      `[oq:swe-bench] Pro score (${data.topPro}) exceeds Verified (${data.topVerified}) — verify parser output`
+    await log?.warn(
+      "external",
+      `Pro score (${data.topPro}) exceeds Verified (${data.topVerified}) — verify parser output`
     );
   }
   if (data.topProPrivate > data.topVerified && data.topVerified > 0) {
-    console.warn(
-      `[oq:swe-bench] Pro Private score (${data.topProPrivate}) exceeds Verified (${data.topVerified}) — verify parser output`
+    await log?.warn(
+      "external",
+      `Pro Private score (${data.topProPrivate}) exceeds Verified (${data.topVerified}) — verify parser output`
     );
   }
 
@@ -1966,7 +1982,8 @@ async function dedupFundingEvents(
 // --- Article fetching ---
 
 async function fetchOQArticles(
-  db: D1Database
+  db: D1Database,
+  log: Logger
 ): Promise<{ fetched: number; errors: FetchError[] }> {
   const parser = new XMLParser({
     ignoreAttributes: false,
@@ -2026,6 +2043,41 @@ async function fetchOQArticles(
         message,
       });
     }
+  }
+
+  // Persist fetch errors to oq_fetch_errors and log them
+  if (errors.length > 0) {
+    const errorInserts = errors.map((e) =>
+      db
+        .prepare(
+          "INSERT INTO oq_fetch_errors (id, source_id, error_type, error_message, http_status) VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(
+          crypto.randomUUID(),
+          e.sourceId,
+          e.errorType,
+          e.message,
+          e.httpStatus ?? null
+        )
+    );
+    try {
+      await db.batch(errorInserts);
+    } catch (err) {
+      await log.warn("fetch", "Failed to persist fetch errors to DB", {
+        count: errors.length,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    const sourceName = (id: string) =>
+      oqSources.find((s) => s.id === id)?.name ?? id;
+    await log.warn("fetch", `${errors.length} source(s) failed`, {
+      errors: errors.map((e) => ({
+        source: sourceName(e.sourceId),
+        type: e.errorType,
+        message: e.message,
+      })),
+    });
   }
 
   return { fetched, errors };
