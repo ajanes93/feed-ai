@@ -1,0 +1,7 @@
+# Prevent edge/browser caching of the HTML shell so new deploys take effect immediately.
+# Hashed JS/CSS assets (e.g. /assets/*) are immutable and cached by default.
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
