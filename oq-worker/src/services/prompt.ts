@@ -7,6 +7,8 @@ interface SanityHarnessContext {
   topModel: string;
   medianPassRate: number;
   languageBreakdown: string;
+  topPassRateDelta?: number;
+  medianPassRateDelta?: number;
 }
 
 interface SWEBenchContext {
@@ -19,6 +21,10 @@ interface SWEBenchContext {
   topProPrivate?: number;
   topProPrivateModel?: string;
   verifiedDeprecated?: boolean;
+  proDelta?: number;
+  proPrivateDelta?: number;
+  verifiedDelta?: number;
+  bashOnlyDelta?: number;
 }
 
 interface FundingContext {
@@ -57,6 +63,22 @@ function formatTrend(trend: FREDSeriesTrend): string {
   return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 
+function formatDelta(delta: number | undefined): string {
+  if (delta === undefined) return "";
+  if (delta === 0) return " [unchanged]";
+  const sign = delta > 0 ? "+" : "";
+  return ` [${sign}${delta}pp since last fetch]`;
+}
+
+function fmtSwe(
+  value: number | undefined,
+  model: string | undefined,
+  delta: number | undefined,
+  fallback: string
+): string {
+  return value ? `${value}% (${model})${formatDelta(delta)}` : fallback;
+}
+
 export function buildScoringPrompt(ctx: PromptContext): string {
   return `You are an analyst tracking whether AI will fully replace the median
 professional software engineer within the next 10 years.
@@ -77,10 +99,10 @@ Note: LessWrong audit (Feb 24) found SWE-bench Pro also has issues
 which is why we track multiple independent sources.
 
 KEY FRAMING: The central metric is the "Capability Gap":
-- SWE-bench Pro Public (unfamiliar real-world repos, Scale AI SEAL): ${typeof ctx.sweBench?.topPro === "number" && ctx.sweBench.topPro > 0 ? `${ctx.sweBench.topPro}% (${ctx.sweBench.topProModel})` : "~46%"}
-- SWE-bench Pro Private (truly private startup codebases, Scale AI SEAL): ${typeof ctx.sweBench?.topProPrivate === "number" && ctx.sweBench.topProPrivate > 0 ? `${ctx.sweBench.topProPrivate}% (${ctx.sweBench.topProPrivateModel})` : "~23%"}
-- SWE-bench Verified (DEPRECATED — contamination confirmed): ${ctx.sweBench ? `${ctx.sweBench.topVerified}% (${ctx.sweBench.topVerifiedModel})` : "~79%"}
-- SWE-bench Bash Only (raw model capability, standardized agent): ${ctx.sweBench ? `${ctx.sweBench.topBashOnly}% (${ctx.sweBench.topBashOnlyModel})` : "~77%"}
+- SWE-bench Pro Public (unfamiliar real-world repos, Scale AI SEAL): ${fmtSwe(ctx.sweBench?.topPro, ctx.sweBench?.topProModel, ctx.sweBench?.proDelta, "~46%")}
+- SWE-bench Pro Private (truly private startup codebases, Scale AI SEAL): ${fmtSwe(ctx.sweBench?.topProPrivate, ctx.sweBench?.topProPrivateModel, ctx.sweBench?.proPrivateDelta, "~23%")}
+- SWE-bench Verified (DEPRECATED — contamination confirmed): ${ctx.sweBench ? `${ctx.sweBench.topVerified}% (${ctx.sweBench.topVerifiedModel})${formatDelta(ctx.sweBench.verifiedDelta)}` : "~79%"}
+- SWE-bench Bash Only (raw model capability, standardized agent): ${ctx.sweBench ? `${ctx.sweBench.topBashOnly}% (${ctx.sweBench.topBashOnlyModel})${formatDelta(ctx.sweBench.bashOnlyDelta)}` : "~77%"}
 The honest numbers are Pro Public (~46%) and Pro Private (~23%). Verified scores are inflated by memorisation and should NOT be cited as evidence of capability. On private codebases it drops to ~23%.
 
 Current score: ${ctx.currentScore}/100
@@ -88,14 +110,17 @@ Technical sub-score: ${ctx.technicalScore}/100
 Economic sub-score: ${ctx.economicScore}/100
 Score history (last 14 days): ${ctx.history}
 
+STANDING EVIDENCE (already priced into the current score — do NOT treat as new information or re-weight as today's signal):
+- CEPR/BIS/EIB study (Feb 2026): 12,000+ European firms, AI adoption → +4% productivity, zero job losses, 5.9x training ROI. Evidence of augmentation, not displacement.
+
 Today's articles grouped by pillar:
 
 ## AI Capability Benchmarks (weight: 25%)
 ${
   ctx.sanityHarness
     ? `SanityHarness latest data (agent-level benchmarks across 6 languages):
-- Top agent pass rate: ${ctx.sanityHarness.topPassRate}% (${ctx.sanityHarness.topAgent} + ${ctx.sanityHarness.topModel})
-- Median agent pass rate: ${ctx.sanityHarness.medianPassRate}%
+- Top agent pass rate: ${ctx.sanityHarness.topPassRate}% (${ctx.sanityHarness.topAgent} + ${ctx.sanityHarness.topModel})${formatDelta(ctx.sanityHarness.topPassRateDelta)}
+- Median agent pass rate: ${ctx.sanityHarness.medianPassRate}%${formatDelta(ctx.sanityHarness.medianPassRateDelta)}
 - Language spread (top agent): ${ctx.sanityHarness.languageBreakdown}
 - Note: High pass rates on Go/Rust but low on Dart/Zig indicates narrow competence, not general replacement capability.
 `
@@ -122,8 +147,7 @@ ${
     ? `Recent AI Spending: ${ctx.fundingSummary.totalRaised} across ${ctx.fundingSummary.count} event(s)${ctx.fundingSummary.topEvent ? ` (top: ${ctx.fundingSummary.topEvent.company} ${ctx.fundingSummary.topEvent.amount})` : ""}.
 `
     : ""
-}Peer-reviewed research (CEPR/BIS/EIB, Feb 2026): Study of 12,000+ European firms found AI adoption led to +4% productivity, zero job losses, and 5.9x training ROI. AI increased output without reducing headcount — evidence of augmentation, not displacement. Source: https://cepr.org/publications/dp19956
-${ctx.articlesByPillar.industry || "No articles today."}
+}${ctx.articlesByPillar.industry || "No articles today."}
 
 ## Structural Barriers (weight: 10%)
 ${ctx.articlesByPillar.barriers || "No articles today."}
@@ -166,6 +190,8 @@ to clearly distinguish the aspect: "Block cuts 50% workforce citing AI" (▲) vs
 
 CALIBRATION RULES:
 - Most days the score should move 0-2 points. 3+ requires landmark news.
+- Data marked [unchanged] is already reflected in the current score — zero delta contribution.
+- Standing evidence is baseline context, not a daily signal. Only new articles or data changes should drive deltas.
 - Distinguish between AI *helping* engineers vs AI *replacing* them.
 - High SWE-bench scores on curated bugs ≠ replacing full engineering roles.
 - CEO hype carries less weight than actual headcount data.

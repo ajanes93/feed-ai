@@ -514,17 +514,21 @@ onMounted(async () => {
                   <OQFundingList :events="data.fundingEvents" />
                 </div>
 
-                <!-- CEPR Study -->
+                <!-- CEPR Study (Standing Evidence) -->
                 <div class="border-t border-border pt-3">
                   <div
                     class="mb-1 text-[10px] tracking-widest text-muted-foreground/60 uppercase"
                   >
-                    CEPR / BIS / EIB Study (Feb 2026)
+                    Standing Evidence — CEPR / BIS / EIB Study (Feb 2026)
                   </div>
                   <p class="text-xs text-muted-foreground">
                     12,000+ European firms studied. Result: +4% productivity, 0
                     job losses, 5.9x training ROI. AI increased output without
                     reducing headcount.
+                  </p>
+                  <p class="mt-1 text-[10px] text-muted-foreground/50 italic">
+                    Baseline context only — already reflected in the score, not
+                    re-weighted daily.
                   </p>
                   <a
                     href="https://cepr.org/publications/dp19956"
@@ -742,9 +746,11 @@ onMounted(async () => {
                 &plusmn;1.2/day.
               </p>
               <p>
-                External data (FRED labour indices, SWE-bench, SanityHarness,
-                CEPR study, funding events) is injected into the prompt so
-                models see the full picture.
+                Dynamic data (FRED labour indices, SWE-bench, SanityHarness,
+                funding events) is injected with change indicators so models
+                only react to actual movement. Standing evidence (e.g. CEPR
+                study) provides baseline framing but is excluded from daily
+                delta calculations.
               </p>
               <p v-if="data.articles.length > 0">
                 {{ data.articles.length }} article{{
