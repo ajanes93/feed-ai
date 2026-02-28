@@ -253,12 +253,21 @@ test.describe("Dashboard", () => {
     ).toBeVisible();
   });
 
-  test("Delete Score shows success result", async ({ page }) => {
+  test("Delete Score shows confirm dialog and succeeds on confirm", async ({
+    page,
+  }) => {
     await mockDashboardApi(page);
     await gotoDashboard(page);
 
     await page.getByText("Actions").click();
     await page.getByText("Delete Score").click();
+
+    // Confirm dialog should appear
+    await expect(page.getByText("Delete today's score?")).toBeVisible();
+    await expect(page.getByText(/re-run Predigest/)).toBeVisible();
+
+    // Confirm the action
+    await page.getByRole("button", { name: "Delete Score" }).click();
 
     await expect(page.getByText(/Deleted score/)).toBeVisible();
   });
@@ -273,39 +282,92 @@ test.describe("Dashboard", () => {
     await expect(page.getByText(/Pre-digested 42 articles/)).toBeVisible();
   });
 
-  test("shows new data actions in actions menu", async ({ page }) => {
+  test("shows grouped actions with section labels", async ({ page }) => {
     await mockDashboardApi(page);
     await gotoDashboard(page);
 
     await page.getByText("Actions").click();
-    await expect(page.getByText("Dedup Funding")).toBeVisible();
-    await expect(page.getByText("Extract Funding")).toBeVisible();
+    // Section labels
+    await expect(page.getByText("Fetch Data")).toBeVisible();
+    await expect(page.getByText("Score Pipeline")).toBeVisible();
+    await expect(
+      page.getByText("Funding", { exact: true })
+    ).toBeVisible();
+    // Actions
+    await expect(
+      page.getByText("Dedup Funding", { exact: true })
+    ).toBeVisible();
+    await expect(
+      page.getByText("Extract Funding", { exact: true })
+    ).toBeVisible();
     await expect(page.getByText("Fetch Sanity")).toBeVisible();
     await expect(page.getByText("Fetch SWE-bench")).toBeVisible();
   });
 
-  test("Dedup Funding shows success result", async ({ page }) => {
+  test("Dedup Funding shows confirm dialog and succeeds on confirm", async ({
+    page,
+  }) => {
     await mockDashboardApi(page);
     await gotoDashboard(page);
 
     await page.getByText("Actions").click();
     await page.getByText("Dedup Funding").click();
 
+    // Confirm dialog should appear
+    await expect(
+      page.getByText("Deduplicate funding rows?")
+    ).toBeVisible();
+    await expect(page.getByText(/cannot be undone/)).toBeVisible();
+
+    // Confirm the action
+    await page
+      .getByRole("button", { name: "Dedup Funding" })
+      .click();
+
     await expect(
       page.getByText(/Removed 3 duplicates, 12 remaining/)
     ).toBeVisible();
   });
 
-  test("Extract Funding shows success result", async ({ page }) => {
+  test("Extract Funding shows confirm dialog and succeeds on confirm", async ({
+    page,
+  }) => {
     await mockDashboardApi(page);
     await gotoDashboard(page);
 
     await page.getByText("Actions").click();
-    await page.getByText("Extract Funding").click();
+    await page.getByText("Extract Funding", { exact: true }).click();
+
+    // Confirm dialog should appear
+    await expect(page.getByText("Extract funding events?")).toBeVisible();
+    await expect(page.getByText(/API credits/)).toBeVisible();
+
+    // Confirm the action
+    await page
+      .getByRole("button", { name: "Extract Funding" })
+      .click();
 
     await expect(
       page.getByText(/Extracted 5 funding events.*20 articles scanned/)
     ).toBeVisible();
+  });
+
+  test("confirm dialog cancel does not execute action", async ({ page }) => {
+    await mockDashboardApi(page);
+    await gotoDashboard(page);
+
+    await page.getByText("Actions").click();
+    await page.getByText("Delete Score").click();
+
+    // Dialog appears
+    await expect(page.getByText("Delete today's score?")).toBeVisible();
+
+    // Cancel
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    // Dialog should close, no result banner
+    await expect(page.getByText("Delete today's score?")).not.toBeVisible();
+    await expect(page.getByText(/Deleted score/)).not.toBeVisible();
   });
 
   test("Fetch Sanity shows success result", async ({ page }) => {
