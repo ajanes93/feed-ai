@@ -694,11 +694,15 @@ app.post("/api/predigest", (c) =>
 );
 
 app.post("/api/fetch-sanity", (c) =>
-  adminHandler(c, "fetch-sanity", () => fetchAndStoreSanityHarness(c.env.DB))
+  adminHandler(c, "fetch-sanity", (log) =>
+    fetchAndStoreSanityHarness(c.env.DB, log)
+  )
 );
 
 app.post("/api/fetch-swebench", (c) =>
-  adminHandler(c, "fetch-swebench", () => fetchAndStoreSWEBench(c.env.DB))
+  adminHandler(c, "fetch-swebench", (log) =>
+    fetchAndStoreSWEBench(c.env.DB, log)
+  )
 );
 
 app.post("/api/fetch-fred", (c) => {
@@ -1260,7 +1264,8 @@ async function storeExternalData(
 }
 
 async function fetchAndStoreSanityHarness(
-  db: D1Database
+  db: D1Database,
+  log?: Logger
 ): Promise<{ stored: boolean; topPassRate: number }> {
   const data = await fetchSanityHarness();
 
@@ -1270,10 +1275,14 @@ async function fetchAndStoreSanityHarness(
     data.topPassRate < 0 ||
     data.topPassRate > 100
   ) {
-    throw new Error(`SanityHarness: invalid topPassRate ${data.topPassRate}`);
+    const msg = `SanityHarness: invalid topPassRate ${data.topPassRate}`;
+    await log?.error("external", msg);
+    throw new Error(msg);
   }
   if (!data.topAgent || !data.topModel) {
-    throw new Error("SanityHarness: missing topAgent or topModel");
+    const msg = "SanityHarness: missing topAgent or topModel";
+    await log?.error("external", msg);
+    throw new Error(msg);
   }
 
   const summary = buildSanityHarnessArticleSummary(data);
@@ -1299,7 +1308,10 @@ async function fetchAndStoreSanityHarness(
   return { stored: true, topPassRate: data.topPassRate };
 }
 
-async function fetchAndStoreSWEBench(db: D1Database): Promise<{
+async function fetchAndStoreSWEBench(
+  db: D1Database,
+  log?: Logger
+): Promise<{
   stored: boolean;
   verified: number;
   bashOnly: number;
@@ -1314,18 +1326,22 @@ async function fetchAndStoreSWEBench(db: D1Database): Promise<{
     data.topVerified < 0 ||
     data.topVerified > 100
   ) {
-    throw new Error(`SWE-bench: invalid topVerified ${data.topVerified}`);
+    const msg = `SWE-bench: invalid topVerified ${data.topVerified}`;
+    await log?.error("external", msg);
+    throw new Error(msg);
   }
 
   // Warn if Pro scores look suspicious (above Verified), but still store them
   if (data.topPro > data.topVerified && data.topVerified > 0) {
-    console.warn(
-      `[oq:swe-bench] Pro score (${data.topPro}) exceeds Verified (${data.topVerified}) — verify parser output`
+    await log?.warn(
+      "external",
+      `Pro score (${data.topPro}) exceeds Verified (${data.topVerified}) — verify parser output`
     );
   }
   if (data.topProPrivate > data.topVerified && data.topVerified > 0) {
-    console.warn(
-      `[oq:swe-bench] Pro Private score (${data.topProPrivate}) exceeds Verified (${data.topVerified}) — verify parser output`
+    await log?.warn(
+      "external",
+      `Pro Private score (${data.topProPrivate}) exceeds Verified (${data.topVerified}) — verify parser output`
     );
   }
 
@@ -2046,8 +2062,11 @@ async function fetchOQArticles(
     );
     try {
       await db.batch(errorInserts);
-    } catch {
-      // Best-effort — don't fail the fetch response over logging
+    } catch (err) {
+      await log.warn("fetch", "Failed to persist fetch errors to DB", {
+        count: errors.length,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     const sourceName = (id: string) =>
