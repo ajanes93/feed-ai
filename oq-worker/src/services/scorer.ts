@@ -280,22 +280,27 @@ function mergeSignals(scores: OQModelScore[]): OQSignal[] {
 
 // --- AI-powered signal deduplication ---
 
-function buildSignalDedupPrompt(
-  signals: Array<{ index: number; signal: OQSignal }>
-): string {
+const DIRECTION_SYMBOL: Record<string, string> = { up: "▲", down: "▼" };
+
+interface SignalDedupResult {
+  keep: number[];
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+async function callGeminiSignalDedup(
+  signals: OQSignal[],
+  apiKey: string
+): Promise<SignalDedupResult> {
   const formatted = signals
-    .map(({ index, signal }) => {
-      const dir =
-        signal.direction === "up"
-          ? "▲"
-          : signal.direction === "down"
-            ? "▼"
-            : "●";
-      return `[${index}] ${dir} "${signal.text}" (impact: ${signal.impact}, source: ${signal.source})`;
-    })
+    .map(
+      (s, i) =>
+        `[${i}] ${DIRECTION_SYMBOL[s.direction] ?? "●"} "${s.text}" (impact: ${s.impact}, source: ${s.source})`
+    )
     .join("\n");
 
-  return `You are deduplicating analysis signals from multiple AI models that all analyzed the same news.
+  const prompt = `You are deduplicating analysis signals from multiple AI models that all analyzed the same news.
 
 Signals:
 ${formatted}
@@ -309,12 +314,7 @@ RULES:
 
 Return JSON: { "keep": [0, 2, 5] }
 where the array contains the 0-based indices of signals to keep (one per group).`;
-}
 
-async function callGeminiSignalDedup(
-  prompt: string,
-  apiKey: string
-): Promise<number[]> {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
     {
@@ -350,50 +350,41 @@ async function callGeminiSignalDedup(
     throw new Error("Gemini dedup: missing keep array");
   }
 
-  return parsed.keep;
+  const tokenMeta = data?.usageMetadata;
+  return {
+    keep: parsed.keep,
+    inputTokens: tokenMeta?.promptTokenCount,
+    outputTokens: tokenMeta?.candidatesTokenCount,
+    totalTokens: tokenMeta?.totalTokenCount,
+  };
 }
 
 async function deduplicateSignals(
   scores: OQModelScore[],
   geminiApiKey?: string
 ): Promise<{ signals: OQSignal[]; dedupUsage?: AIUsageEntry }> {
-  // Step 1: Collect all signals from all models
-  const allSignals: OQSignal[] = [];
-  for (const score of scores) {
-    allSignals.push(...score.top_signals);
-  }
+  // Exact dedup first (fast path — catches identical phrasings)
+  const preDeduped = mergeSignals(scores);
 
-  if (allSignals.length === 0) return { signals: [] };
+  if (preDeduped.length === 0) return { signals: [] };
 
-  // Step 2: Exact dedup (fast path — catches identical phrasings)
-  const seen = new Set<string>();
-  const preDeduped: OQSignal[] = [];
-  for (const signal of allSignals) {
-    const key = normaliseSignalText(signal.text);
-    if (!seen.has(key)) {
-      seen.add(key);
-      preDeduped.push(signal);
-    }
-  }
-
-  // Step 3: AI dedup if Gemini key available and signals remain to dedup
+  // AI dedup if Gemini key available and enough signals to be worth it
   if (geminiApiKey && preDeduped.length > 3) {
     const start = Date.now();
     try {
-      const indexed = preDeduped.map((signal, i) => ({ index: i, signal }));
-      const prompt = buildSignalDedupPrompt(indexed);
-      const keepIndices = await callGeminiSignalDedup(prompt, geminiApiKey);
+      const result = await callGeminiSignalDedup(preDeduped, geminiApiKey);
       const latencyMs = Date.now() - start;
 
-      // Validate: indices must be in range, must keep at least 2 signals
-      const valid = [
-        ...new Set(
-          keepIndices.filter(
-            (i) => typeof i === "number" && i >= 0 && i < preDeduped.length
-          )
-        ),
-      ];
+      // Validate: indices must be in range and unique
+      const valid = result.keep.filter(
+        (i, pos, arr) =>
+          typeof i === "number" &&
+          i >= 0 &&
+          i < preDeduped.length &&
+          arr.indexOf(i) === pos
+      );
 
+      // Guard: if AI returns fewer than 2, assume hallucination and fall back
       if (valid.length >= 2) {
         return {
           signals: valid
@@ -402,6 +393,9 @@ async function deduplicateSignals(
           dedupUsage: {
             model: "gemini-2.0-flash",
             provider: "gemini",
+            inputTokens: result.inputTokens,
+            outputTokens: result.outputTokens,
+            totalTokens: result.totalTokens,
             latencyMs,
             wasFallback: false,
             status: "success",
@@ -409,14 +403,11 @@ async function deduplicateSignals(
         };
       }
     } catch {
-      // Fall through to heuristic result
+      // Fall through to exact-deduped result
     }
   }
 
-  // Fallback: return exact-deduped signals sorted by impact
-  return {
-    signals: preDeduped.sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact)),
-  };
+  return { signals: preDeduped };
 }
 
 function mergePillarScores(scores: OQModelScore[]): OQPillarScores {
@@ -464,6 +455,17 @@ function synthesizeAnalysis(
   return claude?.analysis ?? scores[0].analysis;
 }
 
+// Prefer Claude's value for a field, fall back to first model that has one
+function preferClaude<K extends keyof OQModelScore>(
+  scores: OQModelScore[],
+  field: K
+): OQModelScore[K] | undefined {
+  return (
+    scores.find((s) => s.model.includes("claude"))?.[field] ??
+    scores.find((s) => s[field])?.[field]
+  );
+}
+
 export {
   parseModelResponse,
   calculateConsensusDelta,
@@ -472,6 +474,7 @@ export {
   deduplicateSignals,
   mergePillarScores,
   synthesizeAnalysis,
+  preferClaude,
 };
 
 // --- Main scoring pipeline ---
@@ -732,11 +735,6 @@ export async function runScoring(
   const pillarScores = mergePillarScores(scores);
   const analysis = synthesizeAnalysis(scores, agreement);
 
-  // Prefer Claude's value for a field, fall back to first model that has one
-  const preferClaude = <K extends keyof OQModelScore>(field: K) =>
-    scores.find((s) => s.model.includes("claude"))?.[field] ??
-    scores.find((s) => s[field])?.[field];
-
   // Merge capability gap notes
   const gapNotes = scores
     .map((s) => s.capability_gap_note)
@@ -744,12 +742,12 @@ export async function runScoring(
     .join(" ")
     .slice(0, 500);
 
-  const sanityHarnessNote = preferClaude("sanity_harness_note");
-  const economicNote = preferClaude("economic_note");
-  const labourNote = preferClaude("labour_note");
+  const sanityHarnessNote = preferClaude(scores, "sanity_harness_note");
+  const economicNote = preferClaude(scores, "economic_note");
+  const labourNote = preferClaude(scores, "labour_note");
 
-  const deltaExplanation = preferClaude("delta_explanation");
-  const modelSummary = preferClaude("model_summary");
+  const deltaExplanation = preferClaude(scores, "delta_explanation");
+  const modelSummary = preferClaude(scores, "model_summary");
 
   return {
     score: newScore,

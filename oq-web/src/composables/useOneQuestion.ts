@@ -102,6 +102,25 @@ export interface MethodologyResponse {
   };
   deltas?: ExternalDeltas;
   fundingSummary?: FundingSummary;
+  dataProcessing?: {
+    preDigest?: {
+      description: string;
+      model: string;
+      batchSize: number;
+      directCap: number;
+    };
+    fundingExtraction?: {
+      description: string;
+      model: string;
+      batchSize: number;
+      deduplication: string;
+    };
+    signalDeduplication?: {
+      description: string;
+      model: string;
+      layers: string[];
+    };
+  };
 }
 
 interface ExternalDataSnapshot {

@@ -486,6 +486,12 @@ app.get("/api/methodology", async (c) => {
         batchSize: FUNDING_EXTRACT_BATCH_SIZE,
         deduplication: "company+amount key",
       },
+      signalDeduplication: {
+        description:
+          "Each scoring model returns 3-5 signals. A two-layer dedup removes duplicates: (1) exact text normalization strips numbers, parentheticals, and punctuation, then matches; (2) Gemini Flash acts as a judge, grouping semantically similar signals and keeping the clearest phrasing from each group. Signals with different directions (▲/▼) for the same event are intentionally kept as distinct evidence. Falls back to exact-only dedup if the AI call fails.",
+        model: "gemini-2.0-flash",
+        layers: ["Exact text normalization", "AI semantic grouping"],
+      },
     },
     dataSourceHandling: {
       standingEvidence: {
