@@ -397,6 +397,8 @@ interface ScoringInput {
     topModel: string;
     medianPassRate: number;
     languageBreakdown: string;
+    topPassRateDelta?: number;
+    medianPassRateDelta?: number;
   };
   sweBench?: {
     topVerified: number;
@@ -407,6 +409,10 @@ interface ScoringInput {
     topProModel?: string;
     topProPrivate?: number;
     topProPrivateModel?: string;
+    proDelta?: number;
+    proPrivateDelta?: number;
+    verifiedDelta?: number;
+    bashOnlyDelta?: number;
   };
   softwareIndex?: number;
   softwareDate?: string;

@@ -272,17 +272,21 @@ const isOpen = ref(false);
             </p>
           </div>
 
-          <!-- CEPR Study -->
+          <!-- CEPR Study (Standing Evidence) -->
           <div class="border-t border-border pt-3">
             <p
               class="mb-1 text-[10px] tracking-widest text-muted-foreground/60 uppercase"
             >
-              CEPR / BIS / EIB Study (Feb 2026)
+              Standing Evidence — CEPR / BIS / EIB Study (Feb 2026)
             </p>
             <p>
               12,000+ European firms studied. Result: +4% productivity, 0 job
               losses, 5.9x training ROI. AI increased output without reducing
               headcount.
+            </p>
+            <p class="mt-1 text-[10px] text-muted-foreground/50 italic">
+              Baseline context only — already reflected in the score, not
+              re-weighted daily.
             </p>
             <a
               href="https://cepr.org/publications/dp19956"

@@ -487,6 +487,36 @@ app.get("/api/methodology", async (c) => {
         deduplication: "company+amount key",
       },
     },
+    dataSourceHandling: {
+      standingEvidence: {
+        description:
+          "Peer-reviewed research (e.g. CEPR/BIS/EIB study) is treated as standing evidence already reflected in the current score. It provides baseline framing but is explicitly excluded from daily delta calculations. Models are instructed not to re-weight it as new information.",
+        sources: [
+          {
+            name: "CEPR/BIS/EIB (Feb 2026)",
+            finding:
+              "12,000+ European firms: +4% productivity, zero job losses, 5.9x training ROI",
+            treatment: "standing_evidence",
+          },
+        ],
+      },
+      dynamicBenchmarks: {
+        description:
+          "SWE-bench and SanityHarness scores are fetched daily but include change indicators ([unchanged] or [+/-N since last fetch]). Models are instructed that unchanged values contribute zero delta. Only actual changes in benchmark scores should move the score.",
+        sources: [
+          "SWE-bench (swebench.com)",
+          "SanityHarness (sanityboard.lr7.dev)",
+        ],
+      },
+      labourData: {
+        description:
+          "FRED/Indeed job posting indices include week-over-week and 4-week trend data, allowing models to distinguish stale data from meaningful movement.",
+        sources: [
+          "Indeed Software Dev Postings Index",
+          "Initial Claims (general labour)",
+        ],
+      },
+    },
     whatWouldChange: {
       to50: [
         "SWE-bench Pro Public consistently above 70% with diverse agents",
@@ -2589,9 +2619,10 @@ Return ONLY bullet points, one per line, starting with "- ".`;
     return { score: newScore, delta, date: today };
   }
 
-  // Load external data for prompt context
-  const [externalData, fundingSummary] = await Promise.all([
+  // Load external data + deltas for prompt context
+  const [externalData, externalDeltas, fundingSummary] = await Promise.all([
     loadExternalData(env.DB, log),
+    loadExternalDeltas(env.DB, log),
     loadFundingSummary(env.DB, log),
   ]);
 
@@ -2626,8 +2657,23 @@ Return ONLY bullet points, one per line, starting with "- ".`;
       gemini: env.GEMINI_API_KEY,
       openai: env.OPENAI_API_KEY,
     },
-    sanityHarness: externalData.sanityHarness,
-    sweBench: externalData.sweBench,
+    sanityHarness: externalData.sanityHarness
+      ? {
+          ...externalData.sanityHarness,
+          topPassRateDelta: externalDeltas.sanityHarness?.topPassRateDelta,
+          medianPassRateDelta:
+            externalDeltas.sanityHarness?.medianPassRateDelta,
+        }
+      : undefined,
+    sweBench: externalData.sweBench
+      ? {
+          ...externalData.sweBench,
+          proDelta: externalDeltas.sweBench?.proDelta,
+          proPrivateDelta: externalDeltas.sweBench?.proPrivateDelta,
+          verifiedDelta: externalDeltas.sweBench?.verifiedDelta,
+          bashOnlyDelta: externalDeltas.sweBench?.bashOnlyDelta,
+        }
+      : undefined,
     softwareIndex: externalData.softwareIndex,
     softwareDate: externalData.softwareDate,
     softwareTrend: externalData.softwareTrend,
