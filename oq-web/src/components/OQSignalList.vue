@@ -8,8 +8,6 @@ import {
 } from "@feed-ai/shared/components/ui/collapsible";
 import { ExternalLink, ChevronDown } from "lucide-vue-next";
 
-const MODEL_COUNT = 3;
-
 const props = withDefaults(
   defineProps<{
     signals: OQSignal[];
@@ -20,6 +18,13 @@ const props = withDefaults(
 
 const isOpen = ref(false);
 const hiddenCount = computed(() => props.signals.length - props.initialCount);
+const modelCount = computed(() => {
+  const all = new Set<string>();
+  for (const s of props.signals) {
+    for (const m of s.models ?? []) all.add(m);
+  }
+  return all.size;
+});
 </script>
 
 <template>
@@ -59,7 +64,7 @@ const hiddenCount = computed(() => props.signals.length - props.initialCount);
         class="shrink-0 font-mono text-[10px] text-muted-foreground/40"
         :title="signal.models.join(', ')"
       >
-        {{ signal.models.length }}/{{ MODEL_COUNT }}
+        {{ signal.models.length }}/{{ modelCount }}
       </span>
       <span
         v-if="signal.url"

@@ -792,8 +792,9 @@ describe("deduplicateSignals", () => {
       expect.arrayContaining(["Claude", "GPT-4o", "Gemini"])
     );
 
-    // Block signal should have Claude + GPT-4o merged
+    // Block signal should have exactly Claude + GPT-4o merged
     const blockSignal = signals.find((s) => s.text.includes("Block"));
+    expect(blockSignal!.models).toHaveLength(2);
     expect(blockSignal!.models).toEqual(
       expect.arrayContaining(["Claude", "GPT-4o"])
     );
