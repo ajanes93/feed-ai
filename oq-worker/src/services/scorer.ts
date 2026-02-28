@@ -199,7 +199,7 @@ function parseModelResponse(text: string, model: string): OQModelScore {
           : {}),
       })
     ) as OQSignal[],
-    delta_explanation: truncateStr(parsed.delta_explanation, 150),
+    delta_explanation: truncateStr(parsed.delta_explanation, 140),
     capability_gap_note: truncateStr(parsed.capability_gap_note, 300),
     sanity_harness_note: truncateStr(parsed.sanity_harness_note, 300),
     economic_note: truncateStr(parsed.economic_note, 300),
