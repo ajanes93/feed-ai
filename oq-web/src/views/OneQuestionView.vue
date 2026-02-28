@@ -273,6 +273,11 @@ onMounted(async () => {
           </div>
           <Card class="border-border bg-card py-0">
             <CardContent class="p-6 sm:p-8">
+              <div
+                class="mb-4 text-[10px] tracking-widest text-muted-foreground uppercase"
+              >
+                The Capability Gap
+              </div>
               <OQCapabilityGap
                 :verified="methodology?.capabilityGap?.verified ?? '~77%'"
                 :pro="methodology?.capabilityGap?.pro ?? '~46%'"
@@ -291,10 +296,14 @@ onMounted(async () => {
                 "
                 :previous-date="methodology?.deltas?.sweBench?.previousDate"
               />
-              <Separator
-                v-if="methodology?.sanityHarness"
-                class="my-6 bg-border"
-              />
+              <template v-if="methodology?.sanityHarness">
+                <Separator class="my-6 bg-border" />
+                <div
+                  class="mb-4 text-[10px] tracking-widest text-muted-foreground uppercase"
+                >
+                  AI Agent Reality Check
+                </div>
+              </template>
               <OQSanityHarness
                 v-if="methodology?.sanityHarness"
                 :top-pass-rate="methodology.sanityHarness.topPassRate"
