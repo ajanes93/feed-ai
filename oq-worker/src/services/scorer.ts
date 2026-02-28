@@ -296,9 +296,8 @@ function mergeSignals(scores: OQModelScore[]): OQSignal[] {
 const DIRECTION_SYMBOL: Record<string, string> = { up: "▲", down: "▼" };
 
 interface SignalDedupResult {
-  keep: number[];
   /** Groups of indices — first in each group is the keeper. Used to merge model attribution. */
-  groups?: number[][];
+  groups: number[][];
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
@@ -363,28 +362,16 @@ Each sub-array is a group of duplicate indices. The FIRST index in each group is
   );
   const tokenMeta = data?.usageMetadata;
 
-  // Support both response formats: { groups: [[0,2],[1]] } or legacy { keep: [0,1] }
-  if (Array.isArray(parsed?.groups)) {
-    const groups: number[][] = parsed.groups;
-    return {
-      keep: groups.map((g: number[]) => g[0]),
-      groups,
-      inputTokens: tokenMeta?.promptTokenCount,
-      outputTokens: tokenMeta?.candidatesTokenCount,
-      totalTokens: tokenMeta?.totalTokenCount,
-    };
+  if (!Array.isArray(parsed?.groups)) {
+    throw new Error("Gemini dedup: missing groups array");
   }
 
-  if (Array.isArray(parsed?.keep)) {
-    return {
-      keep: parsed.keep,
-      inputTokens: tokenMeta?.promptTokenCount,
-      outputTokens: tokenMeta?.candidatesTokenCount,
-      totalTokens: tokenMeta?.totalTokenCount,
-    };
-  }
-
-  throw new Error("Gemini dedup: missing groups/keep array");
+  return {
+    groups: parsed.groups as number[][],
+    inputTokens: tokenMeta?.promptTokenCount,
+    outputTokens: tokenMeta?.candidatesTokenCount,
+    totalTokens: tokenMeta?.totalTokenCount,
+  };
 }
 
 async function deduplicateSignals(
@@ -403,13 +390,14 @@ async function deduplicateSignals(
       const result = await callGeminiSignalDedup(preDeduped, geminiApiKey);
       const latencyMs = Date.now() - start;
 
-      // Validate: indices must be in range and unique
-      const valid = result.keep.filter(
-        (i, pos, arr) =>
-          typeof i === "number" &&
-          i >= 0 &&
-          i < preDeduped.length &&
-          arr.indexOf(i) === pos
+      // Build a map from keeper index → full group for O(1) lookup during merge
+      const groupByKeeper = new Map<number, number[]>(
+        result.groups.map((g) => [g[0], g])
+      );
+
+      // Validate keeper indices: must be in range and unique
+      const valid = [...groupByKeeper.keys()].filter(
+        (i) => typeof i === "number" && i >= 0 && i < preDeduped.length
       );
 
       // Guard: if AI returns fewer than 2, assume hallucination and fall back
@@ -417,18 +405,13 @@ async function deduplicateSignals(
         // Merge model attribution from grouped (dropped) signals into keepers
         const keptSignals = valid.map((i) => {
           const signal = { ...preDeduped[i] };
-          if (result.groups) {
-            const group = result.groups.find((g) => g[0] === i);
-            if (group && group.length > 1) {
-              const allModels = new Set(signal.models ?? []);
-              for (const j of group.slice(1)) {
-                if (j >= 0 && j < preDeduped.length) {
-                  for (const m of preDeduped[j].models ?? []) allModels.add(m);
-                }
-              }
-              signal.models = [...allModels];
+          const allModels = new Set(signal.models ?? []);
+          for (const j of groupByKeeper.get(i)!.slice(1)) {
+            if (j >= 0 && j < preDeduped.length) {
+              for (const m of preDeduped[j].models ?? []) allModels.add(m);
             }
           }
+          signal.models = [...allModels];
           return signal;
         });
         return {
@@ -474,13 +457,6 @@ function mergePillarScores(scores: OQModelScore[]): OQPillarScores {
   return result;
 }
 
-function formatModelName(model: string): string {
-  if (model.includes("claude")) return "Claude";
-  if (model.includes("gpt")) return "GPT-4";
-  if (model.includes("gemini")) return "Gemini";
-  return model.split("-")[0];
-}
-
 function synthesizeAnalysis(
   scores: OQModelScore[],
   agreement: OQModelAgreement
@@ -491,7 +467,7 @@ function synthesizeAnalysis(
     return scores
       .map((s) => {
         const sign = s.suggested_delta > 0 ? "+" : "";
-        return `${formatModelName(s.model)} (${sign}${s.suggested_delta}): ${s.analysis}`;
+        return `${shortModelLabel(s.model)} (${sign}${s.suggested_delta}): ${s.analysis}`;
       })
       .join("\n\n");
   }

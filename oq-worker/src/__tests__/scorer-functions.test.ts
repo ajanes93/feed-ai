@@ -381,7 +381,7 @@ describe("synthesizeAnalysis", () => {
     ];
     const result = synthesizeAnalysis(scores, "disagree");
     expect(result).toContain("Claude (+1):");
-    expect(result).toContain("GPT-4 (-1):");
+    expect(result).toContain("GPT-4o (-1):");
     // Full analyses are included, not truncated to first sentence
     expect(result).toContain("multiple sentences");
     expect(result).toContain("more detail here");
